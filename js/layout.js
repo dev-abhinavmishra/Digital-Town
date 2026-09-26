@@ -201,6 +201,30 @@ export const PARK_ZONE = { x0:352, x1:800, z0:-60, z1:300 };
 export const GREEN_BELT = { x0:-800, x1:-740, z0:-720, z1:700 };  // west edge woods
 export const SE_GREEN = { x0:340, x1:800, z0:620, z1:740 };
 
+/* Programmed green parcels — every formerly-bare lawn quadrant gets an
+   explicit use. Rendered by js/city/greens.js, occupancy + audit-checked.
+   Verified free of roads/buildings/lots/water/cottages before commit. */
+export const GREENS = [
+  { id: 'westwood-grove',  name: 'Westwood Memorial Grove',   use: 'grove',
+    x0: -795, x1: -750, z0: -24,  z1: 128  },   // church grounds, W of Cedar
+  { id: 'scholar-pocket',  name: 'Scholar Green',             use: 'pocketpark',
+    x0: -622, x1: -455, z0: -24,  z1: 55   },   // N of Elm, between Scholar/Cedar
+  { id: 'research-green',  name: 'Quarry Research Green',     use: 'pocketpark',
+    x0: -285, x1: -170, z0: -615, z1: -550 },   // campus edge, E of Clinical Sci
+  { id: 'tranquil-grove',  name: 'Tranquil Grove',            use: 'grove',
+    x0: 650,  x1: 795,  z0: -610, z1: -552 },   // hospice backdrop, N of Sunset Ridge
+  { id: 'northsenior',     name: 'North Meadow',              use: 'meadow',
+    x0: 648,  x1: 795,  z0: -700, z1: -616 },   // NE corner behind senior district
+  { id: 'heritage-garden', name: 'Heritage Wellness Garden',  use: 'garden',
+    x0: 645,  x1: 790,  z0: -345, z1: -292 },   // senior district community garden
+  { id: 'commons-orchard', name: 'Commons Orchard & Pond',    use: 'orchard',
+    x0: 692,  x1: 795,  z0: 435,  z1: 615  },   // E of mall on Commerce corridor
+  { id: 'sunrise-meadow',  name: 'Sunrise Meadow',            use: 'meadow',
+    x0: 345,  x1: 795,  z0: 625,  z1: 735  },   // SE_GREEN corner, programmed
+  { id: 'northwoods',      name: 'Northwoods Buffer',         use: 'grove',
+    x0: -640, x1: -350, z0: -715, z1: -665 },   // behind the med campus
+];
+
 /* sidewalk plaza downtown */
 export const PLAZA = { x:60, z:-205, w:150, d:70 };
 

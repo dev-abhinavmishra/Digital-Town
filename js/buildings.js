@@ -12,10 +12,13 @@ const M = THREE.MeshStandardMaterial;
    Wall materials are cached per texture so identical facades share one
    material → mergeStatic() merges every matching wall into one draw call. */
 const wallCache = new Map();
-function wallMat(map, bump, emis) {
-  const k = map.uuid + ':' + (bump ? bump.uuid : '');
+function wallMat(maps) {
+  const { map, bump, emis, rough, normal } = maps;
+  const k = map.uuid + ':' + (bump ? bump.uuid : '') + ':' + (normal ? normal.uuid : '') + ':' + (rough ? rough.uuid : '');
   if (!wallCache.has(k)) {
     const m = new M({ map, bumpMap: bump || null, bumpScale: .05, roughness: .88 });
+    if (rough) { m.roughnessMap = rough; m.roughness = 1; }
+    if (normal) { m.normalMap = normal; m.normalScale = new THREE.Vector2(.65, .65); }
     if (emis) {
       m.emissiveMap = emis;
       m.emissive = new THREE.Color('#ffd9a0');
@@ -28,7 +31,7 @@ function wallMat(map, bump, emis) {
 }
 let _concTop = null;
 function wallMats(maps, roofMat) {
-  const wall = wallMat(maps.map, maps.bump, maps.emis);
+  const wall = wallMat(maps);
   if (!roofMat.map) { // plain color roof -> concrete PBR
     if (!_concTop) { _concTop = M_CONCRETE(7, 7); }
     roofMat = _concTop;
@@ -44,19 +47,136 @@ function sign(group, text, w, y, z, opts = {}) {
   group.add(p);
   return p;
 }
-function parapet(g, w, d, h, color = '#4a4e52') {
-  const t = 0.5, ph = 1.0;
+/* parameterized parapet — seeded height, cap palette, silhouette styles.
+   Accepts a color string (legacy call sites) or {color, ph, style}. */
+const PARAPET_COLORS = ['#4a4e52', '#53575c', '#5d5750', '#424a4e', '#57504a'];
+const PARAPET_CAPS = ['#d9d5cc', '#c9c2b4', '#b0a898', '#8f8b82', '#a8765c'];
+function parapet(g, w, d, h, opts = {}) {
+  const o = typeof opts === 'string' ? { color: opts } : opts;
+  const color = o.color || pick(PARAPET_COLORS);
+  const ph = o.ph || rr(.6, 1.6);
+  const style = o.style || (R() < .32 ? 'stepped' : R() < .30 ? 'pediment' : 'plain');
+  const t = 0.5;
   const m = mat(color);
   g.add(box(w + t, ph, t, m, 0, h, -d / 2));
   g.add(box(w + t, ph, t, m, 0, h, d / 2));
   g.add(box(t, ph, d, m, -w / 2, h, 0));
   g.add(box(t, ph, d, m, w / 2, h, 0));
-  // cap highlight
-  const cm = mat('#d9d5cc');
+  const cm = mat(o.cap || pick(PARAPET_CAPS));
   g.add(box(w + t + .15, .18, t + .15, cm, 0, h + ph, -d / 2));
   g.add(box(w + t + .15, .18, t + .15, cm, 0, h + ph, d / 2));
   g.add(box(t + .15, .18, d, cm, -w / 2, h + ph, 0));
   g.add(box(t + .15, .18, d, cm, w / 2, h + ph, 0));
+  if (style === 'stepped') {
+    // corner piers rise ~.5m above the parapet cap
+    for (const sx of [-1, 1]) for (const sz of [-1, 1])
+      g.add(box(1.4, ph + .62, 1.4, m, sx * (w / 2 - .5), h - .1, sz * (d / 2 - .5)));
+  } else if (style === 'pediment') {
+    // raised center bay on the street face (+z)
+    g.add(box(w * .3, ph + .7, t + .2, m, 0, h, d / 2));
+    g.add(box(w * .3 + .4, .2, t + .35, cm, 0, h + ph + .7, d / 2));
+  }
+  return h + ph;
+}
+
+/* flat-roof finish palette — membrane / gravel / asphalt, cached 3 ways */
+const _flatRoofs = [null, null, null];
+function flatRoofMat() {
+  const i = Math.floor(R() * 3);
+  if (!_flatRoofs[i]) {
+    const finish = [['#c8ccc5', .55], ['#84827c', 1], ['#4a4d51', .97]][i];
+    _flatRoofs[i] = mat(finish[0], { roughness: finish[1] });
+  }
+  return _flatRoofs[i];
+}
+
+/* facade articulation kit — pilasters, cornice ledge, plinth, string
+   courses, corner downspouts. Vertex-colored so it merges globally. */
+function facadeDress(g, w, d, h, o = {}) {
+  const parts = [];
+  const bandC = o.band || '#d9d2c0';
+  if (o.plinth !== false && R() < .82)
+    parts.push({ geo: new THREE.BoxGeometry(w + .22, .95, d + .22), color: o.plinthC || '#5a5348', x: 0, y: .48, z: 0 });
+  if (o.cornice !== false && R() < .68) {
+    parts.push({ geo: new THREE.BoxGeometry(w + .55, .42, d + .55), color: bandC, x: 0, y: h - .65, z: 0 });
+    parts.push({ geo: new THREE.BoxGeometry(w + .3, .16, d + .3), color: bandC, x: 0, y: h - 1.05, z: 0 });
+  }
+  if (o.pilasters && R() < .6) {
+    const n = Math.max(2, Math.round(w / 9));
+    for (let i = 0; i <= n; i++) {
+      const px = -w / 2 + 1 + i * (w - 2) / n;
+      parts.push({ geo: new THREE.BoxGeometry(.8, h - 1.6, .3), color: bandC, x: px, y: .9 + (h - 1.6) / 2, z: d / 2 + .05 });
+    }
+  }
+  if (o.courses && h > 12 && R() < .55) {
+    const floors = Math.floor(h / 3.3);
+    for (let f = 1; f < floors; f++)
+      parts.push({ geo: new THREE.BoxGeometry(w + .18, .14, d + .18), color: bandC, x: 0, y: f * 3.3, z: 0 });
+  }
+  if (o.downspouts !== false && R() < .6) {
+    for (const sx of [-1, 1]) if (R() < .7)
+      parts.push({ geo: new THREE.BoxGeometry(.16, h - .3, .2), color: '#6d7276', x: sx * (w / 2 + .06), y: h / 2, z: d / 2 - .4 });
+  }
+  if (parts.length) {
+    const m = new THREE.Mesh(colored(parts), VCOL());
+    m.castShadow = m.receiveShadow = true; g.add(m);
+  }
+}
+
+/* rooftop clutter beyond hvac(): exhaust fans, vent stacks, skylight rows,
+   stair bulkhead, solar arrays, water tank. Seeded 2–3 kinds per roof. */
+function clutter(g, w, d, h, o = {}) {
+  const parts = [];
+  const kinds = [];
+  if (o.fans !== false && w > 14) kinds.push('fans');
+  if (o.vents !== false) kinds.push('vents');
+  if (o.skylights !== false && w > 16 && d > 12) kinds.push('skylights');
+  if (o.bulkhead !== false && w > 18 && d > 14) kinds.push('bulkhead');
+  if (o.solar && w > 20) kinds.push('solar');
+  if (o.tank && h > 30) kinds.push('tank');
+  const nK = Math.min(kinds.length, 2 + (R() < .5 ? 1 : 0));
+  for (let k = 0; k < nK; k++) {
+    const kind = kinds.splice(Math.floor(R() * kinds.length), 1)[0];
+    if (kind === 'fans')
+      for (let i = 0; i < 2; i++) {
+        const fx = rr(-w / 2 + 4, w / 2 - 4), fz = rr(-d / 2 + 4, d / 2 - 4);
+        parts.push({ geo: new THREE.BoxGeometry(1.5, .8, 1.5), color: '#7d858a', x: fx, y: h + .4, z: fz });
+        parts.push({ geo: new THREE.CylinderGeometry(.5, .5, .3, 10), color: '#5c6367', x: fx, y: h + .95, z: fz });
+      }
+    if (kind === 'vents')
+      for (let i = 0; i < 3; i++)
+        parts.push({ geo: new THREE.CylinderGeometry(.13, .16, rr(1.2, 2.2), 7), color: '#9aa0a3',
+          x: rr(-w / 2 + 3, w / 2 - 3), y: h + .8, z: rr(-d / 2 + 3, d / 2 - 3) });
+    if (kind === 'skylights') {
+      const nx = Math.floor(w / 9);
+      for (let i = 0; i < nx; i++)
+        parts.push({ geo: new THREE.BoxGeometry(2.6, .35, 1.6), color: '#9fc3d4',
+          x: -w / 2 + 5 + i * 9, y: h + .18, z: rr(-d / 4, d / 4) });
+    }
+    if (kind === 'bulkhead') {
+      const bx = rr(-w / 4, w / 4);
+      parts.push({ geo: new THREE.BoxGeometry(4.4, 2.6, 3.4), color: '#8a8f94', x: bx, y: h + 1.3, z: -d / 4 });
+      parts.push({ geo: new THREE.BoxGeometry(.9, 2.0, .15), color: '#3c4145', x: bx, y: h + 1.0, z: -d / 4 + 1.75 });
+    }
+    if (kind === 'solar') {
+      const rows = Math.floor(d / 8);
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < Math.floor(w / 7); c++)
+          parts.push({ geo: new THREE.BoxGeometry(3.2, .14, 2.2), color: '#1e3345',
+            x: -w / 2 + 5 + c * 7, y: h + .5, z: -d / 2 + 5 + r * 8, rx: -.28 });
+    }
+    if (kind === 'tank') {
+      const tx = rr(-w / 4, w / 4);
+      for (const [lx, lz] of [[-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1], [1.1, 1.1]])
+        parts.push({ geo: new THREE.BoxGeometry(.22, 2.4, .22), color: '#4a3f32', x: tx + lx, y: h + 1.2, z: lz });
+      parts.push({ geo: new THREE.CylinderGeometry(1.7, 1.7, 3, 12), color: '#8a6a48', x: tx, y: h + 2.4, z: 0 });
+      parts.push({ geo: new THREE.ConeGeometry(1.9, .9, 12), color: '#6e5138', x: tx, y: h + 4.35, z: 0 });
+    }
+  }
+  if (parts.length) {
+    const m = new THREE.Mesh(colored(parts), VCOL());
+    m.castShadow = m.receiveShadow = true; g.add(m);
+  }
 }
 function hvac(g, w, d, h, n = 3) {
   for (let i = 0; i < n; i++) {
@@ -150,8 +270,9 @@ function hospital(s) {
   const t2 = box(tw * .72, t2h, td * .8, null, -w * .12 - tw * .06, 12 + t1h, -d * .08);
   t2.material = wallMats(glassFacadeMaps({ rows: 4, cols: 8, litRatio: .18, tint: '#8fb4c6' }), mat('#9aa4a9'));
   g.add(t2);
-  parapet(g, tw, td, t1h + 12); hvac(g, tw, td, t1h + 12, 4);
-  parapet(g, tw * .72, td * .8, 12 + s.h);
+  parapet(g, tw, td, t1h + 12, { style: 'stepped' }); hvac(g, tw, td, t1h + 12, 4);
+  parapet(g, tw * .72, td * .8, 12 + s.h, { ph: 1.4 });
+  clutter(g, w, d, 12, { solar: false });   // podium roof clutter around heli
   // podium roof edge band
   g.add(box(w + .6, .5, d + .6, mat('#8a949a'), 0, 12, 0));
   // red cross on tower (front + side)
@@ -248,12 +369,14 @@ function campusb(s) { // campus brick academic block
 function medoffice(s, opts = {}) {
   const g = new THREE.Group();
   const { w, d } = s;
-  const roofM = mat('#5c6367');
+  const roofM = flatRoofMat();
   const maps = facadeMaps({ base: opts.base || '#c9bda6', win: '#2b3b46',
     rows: Math.max(2, Math.round(s.h / 3.4)), cols: Math.round(w / 6), storefront: true,
     signText: opts.sign || null, signBg: opts.signBg || '#3b5568' });
   const b = box(w, s.h, d, null); b.material = wallMats(maps, roofM); g.add(b);
   parapet(g, w, d, s.h); hvac(g, w, d, s.h, 2);
+  clutter(g, w, d, s.h, { solar: R() < .4 });
+  facadeDress(g, w, d, s.h, { pilasters: R() < .5, courses: s.h > 12 });
   door(g, 5, 4.2, 0, d / 2 + .2);
   awning(g, w * .8, 0, 4.6, d / 2 + 1.2, opts.awn || '#41618a');
   return g;
@@ -263,9 +386,9 @@ function ems(s) {
   const g = new THREE.Group();
   const { w, d } = s;
   const b = box(w, s.h, d, null);
-  b.material = wallMats(facadeMaps({ base: '#a8453a', rows: 1, cols: 6, brickLines: true }), mat('#4c5257'));
+  b.material = wallMats(facadeMaps({ base: '#a8453a', rows: 1, cols: 6, brickLines: true }), flatRoofMat());
   g.add(b);
-  parapet(g, w, d, s.h);
+  parapet(g, w, d, s.h); facadeDress(g, w, d, s.h, { cornice: true });
   // 3 garage bays
   for (let i = -1; i <= 1; i++) {
     const door = box(7, 6, .6, new M({ map: garageDoorTexture(), color: '#d7dde0' }), i * 9, 0, d / 2 + .1);
@@ -326,12 +449,13 @@ function hospice(s) {
 function civicb(s, signTxt) {
   const g = new THREE.Group();
   const { w, d } = s;
-  const roofM = mat('#6e7478');
+  const roofM = flatRoofMat();
   const b = box(w, s.h, d, null);
   b.material = wallMats(facadeMaps({ base: '#b3a78f', win: '#2c3a44',
     rows: Math.max(2, Math.round(s.h / 3.6)), cols: Math.round(w / 6.5), band: '#8f8468', trim: '#ddd6c0' }), roofM);
   g.add(b);
-  parapet(g, w, d, s.h);
+  parapet(g, w, d, s.h, { style: 'stepped', ph: rr(1.0, 1.4) });
+  facadeDress(g, w, d, s.h, { cornice: true, pilasters: true, downspouts: false });
   // entry steps + columns
   for (let i = -1; i <= 1; i++) {
     g.add(cyl(.5, .55, 5, mat('#d9d2c0'), i * 4, 0, d / 2 + 1.8));
@@ -372,9 +496,10 @@ function storefront(s, style = {}) {
   const b = box(w, s.h, d, null);
   b.material = wallMats(facadeMaps({ base: style.base || pick(['#c4b49a', '#b8a894', '#cbb8a0', '#bfae92']),
     rows: 1, cols: 4, storefront: true, signText: name, signBg: st.signBg || '#33526b',
-    brickLines: R() < .5, trim: '#ddd6c8' }), roofM);
+    brickLines: R() < .5, trim: '#ddd6c8' }), flatRoofMat());
   g.add(b);
-  parapet(g, w, d, s.h);
+  parapet(g, w, d, s.h, R() < .4 ? { style: 'pediment' } : {});
+  facadeDress(g, w, d, s.h, { cornice: true, pilasters: R() < .45 });
   awning(g, w * .85, 0, 4.4, d / 2 + 1.1, st.awn || '#3f5e78');
   door(g, 4.4, 4, 0, d / 2 + .25);
   // planters flanking door
@@ -390,9 +515,11 @@ function bigbox(s, brand) {
   const body = box(w, s.h, d, null);
   body.material = wallMats(
     facadeMaps({ base: isTarget ? '#d8d3c8' : '#cbb9a0', rows: 1, cols: 10, storefront: true, brickLines: false }),
-    mat(isTarget ? '#a9a49a' : '#8d8578'));
+    flatRoofMat());
   g.add(body);
-  parapet(g, w, d, s.h); hvac(g, w, d, s.h, 8);
+  parapet(g, w, d, s.h, { ph: rr(1.2, 1.8) }); hvac(g, w, d, s.h, 8);
+  clutter(g, w, d, s.h, { solar: true });
+  facadeDress(g, w, d, s.h, { pilasters: true, courses: false });
   if (isTarget) {
     g.add(box(w, 2.6, .8, mat('#cc0000'), 0, s.h - 4, d / 2 + .2));
     sign(g, 'TARGET', w * .3, s.h - 8.4, d / 2 + .4, { bg: '#cc0000', font: 'bold 60px Arial' });
@@ -423,9 +550,11 @@ function mall(s) {
   const body = box(w, s.h, d, null);
   body.material = wallMats(
     facadeMaps({ base: '#b9a48f', rows: 2, cols: 14, storefront: true, band: '#8a7358', brickLines: false }),
-    mat('#7c7263'));
+    flatRoofMat());
   g.add(body);
-  parapet(g, w, d, s.h); hvac(g, w, d, s.h, 10);
+  parapet(g, w, d, s.h, { ph: rr(1.1, 1.7) }); hvac(g, w, d, s.h, 10);
+  clutter(g, w, d, s.h, { solar: true, skylights: false });
+  facadeDress(g, w, d, s.h, { pilasters: false });
   // clerestory spine on roof
   g.add(box(w * .6, 3, 8, mat('#8a8070'), 0, s.h, 0));
   const skyl = box(w * .58, 2.2, 7, new M({ color: '#9fc3d4', roughness: .2, metalness: .4 }), 0, s.h + .5, 0);
@@ -448,8 +577,9 @@ function museum(s) {
   const g = new THREE.Group();
   const { w, d } = s;
   const b = box(w * .7, s.h, d, null, -w * .12, 0, 0);
-  b.material = wallMats(facadeMaps({ base: '#a9b2b8', rows: 2, cols: 8, brickLines: false }), mat('#788086'));
+  b.material = wallMats(facadeMaps({ base: '#a9b2b8', rows: 2, cols: 8, brickLines: false }), flatRoofMat());
   g.add(b);
+  facadeDress(g, w * .7, d, s.h, { cornice: false, pilasters: false });
   const prow = box(w * .3, s.h * .75, d * .8, null, w * .32, 0, 0);
   prow.material = wallMats(glassFacadeMaps({ rows: 4, cols: 5, tint: '#9fc3d4' }), mat('#788086'));
   prow.rotation.y = .3; g.add(prow);
@@ -499,7 +629,8 @@ function fastfood(s) {
   b.material = wallMats(facadeMaps({ base: '#e8dcc4', rows: 1, cols: 4,
     storefront: true, signText: 'FIESTA EXPRESS', signBg: '#c0392b', brickLines: false }), mat('#8a4b2d'));
   g.add(b);
-  parapet(g, w, d, s.h, '#8a4b2d');
+  parapet(g, w, d, s.h, { color: '#8a4b2d' });
+  facadeDress(g, w, d, s.h, { cornice: true, pilasters: false });
   awning(g, w * .9, 0, 4.2, d / 2 + 1, '#c0392b');
   // drive-thru canopy on side + menu board
   g.add(box(8, .5, 5, mat('#c0392b'), w / 2 + 5, 4.6, 0));
@@ -520,10 +651,12 @@ function apartment(s) {
   const maps = facadeMaps({ base: pick(['#b97d5a', '#a87468', '#bfae8e']), win: '#26333d',
     rows: Math.round(s.h / 3.2), cols: Math.round(w / 5.5), litRatio: .2 });
   const b = box(w, s.h, d, null);
-  b.material = wallMats(maps, mat('#5a5048'));
+  b.material = wallMats(maps, flatRoofMat());
   g.add(b);
   parapet(g, w, d, s.h);
+  facadeDress(g, w, d, s.h, { pilasters: false });
   hvac(g, w, d, s.h, 2);
+  clutter(g, w, d, s.h, { solar: true, tank: true });
   // balconies with railings — vertex-colored so they merge globally
   const parts = [];
   const cols = Math.round(w / 8);
@@ -561,9 +694,11 @@ function tower(s) {
   const podH = 7;
   const pod = box(w, podH, d, null);
   pod.material = wallMats(facadeMaps({ base: baseC, rows: 1, cols: Math.round(w / 7),
-    storefront: true, signText: s.sign || null, signBg: '#2e3f4a' }), mat('#5c6367'));
+    storefront: true, signText: s.sign || null, signBg: '#2e3f4a' }), flatRoofMat());
   g.add(pod);
   parapet(g, w, d, podH);
+  clutter(g, w, d, podH, { skylights: false });
+  facadeDress(g, w, d, podH, { pilasters: true });
   // shaft(s) — setback tiers
   let y = podH, ww = w * .82, dd = d * .82, cx = 0, cz = -d * .05;
   const tiers = h > 34 ? 3 : 2;
@@ -579,8 +714,9 @@ function tower(s) {
     if (i < tiers - 1) g.add(box(ww + .4, .5, dd + .4, mat('#6d7276'), cx, y + th, cz));
     y += th; ww *= .8; dd *= .85; cx -= w * .04;
   }
-  // mechanical penthouse + antenna
+  // mechanical penthouse + antenna + roof clutter
   g.add(box(ww * .6, 3, dd * .6, mat('#7a8288'), cx, y, cz));
+  clutter(g, ww, dd, y, { tank: true, skylights: false, solar: false });
   if (R() < .6) g.add(cyl(.1, .14, rr(6, 12), mat('#555'), cx, y + 3, cz));
   // entrance canopy + lobby doors
   g.add(box(10, .5, 4, mat('#3a4a55'), cx, 4.4, cz + dd / 2 + 1.6));
@@ -599,7 +735,7 @@ function church(s) {
   const r = gableRoof(w, 5, d, roofM); r.position.y = h; g.add(r);
   // steeple
   const sx = -w / 2 + 3;
-  g.add(box(4.5, h + 7, 4.5, wallMat(maps.map, maps.bump), sx, 0, 0));
+  g.add(box(4.5, h + 7, 4.5, wallMat(maps), sx, 0, 0));
   const spire = new THREE.Mesh(new THREE.ConeGeometry(3.4, 6, 4), roofM);
   spire.position.set(sx, h + 10, 0); spire.rotation.y = Math.PI / 4; spire.castShadow = true; g.add(spire);
   g.add(box(.3, 2.2, .3, mat('#d4ac0d'), sx, h + 13, 0));
@@ -638,6 +774,7 @@ function gas(s) {
   // price sign
   g.add(cyl(.2, .25, 7, mat('#555'), w * .45, 0, d * .4));
   const st = signTexture('FUEL 3.49', { bg: '#2e6b46', fg: '#ffd98a', w: 256, h: 128, font: 'bold 40px Arial' });
+  // (kiosk roof already concrete; canopy + pumps carry the silhouette)
   const ps = new THREE.Mesh(new THREE.PlaneGeometry(5, 2.6), new M({ map: st, side: THREE.DoubleSide }));
   ps.position.set(w * .45, 6.4, d * .4); g.add(ps);
   return g;
@@ -785,9 +922,11 @@ function skyscraper(s) {
   const pod = box(w, podH, d, null);
   pod.material = wallMats(facadeMaps({ base: pick(['#7d8a92', '#8a8f94', '#96a0a6']),
     rows: 2, cols: Math.round(w / 6), storefront: true,
-    signText: s.sign || null, signBg: '#20313d' }), mat('#4d565c'));
+    signText: s.sign || null, signBg: '#20313d' }), flatRoofMat());
   g.add(pod);
-  parapet(g, w, d, podH);
+  parapet(g, w, d, podH, { ph: rr(1.1, 1.5) });
+  clutter(g, w, d, podH, { skylights: false });
+  facadeDress(g, w, d, podH, { pilasters: true });
   // shaft — 3 setback tiers of glass curtain wall
   let y = podH, ww = w * .88, dd = d * .88;
   for (const share of [.5, .3, .2]) {
@@ -832,7 +971,7 @@ function townhouse(s = {}) {
   const maps = facadeMaps({ base, rows: Math.max(2, Math.round(h / 3.1)), cols: 3,
     win: '#2c3844', cornice: false, trim: '#e8e0d0' });
   const body = box(w, h, d, null);
-  body.material = wallMats(maps, mat('#4a4e52'));
+  body.material = wallMats(maps, flatRoofMat());
   g.add(body);
   // cornice + low parapet + roof hatch
   g.add(box(w + .5, .7, d + .5, mat('#e8e0d0'), 0, h, 0));

@@ -1,7 +1,7 @@
 // audit.mjs — geometric overlap audit of the Havenbrook layout (no three.js needed)
 // Imports the real layout module (requires "type":"module" in package.json) so the
 // audit can never drift out of sync with what the scene actually builds.
-import { ROADS, LOTS, WATER, BUILDINGS, APARTMENTS, HOUSE_BLOCKS, COTTAGE_ROWS, PLAZA, PARK_ZONE, FILLER } from './js/layout.js';
+import { ROADS, LOTS, WATER, BUILDINGS, APARTMENTS, HOUSE_BLOCKS, COTTAGE_ROWS, PLAZA, PARK_ZONE, FILLER, GREENS } from './js/layout.js';
 
 const rect = (x, z, w, d) => ({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 });
 const overlap = (a, b) => {
@@ -24,18 +24,27 @@ const lotRects = LOTS.map((l, i) => ({ name: `lot:${i}(${l.name || ''})`, ...rec
 const watRects = WATER.map(w => ({ name: 'water', ...rect(w.x, w.z, w.r * 2 * w.sx, w.r * 2 * w.sz) }));
 const plazaR = { name: 'plaza', ...rect(PLAZA.x, PLAZA.z, PLAZA.w, PLAZA.d) };
 
-// occupancy model — mirrors details.registerOccupancy() pads (bldg/apt 6, filler 4,
-// lots 1, water 4, roads +2 lat / +1 ends). 'h'-row houses only exist where
-// isFree(x, z, 8) holds in main.js, so the audit drops them the same way.
+// occupancy model — mirrors city/occ.js registerOccupancy(): bldg/apt 6, filler 4,
+// lots 1, water 4, greens 1, roads widen to cover the full streetscape band
+// (gutter+curb+verge+sidewalk): lateral = w/2+1+streetPad, ends +1.
+// 'h'-row houses only exist where isFree(x, z, 8) holds in main.js.
+const streetPad = r => (r.arterial || r.w >= 16) ? 3.4 : 4.4;   // keep in sync with city/occ.js
 const occupied = [
-  ...roadRects.map(r => ({ x0: r.x0 - 2, x1: r.x1 + 2, z0: r.z0 - 1, z1: r.z1 + 1 })),
+  ...ROADS.map(r => {
+    const p = streetPad(r) + 1;
+    return r.axis === 'v'
+      ? { x0: r.c - r.w / 2 - p, x1: r.c + r.w / 2 + p, z0: r.a0 - 1, z1: r.a1 + 1 }
+      : { x0: r.a0 - 1, x1: r.a1 + 1, z0: r.c - r.w / 2 - p, z1: r.c + r.w / 2 + p };
+  }),
   ...bRects.map(b => {
     const p = b.name.startsWith('filler:') ? 4 : 6;
     return { x0: b.x0 - p, x1: b.x1 + p, z0: b.z0 - p, z1: b.z1 + p };
   }),
   ...lotRects.map(l => ({ x0: l.x0 - 1, x1: l.x1 + 1, z0: l.z0 - 1, z1: l.z1 + 1 })),
   ...watRects.map(w => ({ x0: w.x0 - 4, x1: w.x1 + 4, z0: w.z0 - 4, z1: w.z1 + 4 })),
+  ...GREENS.map(g => ({ x0: g.x0 - 1, x1: g.x1 + 1, z0: g.z0 - 1, z1: g.z1 + 1 })),
 ];
+const greenRects = GREENS.map(g => ({ name: `green:${g.id}(${g.use})`, ...g }));
 const houseFree = (x, z) => !occupied.some(o =>
   x + 8 > o.x0 && x - 8 < o.x1 && z + 8 > o.z0 && z - 8 < o.z1);
 
@@ -117,5 +126,25 @@ for (const f of features) for (const b of [...bRects, ...lotRects, plazaR]) {
 console.log('\n=== WATER vs BUILDINGS ===');
 for (const w of watRects) for (const b of bRects) {
   const o = overlap(w, b); if (o) console.log(`${w.name}  x  ${b.name}   ov ${o.ox} x ${o.oz}`);
+}
+// green parcels are checked against the full streetscape band (asphalt+pad),
+// buildings, lots, water, features, and each other
+console.log('\n=== GREENS vs STREETSCAPE BAND ===');
+const bandRects = ROADS.map(r => {
+  const p = r.w / 2 + 1 + streetPad(r);
+  return { name: `band:${r.name}`, ...rect(r.axis === 'v' ? r.c : (r.a0 + r.a1) / 2,
+    r.axis === 'v' ? (r.a0 + r.a1) / 2 : r.c,
+    r.axis === 'v' ? p * 2 : r.a1 - r.a0, r.axis === 'v' ? r.a1 - r.a0 : p * 2) };
+});
+for (const g of greenRects) for (const b of bandRects) {
+  const o = overlap(g, b); if (o) console.log(`${g.name}  x  ${b.name}   ov ${o.ox} x ${o.oz}`);
+}
+console.log('\n=== GREENS vs BUILDINGS/LOTS/WATER/FEATURES/PLAZA ===');
+for (const g of greenRects) for (const b of [...bRects, ...lotRects, ...watRects, ...features, plazaR]) {
+  const o = overlap(g, b); if (o) console.log(`${g.name}  x  ${b.name}   ov ${o.ox} x ${o.oz}`);
+}
+console.log('\n=== GREENS vs GREENS ===');
+for (let i = 0; i < greenRects.length; i++) for (let j = i + 1; j < greenRects.length; j++) {
+  const o = overlap(greenRects[i], greenRects[j]); if (o) console.log(`${greenRects[i].name}  x  ${greenRects[j].name}   ov ${o.ox} x ${o.oz}`);
 }
 console.log('\ndone');

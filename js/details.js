@@ -1,4 +1,4 @@
-// details.js — roads, vegetation, vehicles, street furniture, park, people
+﻿// details.js â€” roads, vegetation, vehicles, street furniture, park, people
 // Everything static is merged per-material (see mergeStatic in main.js);
 // repeated street furniture is instanced; traffic & pedestrians animate.
 import * as THREE from 'three';
@@ -9,6 +9,12 @@ import { box, cyl, plane, mat, signTexture, fieldTexture, colored, VCOL,
          R, rr, pick } from './lib.js';
 import { pbr, M_BARK } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
+import { GeoBin } from './city/geo.js';
+import { buildStreetscape, intersections } from './city/streetscape.js';
+import { buildGreens } from './city/greens.js';
+import { publishCity } from './city/stats.js';
+export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
 const ASPH = pbr('asphalt_02');          // tile via plane(..., tile)
 ASPH.color = new THREE.Color('#484c52'); ASPH.roughness = .97;
@@ -16,214 +22,14 @@ const PAVE = pbr('precast_stone_paving'); PAVE.color = new THREE.Color('#a8a499'
 const GRVL = pbr('gravel');
 
 const M = THREE.MeshStandardMaterial;
-const Y = 0.28; // surface lift — must clear depth-buffer epsilon at aerial range
+const Y = 0.28; // surface lift â€” must clear depth-buffer epsilon at aerial range
 
-/* ---------------- occupancy (for scattering) ---------------- */
-export const occupied = [];
-export function occupyRect(x, z, w, d, pad = 4) {
-  occupied.push({ x0: x - w / 2 - pad, x1: x + w / 2 + pad, z0: z - d / 2 - pad, z1: z + d / 2 + pad });
-}
-export function isFree(x, z, r = 3) {
-  for (const o of occupied)
-    if (x + r > o.x0 && x - r < o.x1 && z + r > o.z0 && z - r < o.z1) return false;
-  return true;
-}
-export function registerOccupancy() {
-  for (const b of BUILDINGS) if (b.w) occupyRect(b.x, b.z, b.w, b.d, 6);
-  for (const a of APARTMENTS) occupyRect(a.x, a.z, a.w, a.d, 6);
-  for (const l of LOTS) occupyRect(l.x, l.z, l.w, l.d, 1);
-  for (const wd of WATER) occupyRect(wd.x, wd.z, wd.r * 2 * wd.sx, wd.r * 2 * wd.sz, 4);
-  for (const rd of ROADS) {
-    if (rd.axis === 'v') occupyRect(rd.c, (rd.a0 + rd.a1) / 2, rd.w + 2, rd.a1 - rd.a0, 1);
-    else occupyRect((rd.a0 + rd.a1) / 2, rd.c, rd.a1 - rd.a0, rd.w + 2, 1);
-  }
-}
-
-/* ---------------- intersections ---------------- */
-export function intersections() {
-  const out = [];
-  const vs = ROADS.filter(r => r.axis === 'v'), hs = ROADS.filter(r => r.axis === 'h');
-  for (const v of vs) for (const h of hs)
-    if (h.a0 < v.c && v.c < h.a1 && v.a0 < h.c && h.c < v.a1)
-      out.push({ x: v.c, z: h.c, wv: v.w, wh: h.w, vn: v.name, hn: h.name, arterial: v.arterial && h.arterial, v, h });
-  return out;
-}
-
-/* ---------------- geometry collector (merge into few meshes per material) ---------------- */
-class GeoBin {
-  constructor() { this.b = new Map(); }
-  add(geo, material, x, y, z, { rx = 0, ry = 0, rz = 0 } = {}) {
-    const g = geo.clone();
-    const m = new THREE.Matrix4().compose(
-      new THREE.Vector3(x, y, z),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)),
-      new THREE.Vector3(1, 1, 1));
-    g.applyMatrix4(m);
-    let b = this.b.get(material);
-    if (!b) { b = []; this.b.set(material, b); }
-    b.push(g);
-  }
-  plane(w, d, material, x, y, z, ry = 0) {
-    const g = new THREE.PlaneGeometry(w, d);
-    g.rotateX(-Math.PI / 2); if (ry) g.rotateY(ry);
-    g.translate(x, y, z);
-    let b = this.b.get(material);
-    if (!b) { b = []; this.b.set(material, b); }
-    b.push(g);
-  }
-  build(scene) {
-    for (const [material, geos] of this.b) {
-      const merged = mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g), false);
-      const mesh = new THREE.Mesh(merged, material);
-      mesh.receiveShadow = true;
-      mesh.matrixAutoUpdate = false;
-      scene.add(mesh);
-      geos.forEach(g => g.dispose());
-    }
-    this.b.clear();
-  }
-}
-
-/* ---------------- roads ---------------- */
+/* ---------------- roads â†’ city/streetscape.js ---------------- */
 export function buildRoads(scene) {
-  const asph = ASPH, side = PAVE;
-  const curb = pbr('concrete');
-  const white = mat('#e8e6df'), yellow = mat('#d9b23a');
-  const ix = intersections();
-  const bin = new GeoBin();
-  for (const r of ROADS) {
-    const len = r.a1 - r.a0, mid = (r.a0 + r.a1) / 2;
-    // asphalt ribbon (own mesh — big UV-tiled surface)
-    const road = r.axis === 'v'
-      ? plane(r.w, len, asph, r.c, Y, mid, -Math.PI / 2, 6)
-      : plane(len, r.w, asph, mid, Y, r.c, -Math.PI / 2, 6);
-    scene.add(road);
-    // curbs + sidewalks both sides → merged into GeoBin
-    const sw = 2.6;
-    for (const s of [-1, 1]) {
-      const off = (r.w / 2 + sw / 2) * s;
-      const sx = r.axis === 'v' ? r.c + off : mid;
-      const sz = r.axis === 'v' ? mid : r.c + off;
-      const sg = new THREE.PlaneGeometry(r.axis === 'v' ? sw : len, r.axis === 'v' ? len : sw);
-      // world-scale UVs (tile every 3 m)
-      const uv = sg.attributes.uv;
-      for (let i = 0; i < uv.count; i++)
-        uv.setXY(i, uv.getX(i) * (r.axis === 'v' ? sw : len) / 3, uv.getY(i) * (r.axis === 'v' ? len : sw) / 3);
-      sg.rotateX(-Math.PI / 2); sg.translate(sx, Y - .01, sz);
-      let bb = bin.b.get(side); if (!bb) { bb = []; bin.b.set(side, bb); }
-      bb.push(sg);
-      // curb strip
-      const co = (r.w / 2 + .18) * s;
-      const cx = r.axis === 'v' ? r.c + co : mid, cz = r.axis === 'v' ? mid : r.c + co;
-      const cg = new THREE.PlaneGeometry(r.axis === 'v' ? .4 : len, r.axis === 'v' ? len : .4);
-      cg.rotateX(-Math.PI / 2); cg.translate(cx, Y - .005, cz);
-      bb = bin.b.get(curb); if (!bb) { bb = []; bin.b.set(curb, bb); }
-      bb.push(cg);
-    }
-    // lane markings
-    if (r.arterial) {
-      // solid double yellow center + white edge lines
-      for (const s of [-.5, .5]) {
-        const g = new THREE.PlaneGeometry(.16, len);
-        g.rotateX(-Math.PI / 2);
-        g.translate(r.axis === 'v' ? r.c + s : mid, Y + .008, r.axis === 'v' ? mid : r.c + s);
-        let bb = bin.b.get(yellow); if (!bb) { bb = []; bin.b.set(yellow, bb); }
-        bb.push(g);
-      }
-      // dashed white lane lines splitting each half
-      for (const s of [-1, 1]) {
-        const off = (r.w / 4) * s;
-        for (let a = r.a0 + 2; a < r.a1 - 2; a += 9) {
-          const segMid = a + 2.4;
-          if (ix.some(i => r.axis === 'v'
-            ? Math.abs(i.x - r.c) < r.w && segMid > i.z - i.wh / 2 - 6 && segMid < i.z + i.wh / 2 + 6
-            : Math.abs(i.z - r.c) < r.w && segMid > i.x - i.wv / 2 - 6 && segMid < i.x + i.wv / 2 + 6)) continue;
-          const g = new THREE.PlaneGeometry(.2, 3);
-          g.rotateX(-Math.PI / 2);
-          g.translate(r.axis === 'v' ? r.c + off : segMid, Y + .009,
-                      r.axis === 'v' ? segMid : r.c + off);
-          let bb = bin.b.get(white); if (!bb) { bb = []; bin.b.set(white, bb); }
-          bb.push(g);
-        }
-      }
-      // edge lines
-      for (const s of [-1, 1]) {
-        const off = (r.w / 2 - .7) * s;
-        const g = new THREE.PlaneGeometry(.25, len);
-        g.rotateX(-Math.PI / 2);
-        g.translate(r.axis === 'v' ? r.c + off : mid, Y + .006, r.axis === 'v' ? mid : r.c + off);
-        let bb = bin.b.get(white); if (!bb) { bb = []; bin.b.set(white, bb); }
-        bb.push(g);
-      }
-    } else {
-      // minor road: dashed center line
-      const dash = 3.5, gap = 3;
-      for (let a = r.a0 + 2; a < r.a1 - 2; a += dash + gap) {
-        const segMid = a + dash / 2;
-        if (ix.some(i => r.axis === 'v'
-          ? Math.abs(i.x - r.c) < r.w && segMid > i.z - i.wh / 2 - 6 && segMid < i.z + i.wh / 2 + 6
-          : Math.abs(i.z - r.c) < r.w && segMid > i.x - i.wv / 2 - 6 && segMid < i.x + i.wv / 2 + 6)) continue;
-        const g = new THREE.PlaneGeometry(r.axis === 'v' ? .25 : dash, r.axis === 'v' ? dash : .25);
-        g.rotateX(-Math.PI / 2);
-        g.translate(r.axis === 'v' ? r.c : segMid, Y + .008, r.axis === 'v' ? segMid : r.c);
-        let bb = bin.b.get(yellow); if (!bb) { bb = []; bin.b.set(yellow, bb); }
-        bb.push(g);
-      }
-    }
-    // manholes + storm drains every ~70m
-    for (let a = r.a0 + 40; a < r.a1 - 20; a += 70) {
-      const g = new THREE.CircleGeometry(.55, 12);
-      g.rotateX(-Math.PI / 2);
-      g.translate(r.axis === 'v' ? r.c + rr(-r.w / 4, r.w / 4) : a, Y + .007,
-                  r.axis === 'v' ? a : r.c + rr(-r.w / 4, r.w / 4));
-      let bb = bin.b.get(mat('#3a3d40')); if (!bb) { bb = []; bin.b.set(mat('#3a3d40'), bb); }
-      bb.push(g);
-    }
-  }
-  // intersection pads + crosswalks + stop bars
-  for (const i of ix) {
-    scene.add(plane(i.wv + 2, i.wh + 2, asph, i.x, Y + .002, i.z, -Math.PI / 2, 6));
-    const cw = 3.2, bars = 6;
-    // only draw a crosswalk on legs where the road actually continues
-    // (kills zebra bars spilling onto grass at T-junctions / dead ends)
-    const legOk = [
-      i.v.a0 < i.z - i.wh / 2 - 4.9,   // N
-      i.v.a1 > i.z + i.wh / 2 + 4.9,   // S
-      i.h.a0 < i.x - i.wv / 2 - 4.9,   // W
-      i.h.a1 > i.x + i.wv / 2 + 4.9,   // E
-    ];
-    const legs = [
-      { dx: 0, dz: -(i.wh / 2 + cw / 2 + 1.2), w: i.wv - 2, horiz: true },
-      { dx: 0, dz: (i.wh / 2 + cw / 2 + 1.2), w: i.wv - 2, horiz: true },
-      { dx: -(i.wv / 2 + cw / 2 + 1.2), dz: 0, w: i.wh - 2, horiz: false },
-      { dx: (i.wv / 2 + cw / 2 + 1.2), dz: 0, w: i.wh - 2, horiz: false },
-    ];
-    for (let li = 0; li < legs.length; li++) {
-      if (!legOk[li]) continue;
-      const L = legs[li];
-      for (let b = 0; b < bars; b++) {
-        const t = -L.w / 2 + (b + .5) * (L.w / bars);
-        const g = L.horiz
-          ? new THREE.PlaneGeometry(L.w / bars * .55, cw)
-          : new THREE.PlaneGeometry(cw, L.w / bars * .55);
-        g.rotateX(-Math.PI / 2);
-        g.translate(L.horiz ? i.x + t : i.x + L.dx, Y + .015, L.horiz ? i.z + L.dz : i.z + t);
-        let bb = bin.b.get(white); if (!bb) { bb = []; bin.b.set(white, bb); }
-        bb.push(g);
-      }
-      // stop bar behind each crosswalk
-      const g = L.horiz ? new THREE.PlaneGeometry(L.w, .5) : new THREE.PlaneGeometry(.5, L.w);
-      g.rotateX(-Math.PI / 2);
-      g.translate(L.horiz ? i.x : i.x + L.dx * 1.18, Y + .013, L.horiz ? i.z + L.dz * 1.18 : i.z);
-      let bb = bin.b.get(white); if (!bb) { bb = []; bin.b.set(white, bb); }
-      bb.push(g);
-    }
-  }
-  bin.build(scene);
+  const ix = buildStreetscape(scene);
+  publishCity();
   return ix;
 }
-
-/* ---------------- parking lots ---------------- */
 export function buildLots(scene) {
   const bin = new GeoBin();
   const white = mat('#dfe3e6');
@@ -253,16 +59,17 @@ export function buildLots(scene) {
 /* ---------------- trees (instanced) ---------------- */
 export function buildTrees(scene) {
   const spots = [];
-  // species keys: o oak · m maple (autumn) · b birch · c spruce · p pine · s sakura
+  // species keys: o oak Â· m maple (autumn) Â· b birch Â· c spruce Â· p pine Â· s sakura
   for (const r of ROADS) {
     const step = r.arterial ? 26 : 34;
+    const treeline = streetBand(r) + 1.4;   // just outside the sidewalk band
     for (let a = r.a0 + 8; a < r.a1 - 8; a += step) for (const s of [-1, 1]) {
-      const off = (r.w / 2 + 4.5) * s;
+      const off = treeline * s;
       const x = r.axis === 'v' ? r.c + off : a;
       const z = r.axis === 'v' ? a : r.c + off;
       // street mix: mostly oak, maple accents, birch on the commercial stretch
       const t = R() < .58 ? 'o' : R() < .7 ? 'm' : 'b';
-      if (isFree(x, z, 2.5) && R() < .8) spots.push({ x, z, s: rr(.8, 1.15), t });
+      if (isFree(x, z, 1) && R() < .8) spots.push({ x, z, s: rr(.8, 1.15), t });
     }
   }
   for (let i = 0; i < 340; i++) {
@@ -273,7 +80,7 @@ export function buildTrees(scene) {
   }
   for (let i = 0; i < 220; i++) {
     const x = rr(-800, -700), z = rr(-720, 700);
-    // west greenbelt: conifer forest — pines & spruce
+    // west greenbelt: conifer forest â€” pines & spruce
     if (isFree(x, z, 3)) spots.push({ x, z, s: rr(1.0, 1.9), t: R() < .6 ? 'p' : 'c' });
   }
   for (const b of HOUSE_BLOCKS) {
@@ -343,35 +150,35 @@ export function buildTrees(scene) {
   mk(folG2, folM, oak, 6.4, true, 1.4, .24, .4, .25, .9);
   mk(folG2, folM, oak, 4.2, true, 2.6, .27, .38, .17, .85);
   mk(folG2, folM, oak, 5.4, true, 3.4, .26, .44, .21, .8);
-  // spruce — 2 cones
+  // spruce â€” 2 cones
   mk(trunkG, trunkM, con, 0, false);
   mk(conG, conM, con, 4.4, true, 0, .34, .38, .14);
   mk(conG2, conM, con, 7.6, true, .3, .33, .42, .18);
-  // maple — round crown, autumn oranges/reds
+  // maple â€” round crown, autumn oranges/reds
   mk(trunkG, trunkM, maple, 0, false);
   mk(folG, folM, maple, 4.8, true, 0, .055, .55, .34, .95);
   mk(folG2, folM, maple, 6.0, true, 1.6, .04, .6, .3, .9);
   mk(folG2, folM, maple, 4.4, true, 2.4, .08, .5, .3, .88);
-  // birch — tall pale trunk, small bright crown high up
+  // birch â€” tall pale trunk, small bright crown high up
   mk(trunkG2, trunkM2, birch, 0, false);
   mk(folG2, folM, birch, 6.6, true, 0, .26, .5, .34, 1);
   mk(folG2, folM, birch, 7.8, true, .9, .3, .55, .38, .95);
-  // pine — 3 stacked dark cones, layered look
+  // pine â€” 3 stacked dark cones, layered look
   mk(trunkG, trunkM, pine, 0, false);
   mk(conG, conM, pine, 3.6, true, 0, .36, .4, .13);
   mk(conG2, conM, pine, 6.2, true, 0, .35, .45, .16);
   mk(conG3, conM, pine, 8.4, true, 0, .33, .5, .19);
-  // sakura — pink blossom clouds, park accents
+  // sakura â€” pink blossom clouds, park accents
   mk(trunkG, trunkM, sakura, 0, false);
   mk(folG, folM, sakura, 4.6, true, 0, .93, .42, .58, .95);
   mk(folG2, folM, sakura, 5.8, true, 1.8, .95, .38, .62, .9);
   mk(folG2, folM, sakura, 4.0, true, 2.4, .91, .45, .55, .9);
 
-  /* bushes & hedges — instanced squashed blobs along facades & park edges */
+  /* bushes & hedges â€” instanced squashed blobs along facades & park edges */
   const bushes = [];
   for (const b of BUILDINGS) {
     if (!b.w || b.type === 'zone' || b.type === 'parkzone') continue;
-    // bushes hug the facade — no occupancy check (the pad would reject them all)
+    // bushes hug the facade â€” no occupancy check (the pad would reject them all)
     for (let i = 0; i < Math.floor(b.w / 9); i++) {
       const x = b.x - b.w / 2 + 4 + i * 9 + rr(-1.5, 1.5);
       bushes.push({ x, z: b.z + b.d / 2 + 1.6, s: rr(.6, 1.1) });
@@ -464,7 +271,7 @@ function ambulance() {
   return g;
 }
 
-/* parked + moving cars — instanced */
+/* parked + moving cars â€” instanced */
 let traffic = null;
 export function buildCars(scene) {
   const { body, trim } = carGeos();
@@ -660,6 +467,7 @@ export function buildWater(scene) {
 }
 
 export function buildPark(scene) {
+  buildGreens(scene);      // programmed green parcels (city/greens.js)
   const P = PARK_ZONE;
   const lawnM = pbr('grass_ground'); lawnM.color = new THREE.Color('#a8c088');
   const lawn = plane(P.x1 - P.x0, P.z1 - P.z0,
@@ -739,7 +547,7 @@ export function buildPark(scene) {
     bf.add(box(.8, .08, .8, baseM, bx, Y + .02, bz)));
   bf.position.set(430, 0, 235); scene.add(bf);
 
-  // benches along path + picnic tables — one merged colored mesh
+  // benches along path + picnic tables â€” one merged colored mesh
   const parts = [];
   const benchAt = (bx, bz, ry) => {
     const c = Math.cos(ry), s2 = Math.sin(ry);
@@ -758,7 +566,7 @@ export function buildPark(scene) {
     benchAt(P.x0 + 30 + t * (P.x1 - P.x0 - 60) + rr(-6, 6),
       (P.z0 + P.z1) / 2 + Math.sin(t * Math.PI * 2.4) * 70 + rr(4, 8), rr(0, 6.28));
   }
-  // flower beds — colored rings + instanced flowers
+  // flower beds â€” colored rings + instanced flowers
   const flowers = [];
   for (let i = 0; i < 6; i++) {
     const fx = rr(P.x0 + 40, P.x1 - 60), fz = rr(P.z0 + 20, P.z1 - 60);
@@ -779,7 +587,7 @@ export function buildPark(scene) {
 
   // keep scattered trees off the built features & the walking path
   occupyRect(505, 95, 13, 13, 3);            // gazebo
-  occupyRect(540, 132, 20, 16, 2);           // dock (rotated — generous box)
+  occupyRect(540, 132, 20, 16, 2);           // dock (rotated â€” generous box)
   occupyRect(415, 60, 38, 28, 3);            // playground
   occupyRect(430, 235, 72, 72, 3);           // ball field
   for (let t = 0; t <= 1; t += .04)
@@ -1002,7 +810,7 @@ export function buildProps(scene) {
     for (const [cx, cz, ry] of [[-1, -1, 0], [1, 1, Math.PI]]) {
       const x = i.x + cx * (i.wv / 2 + 1.8), z = i.z + cz * (i.wh / 2 + 1.8);
       sigT.push({ x, z, ry: ry + Math.PI / 4 });
-      // 3 bulbs per head — face back along the arm toward oncoming traffic
+      // 3 bulbs per head â€” face back along the arm toward oncoming traffic
       const yawG = ry + Math.PI / 4;
       const face = Math.atan2(Math.cos(yawG), Math.sin(yawG)); // +z maps to -armdir
       for (let b = 0; b < 3; b++)
@@ -1041,7 +849,7 @@ export function buildProps(scene) {
   scene.add(bulbIM);
   signals = { bulbIM, bulbs, t: 0 };
 
-  // hydrants, trash cans, mailboxes, stop signs, bus stops — colored → merged
+  // hydrants, trash cans, mailboxes, stop signs, bus stops â€” colored â†’ merged
   const parts = [];
   const hydrants = [[-20, -60], [160, -60], [60, -24], [-160, 60], [-480, 440], [240, -24],
                     [-420, 200], [-640, 420], [420, -240], [620, -460]];
@@ -1078,7 +886,7 @@ export function buildProps(scene) {
   for (const i of ix.slice(0, 6)) {
     parts.push({ geo: new THREE.CylinderGeometry(.06, .07, 3.4, 8), color: '#3d4145',
       x: i.x - i.wv / 2 - 1.4, y: 1.7, z: i.z + i.wh / 2 + 1.4 });
-    // blades face both directions — green
+    // blades face both directions â€” green
     parts.push({ geo: new THREE.BoxGeometry(2.6, .34, .06), color: '#1e6b46',
       x: i.x - i.wv / 2 - 1.4, y: 3.1, z: i.z + i.wh / 2 + 1.4 });
     parts.push({ geo: new THREE.BoxGeometry(.06, .34, 2.6), color: '#1e6b46',
@@ -1125,7 +933,7 @@ export function buildProps(scene) {
   sc.add(box(1.8, 3.2, 1.8, mat('#d4ac0d'), 8, 0, 3));
   sc.position.set(-560, 0, 645); scene.add(sc);
   occupyRect(-560, 645, 44, 30, 3);
-  // track + soccer field west of Cedar Ave at the woods edge —
+  // track + soccer field west of Cedar Ave at the woods edge â€”
   // clear of every road (Cedar -645..-635, Maple -425..-415)
   const sfm = pbr('grass_ground'); sfm.color = new THREE.Color('#8fae6f');
   scene.add(plane(90, 55, sfm, -730, Y + .002, 590, -Math.PI / 2, 9));
@@ -1244,9 +1052,9 @@ export function buildCountryside(scene) {
   scene.add(instances(tlG, new M({ color: '#fff', roughness: .95, flatShading: true }), tl));
 }
 
-/* ---------------- mountain ring — the hard edge of the world ----------------
+/* ---------------- mountain ring â€” the hard edge of the world ----------------
    Two concentric ridges, harmonic height noise, vertex-colored altitude bands
-   (forest → scree → snow). One non-indexed mesh → merges into the VCOL bucket. */
+   (forest â†’ scree â†’ snow). One non-indexed mesh â†’ merges into the VCOL bucket. */
 export function buildMountains(scene) {
   const pos = [], col = [];
   const cFor = new THREE.Color('#35522c'), cRock = new THREE.Color('#5d554b'),
@@ -1271,10 +1079,10 @@ export function buildMountains(scene) {
       const a0 = i / N * 6.2831853, a1 = (i + 1) / N * 6.2831853;
       const h0 = H(a0), h1 = H(a1);
       const rm0 = R0(a0), rm1 = R0(a1);
-      // inner slope (faces town) — wound to face inward
+      // inner slope (faces town) â€” wound to face inward
       V(a0, rm0 - width, 0); V(a1, rm1 - width, 0); V(a0, rm0, h0);
       V(a0, rm0, h0);       V(a1, rm1 - width, 0); V(a1, rm1, h1);
-      // outer slope — wound to face outward
+      // outer slope â€” wound to face outward
       V(a0, rm0, h0);       V(a1, rm1, h1);        V(a0, rm0 + width, 0);
       V(a0, rm0 + width, 0); V(a1, rm1, h1);       V(a1, rm1 + width, 0);
     }
@@ -1284,7 +1092,7 @@ export function buildMountains(scene) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.computeVertexNormals();          // non-indexed → crisp facets
+  g.computeVertexNormals();          // non-indexed â†’ crisp facets
   const m = new THREE.Mesh(g, VCOL());
   m.receiveShadow = true;
   scene.add(m);
@@ -1293,7 +1101,7 @@ export function buildMountains(scene) {
 /* ---------------- bird flocks ---------------- */
 let birds = null;
 export function buildBirds(scene) {
-  // tiny chevron: two triangles sharing a body vertex — reads as a gliding bird
+  // tiny chevron: two triangles sharing a body vertex â€” reads as a gliding bird
   const bg = new THREE.BufferGeometry();
   bg.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
     0, 0, .28,  -1.05, .18, -.3,  0, 0, -.3,   // left wing
@@ -1394,7 +1202,7 @@ export function tickWorld(t, dt) {
       _eul.set(0, yaw, 0); _q.setFromEuler(_eul);
       _mx.compose(_p, _q, _s1);
       torsoIM.setMatrixAt(i, _mx); headIM.setMatrixAt(i, _mx);
-      // legs pivot at hip .82 — swing around X in local frame
+      // legs pivot at hip .82 â€” swing around X in local frame
       _p.y = .82 + bob;
       _eul.set(swing, yaw, 0); _q.setFromEuler(_eul); _mx.compose(_p, _q, _s1);
       legLIM.setMatrixAt(i, _mx);
@@ -1438,7 +1246,7 @@ export function tickWorld(t, dt) {
     c.sp.position.x += c.v * dt;
     if (c.sp.position.x > 1800) c.sp.position.x = -1800;
   }
-  // circling birds — flap = quick body roll, glide between wingbeats
+  // circling birds â€” flap = quick body roll, glide between wingbeats
   if (birds) {
     const { im, list } = birds;
     list.forEach((b, i) => {
