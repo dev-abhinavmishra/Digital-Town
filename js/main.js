@@ -487,9 +487,22 @@ function updateShadow() {
   }
 }
 
+/* resize paths MUST repaint in the same task — setPixelRatio/setSize clear
+   the canvas, and a compositor paint between the clear and the next tick's
+   render would present a black frame (this landed in the __ready window) */
+const resync = () => {
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(pixelRatio);
+  if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight);
+    if (pipe && pipe.gtao) pipe.gtao.dirty = true;   // RTs realloc'd — rebuild AO, never composite stale
+    composer.render(); }
+  else renderer.render(scene, activeCam);
+};
+
 /* ---------- debug HUD ---------- */
 const hud = document.getElementById('hud');
 let fpsEMA = 60, frames = 0, lastHud = 0;
+let veilGone = false, veilFreeFrames = 0;
 
 /* ---------- loop ---------- */
 const clock = new THREE.Clock();
@@ -571,32 +584,27 @@ function tick() {
   if (t - lastRatioCheck > 2.5) {
     lastRatioCheck = t;
     if (fpsEMA < 42 && pixelRatio > .55) {
-      pixelRatio = Math.max(.42, pixelRatio - .2);
-      renderer.setPixelRatio(pixelRatio);
-      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight);
-        if (pipe && pipe.gtao) pipe.gtao.dirty = true; }   // RTs realloc'd — rebuild AO, never composite stale
+      pixelRatio = Math.max(.42, pixelRatio - .2); resync();
     } else if (fpsEMA > 57 && pixelRatio < MAX_RATIO) {
-      pixelRatio = Math.min(MAX_RATIO, pixelRatio + .25);
-      renderer.setPixelRatio(pixelRatio);
-      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight);
-        if (pipe && pipe.gtao) pipe.gtao.dirty = true; }   // RTs realloc'd — rebuild AO, never composite stale
+      pixelRatio = Math.min(MAX_RATIO, pixelRatio + .25); resync();
     }
   }
   if (++frames === 40) {
     __fx.tex = texReport();
     const lo = document.getElementById('loading');
-    // gate __ready on the veil actually being gone — a mid-fade capture
-    // reads as a transient dark frame
+    // fade the veil, then count frames tick-side: __ready must not flip until
+    // real composer frames have PRESENTED with the veil gone — a capture at
+    // the flip sees whatever was last composited
     if (lo) { lo.style.opacity = '0';
-      setTimeout(() => { lo.remove(); window.__ready = true; }, 700); }
-    else window.__ready = true;
+      setTimeout(() => { lo.remove(); veilGone = true; }, 700); }
+    else veilGone = true;
   }
+  if (veilGone && !window.__ready && ++veilFreeFrames >= 2)
+    window.__ready = true;
 }
 tick();
 addEventListener('resize', () => {
-  renderer.setSize(innerWidth, innerHeight);
-  if (composer) { composer.setSize(innerWidth, innerHeight);
-    if (pipe && pipe.gtao) pipe.gtao.dirty = true; }
   if (camera.isPerspectiveCamera) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+  resync();
 });
 window.__cam = camera; window.__scene = scene; window.__renderer = renderer;

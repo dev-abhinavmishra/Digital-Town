@@ -78,6 +78,24 @@
 <body>
 <div id="app"></div>
 <div id="loading"><h1>HAVEN<b>BROOK</b></h1><p>A COMMUNITY PLANNED AROUND CARE</p><div class="bar"><i></i></div></div>
+<script>
+// boot watchdog — inline so it survives a module-load failure (e.g. a
+// network flap killing main.js leaves the veil up forever). Reloads if
+// __ready hasn't fired in 30s, capped at 3 tries per tab session.
+(function () {
+  var KEY = 'hbBoot';
+  var n = +sessionStorage.getItem(KEY) || 0;
+  setTimeout(function () {
+    if (!window.__ready && n < 3) {
+      sessionStorage.setItem(KEY, n + 1);
+      location.reload();
+    }
+  }, 30000);
+  var poll = setInterval(function () {
+    if (window.__ready) { sessionStorage.removeItem(KEY); clearInterval(poll); }
+  }, 1000);
+})();
+</script>
 <div id="labels"></div>
 <div id="hud"></div>
 <div id="legend"></div>
