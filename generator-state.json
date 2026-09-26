@@ -28,6 +28,10 @@
     {
       "t": "2026-09-26T14:25Z",
       "ev": "r02: eval FAIL C3(rect clipping)+C4(day haze) -> vignette destination-in elliptical mask on all cumulus variants, day kids 2-4->0-2 + op .88, hazeW .30->.20 airLo 240->300; verified blocker cam clean, aerial 567c/21.9f, dusk unchanged"
+    },
+    {
+      "t": "2026-09-26T15:05Z",
+      "ev": "eval r02 CONTRACT PASS 11/11 on 451543a - stream rubric 7.80; RENDER done for sprint-02. B's 20091b6 un-zero lamps fix landed post-commit -> lampIM populated, pools auto-followed to 191 real heads (synthesized count was 222 while empty). Carry: AO foliage ghost watch, green reshoot pending network, lamp pole near blocker cam = B-side placement quirk."
     }
   ],
   "caps": {
