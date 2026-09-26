@@ -155,7 +155,9 @@ function facadeDress(g, w, d, h, o = {}) {
    faces: 'f' = +z street face, 'b' = back, 's' = ±x flanks.
    storefront:true clips the grid at the painted shopfront band (px 322). */
 function winDress(parts, w, d, h, { rows = 2, cols = 4, storefront = false,
-                                    faces = 'fb', trim = '#e5e0d4' } = {}) {
+                                    faces = 'fb', trim = '#e5e0d4',
+                                    transom = false, spandrel = false,
+                                    fins = false } = {}) {
   const TOP = storefront ? 190 : 14, BAND = storefront ? 322 : 512;
   const cw = 512 / cols, rh = (512 - TOP - 14) / rows;
   // face table: ry = box rotation to lie on the face; at(u, n) maps a lateral
@@ -171,27 +173,87 @@ function winDress(parts, w, d, h, { rows = 2, cols = 4, storefront = false,
   for (const ch of faces)
     if (ch === 's') list.push(FDEF.l, FDEF.r);
     else if (FDEF[ch]) list.push(FDEF[ch]);
+  let topY = -1, botY = -1;
   for (let r = 0; r < rows; r++) {
     const wy = TOP + r * rh + rh * .14, wh = rh * .64;
     if (wy >= BAND) break;                         // row hidden behind shopfront
     const yT = h * (1 - wy / 512);
     const yB = h * (1 - Math.min(wy + wh, BAND) / 512);
     if (yT - yB < .4) continue;
+    if (topY < 0) topY = yT;
+    botY = yB;
     for (let c = 0; c < cols; c++) {
       const cf = (c + .5) / cols - .5;
       for (const F of list) {
         const ww = cw * .68 / 512 * F.W, u = cf * F.W;
         const [lx, lz] = F.at(u, .1);              // lintel
-        parts.push({ geo: new THREE.BoxGeometry(ww + .24, .16, .16), color: trim,
-          x: lx, y: yT + .06, z: lz, ry: F.ry });
+        parts.push({ geo: new THREE.BoxGeometry(ww + .24, .18, .2), color: trim,
+          x: lx, y: yT + .07, z: lz, ry: F.ry });
         const [sx, sz] = F.at(u, .12);             // sill
-        parts.push({ geo: new THREE.BoxGeometry(ww + .3, .13, .24), color: '#d5cfc0',
-          x: sx, y: yB - .065, z: sz, ry: F.ry });
+        parts.push({ geo: new THREE.BoxGeometry(ww + .3, .14, .26), color: '#d5cfc0',
+          x: sx, y: yB - .07, z: sz, ry: F.ry });
         for (const sd of [-1, 1]) {                // jambs
-          const [jx, jz] = F.at(u + sd * (ww / 2 + .05), .05);
-          parts.push({ geo: new THREE.BoxGeometry(.09, yT - yB, .1), color: trim,
+          const [jx, jz] = F.at(u + sd * (ww / 2 + .06), .08);
+          parts.push({ geo: new THREE.BoxGeometry(.1, yT - yB, .16), color: trim,
             x: jx, y: (yT + yB) / 2, z: jz, ry: F.ry });
         }
+        if (transom && yT - yB > 1.4) {            // mid-rail splits tall panes
+          const ty = yB + (yT - yB) * .38;
+          const [tx, tz] = F.at(u, .07);
+          parts.push({ geo: new THREE.BoxGeometry(ww + .16, .11, .14), color: trim,
+            x: tx, y: ty, z: tz, ry: F.ry });
+        }
+      }
+    }
+    if (spandrel) {
+      // floor-slab band at this row's top line (painter's shadow row)
+      const by = h * (1 - (TOP + r * rh) / 512);
+      for (const F of list) {
+        const [bx, bz] = F.at(0, .13);
+        parts.push({ geo: new THREE.BoxGeometry(F.W + .2, .26, .18), color: trim,
+          x: bx, y: by, z: bz, ry: F.ry });
+      }
+    }
+  }
+  if (fins && cols > 3 && topY > 0)                // pilaster fins between bays
+    for (let c = 1; c < cols; c++)
+      for (const F of list) {
+        const [fx, fz] = F.at((c / cols - .5) * F.W, .09);
+        parts.push({ geo: new THREE.BoxGeometry(.2, topY - botY + .3, .18),
+          color: trim, x: fx, y: (topY + botY) / 2, z: fz, ry: F.ry });
+      }
+}
+
+/* ground-floor shopfront articulation over the painted storefront band —
+   bay mullions, header fascia, kick plate. Matches the painter's bay grid. */
+function storefrontKit(parts, w, d, h, { cols = 4, faces = 'f',
+                                        band = '#3a4147', trim = '#ddd6c8' } = {}) {
+  const bandTop = h * (1 - 322 / 512);             // painted shopfront height
+  const FDEF = {
+    f: { ry: 0,            W: w, at: (u, n) => [u,  d / 2 + n] },
+    b: { ry: Math.PI,      W: w, at: (u, n) => [-u, -d / 2 - n] },
+    l: { ry: Math.PI / 2,  W: d, at: (u, n) => [-w / 2 - n, u] },
+    r: { ry: -Math.PI / 2, W: d, at: (u, n) => [w / 2 + n, -u] },
+  };
+  for (const ch of faces) {
+    const fl = ch === 's' ? [FDEF.l, FDEF.r] : [FDEF[ch]];
+    for (const FF of fl) {
+      if (!FF) continue;
+      // header fascia across the whole band + kick plate at grade
+      let [hx, hz] = FF.at(0, .12);
+      parts.push({ geo: new THREE.BoxGeometry(FF.W + .3, .5, .22), color: trim,
+        x: hx, y: bandTop + .18, z: hz, ry: FF.ry });
+      const [kx, kz] = FF.at(0, .1);
+      parts.push({ geo: new THREE.BoxGeometry(FF.W + .2, .42, .16), color: '#2e3439',
+        x: kx, y: .28, z: kz, ry: FF.ry });
+      // mullions at bay boundaries + thicker end pilasters
+      for (let c = 0; c <= cols; c++) {
+        const edge = c === 0 || c === cols;
+        const u = (c / cols - .5) * FF.W;
+        const [mx, mz] = FF.at(u, .08);
+        parts.push({ geo: new THREE.BoxGeometry(edge ? .3 : .16, bandTop - .3,
+          edge ? .2 : .14), color: edge ? trim : band,
+          x: mx, y: .4 + (bandTop - .4) / 2, z: mz, ry: FF.ry });
       }
     }
   }
@@ -247,6 +309,13 @@ function winDressMesh(g, w, d, h, o) {
 function fireEscapeMesh(g, w, d, h, o) {
   const parts = [];
   fireEscape(parts, w, d, h, o);
+  if (!parts.length) return;
+  const m = new THREE.Mesh(colored(parts), VCOL());
+  m.castShadow = m.receiveShadow = true; g.add(m);
+}
+function storefrontKitMesh(g, w, d, h, o) {
+  const parts = [];
+  storefrontKit(parts, w, d, h, o);
   if (!parts.length) return;
   const m = new THREE.Mesh(colored(parts), VCOL());
   m.castShadow = m.receiveShadow = true; g.add(m);
@@ -440,7 +509,9 @@ function hospital(s) {
   parapet(g, tw, td, t1h + 12, { style: 'stepped' }); hvac(g, tw, td, t1h + 12, 4);
   parapet(g, tw * .72, td * .8, 12 + s.h, { ph: 1.4 });
   clutter(g, w, d, 12, { solar: false });   // podium roof clutter around heli
-  winDressMesh(g, w, d, 12, { rows: 2, cols: 12, storefront: true, faces: 'fbs' });
+  winDressMesh(g, w, d, 12, { rows: 2, cols: 12, storefront: true, faces: 'fbs',
+    transom: true, fins: true });
+  storefrontKitMesh(g, w, d, 12, { cols: 12, faces: 'fbs' });
   // podium roof edge band
   g.add(box(w + .6, .5, d + .6, mat('#8a949a'), 0, 12, 0));
   // red cross on tower (front + side)
@@ -540,7 +611,8 @@ function medhall(s) { // university main hall with clock tower
   }
   // sills/lintels on back + flanks (front already carries 3D window strips)
   winDressMesh(g, w, d, s.h, { rows: Math.max(3, Math.round(s.h / 4)),
-    cols: Math.max(6, Math.round(w / 8)), faces: 'bs', trim: '#e8e2d4' });
+    cols: Math.max(6, Math.round(w / 8)), faces: 'bs', trim: '#e8e2d4',
+    transom: true, spandrel: true, fins: true });
   door(g, 8, 6.4, 0, d / 2 + .4, 0, '#2c3a42', { recess: true });
   // entry stairs
   g.add(box(12, .4, 2.4, mat('#b9b2a2'), 0, 0, d / 2 + 5));
@@ -558,7 +630,8 @@ function campusb(s) { // campus brick academic block
   g.add(b);
   const r = gableRoof(w, 4.5, d, roofM); r.position.y = s.h; g.add(r);
   g.add(box(w * .3, 1.2, .8, mat('#e8e2d4'), 0, s.h * .55, d / 2 + .2)); // limestone band
-  winDressMesh(g, w, d, s.h, { rows: 3, cols: Math.round(w / 7), faces: 'fbs', trim: '#e8e2d4' });
+  winDressMesh(g, w, d, s.h, { rows: 3, cols: Math.round(w / 7), faces: 'fbs',
+    trim: '#e8e2d4', transom: true, spandrel: true, fins: true });
   door(g, 6, 4.5, 0, d / 2 + .3, 0, '#2c3a42', { recess: true });
   // steps + hedges flanking entry
   g.add(box(9, .35, 2, mat('#b9b2a2'), 0, 0, d / 2 + 1.4));
@@ -577,7 +650,9 @@ function medoffice(s, opts = {}) {
   clutter(g, w, d, s.h, { solar: R() < .4 });
   facadeDress(g, w, d, s.h, { pilasters: R() < .5, courses: s.h > 12 });
   winDressMesh(g, w, d, s.h, { rows: Math.max(2, Math.round(s.h / 3.4)),
-    cols: Math.round(w / 6), storefront: true, faces: 'fbs' });
+    cols: Math.round(w / 6), storefront: true, faces: 'fbs',
+    transom: true, spandrel: true, fins: true });
+  storefrontKitMesh(g, w, d, s.h, { cols: Math.round(w / 6), faces: 'fbs' });
   if (s.h > 8.5 && R() < .65) fireEscapeMesh(g, w, d, s.h, { side: R() < .5 ? -1 : 1 });
   door(g, 5, 4.2, 0, d / 2 + .2, 0, '#2c3a42', { recess: true });
   awning(g, w * .8, 0, 4.6, d / 2 + 1.2, opts.awn || '#41618a', true, s.num ? true : false);
@@ -651,7 +726,7 @@ function hospice(s) {
   const b = box(w, s.h, d, null);
   b.material = wallMats(facadeMaps({ base: '#e3d5b8', rows: 1, cols: 9, win: '#3a4a55', brickLines: false }), roofM);
   g.add(b);
-  winDressMesh(g, w, d, s.h, { rows: 1, cols: 9, faces: 'fb', trim: '#efe8da' });
+  winDressMesh(g, w, d, s.h, { rows: 1, cols: 9, faces: 'fb', trim: '#efe8da', transom: true });
   const r = gableRoof(w, 5.5, d, roofM); r.position.y = s.h; g.add(r);
   // porch
   g.add(box(w * .7, .5, 5, mat('#a58a68'), 0, .4, d / 2 + 2.5));
@@ -672,7 +747,8 @@ function civicb(s, signTxt) {
   parapet(g, w, d, s.h, { style: 'stepped', ph: rr(1.0, 1.4) });
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: true, downspouts: false });
   winDressMesh(g, w, d, s.h, { rows: Math.max(2, Math.round(s.h / 3.6)),
-    cols: Math.round(w / 6.5), faces: 'fbs', trim: '#ddd6c0' });
+    cols: Math.round(w / 6.5), faces: 'fbs', trim: '#ddd6c0',
+    transom: true, spandrel: true, fins: true });
   // entry steps + columns
   for (let i = -1; i <= 1; i++) {
     g.add(cyl(.5, .55, 5, mat('#d9d2c0'), i * 4, 0, d / 2 + 1.8));
@@ -717,7 +793,9 @@ function storefront(s, style = {}) {
   g.add(b);
   parapet(g, w, d, s.h, R() < .4 ? { style: 'pediment' } : {});
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: R() < .45 });
-  winDressMesh(g, w, d, s.h, { rows: 1, cols: 4, storefront: true, faces: 'fbs', trim: '#ddd6c8' });
+  winDressMesh(g, w, d, s.h, { rows: 1, cols: 4, storefront: true, faces: 'fbs',
+    trim: '#ddd6c8', transom: true });
+  storefrontKitMesh(g, w, d, s.h, { cols: 4, faces: 'fbs' });
   if (s.h > 8.5 && R() < .7) fireEscapeMesh(g, w, d, s.h, { side: R() < .5 ? -1 : 1 });
   awning(g, w * .85, 0, 4.4, d / 2 + 1.1, st.awn || '#3f5e78', true, true);
   door(g, 4.4, 4, 0, d / 2 + .25, 0, '#2c3a42', { recess: true });
@@ -739,7 +817,9 @@ function bigbox(s, brand) {
   parapet(g, w, d, s.h, { ph: rr(1.2, 1.8) }); hvac(g, w, d, s.h, 8);
   clutter(g, w, d, s.h, { solar: true });
   facadeDress(g, w, d, s.h, { pilasters: true, courses: false });
-  winDressMesh(g, w, d, s.h, { rows: 1, cols: 10, storefront: true, faces: 'fbs' });
+  winDressMesh(g, w, d, s.h, { rows: 1, cols: 10, storefront: true, faces: 'fbs',
+    transom: true, fins: true });
+  storefrontKitMesh(g, w, d, s.h, { cols: 10, faces: 'fbs' });
   if (isTarget) {
     g.add(box(w, 2.6, .8, mat('#cc0000'), 0, s.h - 4, d / 2 + .2));
     sign(g, 'TARGET', w * .3, s.h - 8.4, d / 2 + .4, { bg: '#cc0000', font: 'bold 60px Arial' });
@@ -782,7 +862,9 @@ function mall(s) {
   parapet(g, w, d, s.h, { ph: rr(1.1, 1.7) }); hvac(g, w, d, s.h, 10);
   clutter(g, w, d, s.h, { solar: true, skylights: false });
   facadeDress(g, w, d, s.h, { pilasters: false });
-  winDressMesh(g, w, d, s.h, { rows: 2, cols: 14, storefront: true, faces: 'fbs' });
+  winDressMesh(g, w, d, s.h, { rows: 2, cols: 14, storefront: true, faces: 'fbs',
+    transom: true, fins: true });
+  storefrontKitMesh(g, w, d, s.h, { cols: 14, faces: 'fbs' });
   // clerestory spine on roof
   g.add(box(w * .6, 3, 8, mat('#8a8070'), 0, s.h, 0));
   const skyl = box(w * .58, 2.2, 7, new M({ color: '#9fc3d4', roughness: .2, metalness: .4 }), 0, s.h + .5, 0);
@@ -888,7 +970,8 @@ function fastfood(s) {
   g.add(b);
   parapet(g, w, d, s.h, { color: '#8a4b2d' });
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: false });
-  winDressMesh(g, w, d, s.h, { rows: 1, cols: 4, storefront: true, faces: 'fbs' });
+  winDressMesh(g, w, d, s.h, { rows: 1, cols: 4, storefront: true, faces: 'fbs', transom: true });
+  storefrontKitMesh(g, w, d, s.h, { cols: 4, faces: 'fbs' });
   awning(g, w * .9, 0, 4.2, d / 2 + 1, '#c0392b', true, true);
   // drive-thru canopy on side + menu board
   g.add(box(8, .5, 5, mat('#c0392b'), w / 2 + 5, 4.6, 0));
@@ -917,7 +1000,8 @@ function apartment(s) {
   clutter(g, w, d, s.h, { solar: true, tank: true });
   // balconies with railings — vertex-colored so they merge globally
   const parts = [];
-  winDress(parts, w, d, s.h, { rows: Math.round(s.h / 3.2), cols: Math.round(w / 5.5), faces: 'fbs' });
+  winDress(parts, w, d, s.h, { rows: Math.round(s.h / 3.2), cols: Math.round(w / 5.5),
+    faces: 'fbs', transom: true, spandrel: true, fins: true });
   fireEscape(parts, w, d, s.h, { side: s.x > 0 ? -1 : 1 });
   const cols = Math.round(w / 8);
   for (let i = 0; i < cols; i++) for (let r = 0; r < Math.round(s.h / 3.2); r++) {
@@ -959,7 +1043,9 @@ function tower(s) {
   parapet(g, w, d, podH);
   clutter(g, w, d, podH, { skylights: false });
   facadeDress(g, w, d, podH, { pilasters: true });
-  winDressMesh(g, w, d, podH, { rows: 1, cols: Math.round(w / 7), storefront: true, faces: 'fbs' });
+  winDressMesh(g, w, d, podH, { rows: 1, cols: Math.round(w / 7), storefront: true,
+    faces: 'fbs', transom: true, fins: true });
+  storefrontKitMesh(g, w, d, podH, { cols: Math.round(w / 7), faces: 'fbs' });
   // shaft(s) — setback tiers
   let y = podH, ww = w * .82, dd = d * .82, cx = 0, cz = -d * .05;
   const tiers = h > 34 ? 3 : 2;
@@ -1265,7 +1351,9 @@ function skyscraper(s) {
   parapet(g, w, d, podH, { ph: rr(1.1, 1.5) });
   clutter(g, w, d, podH, { skylights: false });
   facadeDress(g, w, d, podH, { pilasters: true });
-  winDressMesh(g, w, d, podH, { rows: 2, cols: Math.round(w / 6), storefront: true, faces: 'fbs' });
+  winDressMesh(g, w, d, podH, { rows: 2, cols: Math.round(w / 6), storefront: true,
+    faces: 'fbs', transom: true, fins: true });
+  storefrontKitMesh(g, w, d, podH, { cols: Math.round(w / 6), faces: 'fbs' });
   // shaft — 3 setback tiers of glass curtain wall
   let y = podH, ww = w * .88, dd = d * .88;
   for (const share of [.5, .3, .2]) {
@@ -1360,7 +1448,7 @@ function townhouse(s = {}) {
   // lintels/sills on the street face + downspout at the front corner
   // (side walls are shared — nothing protrudes on ±x)
   winDress(parts, w, d, h, { rows: Math.max(2, Math.round(h / 3.1)), cols: 3,
-    faces: 'f', trim: '#e8e0d0' });
+    faces: 'f', trim: '#e8e0d0', transom: true });
   parts.push({ geo: new THREE.BoxGeometry(.14, h, .16), color: '#6d7276', x: w / 2 - .4, y: h / 2, z: d / 2 + .08 });
   parts.push({ geo: new THREE.BoxGeometry(w * .7, .5, d * .7), color: '#4d5154', x: 0, y: h + 1.15, z: 0 });
   parts.push({ geo: new THREE.BoxGeometry(1.6, 1.4, 1.8), color: '#5d6165', x: w * .2, y: h + 2, z: -d * .15 });
