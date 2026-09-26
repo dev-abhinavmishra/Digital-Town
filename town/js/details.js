@@ -9,6 +9,7 @@ import { box, cyl, plane, mat, signTexture, fieldTexture, colored, VCOL,
          R, rr, pick } from './lib.js';
 import { pbr, M_BARK } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { vegKit, bushGeo } from './veg.js';
 import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
 import { GeoBin } from './city/geo.js';
 import { buildStreetscape, intersections } from './city/streetscape.js';
@@ -69,11 +70,11 @@ export function buildLots(scene) {
           x: ix, y: .1, z: l.z });
         parts.push({ geo: new THREE.CylinderGeometry(.2, .3, 2.6, 6), color: '#4a3527',
           x: ix, y: 1.3, z: l.z });
-        parts.push({ geo: new THREE.IcosahedronGeometry(1.7, 0), color: '#5d8a3c',
-          x: ix, y: 3.4, z: l.z });
+        parts.push({ geo: bushGeo(), color: '#5d8a3c', sx: 1.7, sy: 1.9, sz: 1.7,
+          x: ix, y: 2.4, z: l.z });
         for (const sxx of [-iw / 4, iw / 4])
-          parts.push({ geo: new THREE.IcosahedronGeometry(.7, 0), color: '#4e6b3e',
-            x: ix + sxx, y: .55, z: l.z });
+          parts.push({ geo: bushGeo(), color: '#4e6b3e', sx: .7, sy: .75, sz: .7,
+            x: ix + sxx, y: .1, z: l.z });
       }
     }
   }
@@ -159,18 +160,18 @@ export function buildTrees(scene) {
         pine = spots.filter(s => s.t === 'p'), sakura = spots.filter(s => s.t === 's'),
         elm = spots.filter(s => s.t === 'e'), poplar = spots.filter(s => s.t === 'u'),
         willow = spots.filter(s => s.t === 'w'), dogwood = spots.filter(s => s.t === 'd');
-  // tapered, slightly irregular trunk
-  const trunkG = new THREE.CylinderGeometry(.26, .5, 4.6, 6);
-  trunkG.translate(0, 2.3, 0);
-  const folG = new THREE.IcosahedronGeometry(2.4, 1);   // main crown: smoother silhouette
-  const folG2 = new THREE.IcosahedronGeometry(1.7, 0);
-  const conG = new THREE.ConeGeometry(2.0, 8.2, 7);
-  const conG2 = new THREE.ConeGeometry(1.3, 5.4, 7);
-  const trunkM = M_BARK(); trunkM.color = new THREE.Color('#7a6a58');
-  // flatShading gives crowns a stylized faceted look
-  const folM = new M({ color: '#ffffff', roughness: .95, flatShading: true });
-  const conM = new M({ color: '#ffffff', roughness: .95, flatShading: true });
-
+  /* vegetation v3 — per-species archetypes from js/veg.js: merged clump
+     canopies (displaced verts + baked under-shade) + alpha-tested leaf-card
+     fringe + tapered branched trunks. One instanced mesh per layer/species. */
+  const { kit: VK, leafM, cardM, needleM, trunkM, barkPaleM } = vegKit();
+  // per-species HSL instance tints [hueBase, sat, lit] — lightness kept high:
+  // instance color multiplies the leaf texture
+  const TINT = {
+    o: [.26, .38, .62], m: [.05, .5, .60], b: [.26, .45, .66],
+    s: [.95, .35, .74], e: [.28, .36, .56], u: [.28, .34, .56],
+    w: [.25, .4, .58],  d: [.33, .4, .62],
+    c: [.34, .35, .42], p: [.35, .38, .40],
+  };
   const mk = (geo, m, list, yoff, sVar, jitter = 0, hueBase = .27, sat = .45, lit = .3,
               flat = 1) => {
     if (!list.length) return null;
@@ -188,77 +189,18 @@ export function buildTrees(scene) {
     scene.add(im);
     return im;
   };
-  const trunkG2 = new THREE.CylinderGeometry(.14, .24, 6.4, 6);   // slender birch trunk
-  trunkG2.translate(0, 3.2, 0);
-  const trunkM2 = M_BARK(); trunkM2.color = new THREE.Color('#d8d2c8');  // pale birch bark
-  const conG3 = new THREE.ConeGeometry(1.05, 3.0, 7);
+  const tree = (key, list, pale = false) => {
+    if (!list.length) return;
+    const [h, s, l] = TINT[key];
+    mk(VK[key].trunk, pale ? barkPaleM : trunkM, list, 0, false);
+    if (VK[key].canopy) mk(VK[key].canopy, leafM, list, 0, true, 0, h, s, l);
+    if (VK[key].conifer) mk(VK[key].conifer, needleM, list, 0, true, 0, h, s, l);
+    if (VK[key].cards) mk(VK[key].cards, cardM, list, 0, true, 0, h, s, l + .08);
+  };
 
-  mk(trunkG, trunkM, oak, 0, false);
-  // irregular crown: 4 offset blobs per oak
-  mk(folG, folM, oak, 5.0, true, 0, .25, .42, .20, .92);
-  mk(folG2, folM, oak, 6.4, true, 1.4, .24, .4, .25, .9);
-  mk(folG2, folM, oak, 4.2, true, 2.6, .27, .38, .17, .85);
-  mk(folG2, folM, oak, 5.4, true, 3.4, .26, .44, .21, .8);
-  // spruce â€” 2 cones
-  mk(trunkG, trunkM, con, 0, false);
-  mk(conG, conM, con, 4.4, true, 0, .34, .38, .14);
-  mk(conG2, conM, con, 7.6, true, .3, .33, .42, .18);
-  // maple â€” round crown, autumn oranges/reds
-  mk(trunkG, trunkM, maple, 0, false);
-  mk(folG, folM, maple, 4.8, true, 0, .055, .55, .34, .95);
-  mk(folG2, folM, maple, 6.0, true, 1.6, .04, .6, .3, .9);
-  mk(folG2, folM, maple, 4.4, true, 2.4, .08, .5, .3, .88);
-  // birch â€” tall pale trunk, small bright crown high up
-  mk(trunkG2, trunkM2, birch, 0, false);
-  mk(folG2, folM, birch, 6.6, true, 0, .26, .5, .34, 1);
-  mk(folG2, folM, birch, 7.8, true, .9, .3, .55, .38, .95);
-  // pine â€” 3 stacked dark cones, layered look
-  mk(trunkG, trunkM, pine, 0, false);
-  mk(conG, conM, pine, 3.6, true, 0, .36, .4, .13);
-  mk(conG2, conM, pine, 6.2, true, 0, .35, .45, .16);
-  mk(conG3, conM, pine, 8.4, true, 0, .33, .5, .19);
-  // sakura â€” pink blossom clouds, park accents
-  mk(trunkG, trunkM, sakura, 0, false);
-  mk(folG, folM, sakura, 4.6, true, 0, .93, .42, .58, .95);
-  mk(folG2, folM, sakura, 5.8, true, 1.8, .95, .38, .62, .9);
-  mk(folG2, folM, sakura, 4.0, true, 2.4, .91, .45, .55, .9);
-  // elm - vase silhouette: lobes ringed around a high crown
-  const elmCrown = mergeGeometries([
-    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(1.6, 5.6, 0),
-    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(-1.6, 5.6, 0),
-    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(0, 5.6, 1.6),
-    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(0, 5.6, -1.6),
-    new THREE.IcosahedronGeometry(1.8, 0).scale(1, .8, 1).translate(0, 7.0, 0),
-  ], false);
-  mk(trunkG2, trunkM2, elm, 0, false);
-  mk(elmCrown, folM, elm, 0, true, 0, .30, .4, .22);
-  // columnar poplar - tight vertical crown stack (downtown/commercial street tree)
-  const popCrown = mergeGeometries([
-    new THREE.IcosahedronGeometry(1.35, 0).scale(1, 1.15, 1).translate(0, 4.4, 0),
-    new THREE.IcosahedronGeometry(1.7, 0).scale(1, 1.3, 1).translate(0, 6.0, 0),
-    new THREE.IcosahedronGeometry(1.15, 0).scale(1, 1.2, 1).translate(0, 7.7, 0),
-  ], false);
-  mk(trunkG2, trunkM2, poplar, 0, false);
-  mk(popCrown, folM, poplar, 0, true, 0, .29, .38, .24);
-  // weeping willow - broad flat crown + drooping skirt lobes
-  const wilCrown = mergeGeometries([
-    new THREE.IcosahedronGeometry(2.6, 1).scale(1, .55, 1).translate(0, 4.7, 0),
-    new THREE.IcosahedronGeometry(1.05, 0).translate(2.1, 3.4, 0),
-    new THREE.IcosahedronGeometry(1.05, 0).translate(-2.1, 3.4, 0),
-    new THREE.IcosahedronGeometry(1.05, 0).translate(0, 3.4, 2.1),
-    new THREE.IcosahedronGeometry(1.05, 0).translate(0, 3.4, -2.1),
-    new THREE.IcosahedronGeometry(1.05, 0).translate(1.5, 3.2, 1.5),
-    new THREE.IcosahedronGeometry(1.05, 0).translate(-1.5, 3.2, -1.5),
-  ], false);
-  mk(trunkG, trunkM, willow, 0, false);
-  mk(wilCrown, folM, willow, 0, true, 0, .24, .45, .2);
-  // dogwood - low ornamental crown + offset blossom puff
-  const dogCrown = mergeGeometries([
-    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .8, 1).translate(0, 3.4, 0),
-    new THREE.IcosahedronGeometry(1.0, 0).scale(1, .7, 1).translate(.9, 4.2, .4),
-  ], false);
-  mk(trunkG2, trunkM2, dogwood, 0, false);
-  mk(dogCrown, folM, dogwood, 0, true, 0, .33, .42, .3);
+  tree("o", oak);  tree("c", con);  tree("m", maple); tree("b", birch, true);
+  tree("p", pine); tree("s", sakura); tree("e", elm, true); tree("u", poplar, true);
+  tree("w", willow); tree("d", dogwood, true);
 
   if (window.__city) {
     window.__city.trees = {
@@ -286,8 +228,8 @@ export function buildTrees(scene) {
       if (isFree(x, z, 1.4) && R() < .5) bushes.push({ x, z, s: rr(.5, .9) });
     }
   }
-  const bgeo = new THREE.IcosahedronGeometry(1, 0); bgeo.scale(1, .72, 1);
-  const bmat = new M({ color: '#ffffff', roughness: .95, flatShading: true });
+  const bgeo = bushGeo();                     // leafy clump, not a smooth blob
+  const bmat = leafM;
   const bim = new THREE.InstancedMesh(bgeo, bmat, bushes.length);
   {
     const Mx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
@@ -296,7 +238,7 @@ export function buildTrees(scene) {
       sc.set(t.s * rr(.8, 1.4), t.s, t.s * rr(.8, 1.4));
       q.setFromEuler(new THREE.Euler(0, rr(0, 6.28), 0));
       Mx.compose(p, q, sc); bim.setMatrixAt(i, Mx);
-      col.setHSL(.26 + rr(-.05, .05), .4 + rr(-.1, .1), .18 + rr(-.04, .06));
+      col.setHSL(.26 + rr(-.05, .05), .4 + rr(-.1, .1), .5 + rr(-.06, .08));
       bim.setColorAt(i, col);
     });
     bim.castShadow = bim.receiveShadow = true;
@@ -345,7 +287,7 @@ function carGeos() {
 export function makeCar(color, len = 4.4) {
   const g = new THREE.Group();
   const { body, trim } = carGeos();
-  const b = new THREE.Mesh(body, new M({ color, roughness: .35, metalness: .5 }));
+  const b = new THREE.Mesh(body, new M({ color, roughness: .28, metalness: .5, envMapIntensity: 1.5 }));
   b.castShadow = true; g.add(b);
   const t = new THREE.Mesh(trim, VCOL()); t.castShadow = true; g.add(t);
   return g;
@@ -372,7 +314,7 @@ let traffic = null;
 export function buildCars(scene) {
   const { body, trim } = carGeos();
   const parked = [];
-  const bodyM = new M({ color: '#ffffff', roughness: .35, metalness: .5 });
+  const bodyM = new M({ color: '#ffffff', roughness: .28, metalness: .5, envMapIntensity: 1.5 });
   // parked in lots
   for (const l of LOTS) {
     if (l.plain) continue;
@@ -508,7 +450,7 @@ export function buildTraffic(scene) {
     if (!lanes.has(k)) lanes.set(k, { 1: [], '-1': [] });
     lanes.get(k)[c.dir].push(c);
   });
-  const bodyIM = new THREE.InstancedMesh(body, new M({ color: '#fff', roughness: .35, metalness: .5 }), cars.length);
+  const bodyIM = new THREE.InstancedMesh(body, new M({ color: '#fff', roughness: .28, metalness: .5, envMapIntensity: 1.5 }), cars.length);
   const trimIM = new THREE.InstancedMesh(trim, VCOL(), cars.length);
   bodyIM.castShadow = trimIM.castShadow = true;
   bodyIM.frustumCulled = trimIM.frustumCulled = false;
@@ -729,7 +671,7 @@ export function buildPark(scene) {
   const propMesh = new THREE.Mesh(colored(parts), VCOL());
   propMesh.castShadow = propMesh.receiveShadow = true;
   scene.add(propMesh);
-  const flG = new THREE.IcosahedronGeometry(.22, 0); flG.translate(0, .45, 0);
+  const flG = bushGeo(); flG.scale(.22, .3, .22); flG.translate(0, .1, 0);
   const flStem = new THREE.ConeGeometry(.05, .5, 4); flStem.translate(0, .25, 0);
   scene.add(instances(flG, new M({ color: '#fff', roughness: .8 }), flowers, { shadow: false }));
 
@@ -1333,8 +1275,8 @@ export function buildCountryside(scene) {
    (forest â†’ scree â†’ snow). One non-indexed mesh â†’ merges into the VCOL bucket. */
 export function buildMountains(scene) {
   const pos = [], col = [];
-  const cFor = new THREE.Color('#35522c'), cRock = new THREE.Color('#5d554b'),
-        cScr = new THREE.Color('#847a6d'), cSnow = new THREE.Color('#f2f5f7');
+  const cFor = new THREE.Color('#33502b'), cRock = new THREE.Color('#50493f'),
+        cScr = new THREE.Color('#6b6357'), cSnow = new THREE.Color('#f2f5f7');
   const vc = new THREE.Color();
   const colAt = (y, hMax, snowAt) => {
     const t = y / hMax;
@@ -1351,7 +1293,7 @@ export function buildMountains(scene) {
     };
     const R0 = a => rMid + 150 * Math.sin(4 * a + seed * 2) + 80 * Math.sin(9 * a + seed);
     // mid-slope jitter: craggy facets instead of flat slabs
-    const J = a => 26 * Math.sin(23 * a + seed * 3) + 14 * Math.sin(41 * a + seed);
+    const J = a => 13 * Math.sin(19 * a + seed * 3) + 7 * Math.sin(31 * a + seed);
     const V = (a, r, y) => { pos.push(Math.cos(a) * r, y, Math.sin(a) * r); colAt(y, hMax, snowAt); };
     for (let i = 0; i < N; i++) {
       const a0 = i / N * 6.2831853, a1 = (i + 1) / N * 6.2831853;
@@ -1370,8 +1312,8 @@ export function buildMountains(scene) {
       V(a0, rm0 + width, 0); V(a1, rm1 + width * .45 + j1, h1 * .55); V(a1, rm1 + width, 0);
     }
   };
-  ridge(1700, 350, 240, 0.0, .80);   // near green foothills
-  ridge(2600, 760, 460, 2.4, .5);    // taller far range, deeper snowline
+  ridge(1700, 350, 240, 0.0, .84);   // near green foothills
+  ridge(2600, 760, 460, 2.4, .56);    // taller far range, deeper snowline
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -1380,6 +1322,52 @@ export function buildMountains(scene) {
   m.receiveShadow = true;
   scene.add(m);
 }
+
+/* ---------------- rolling foothill band ----------------
+   The farmland ring ends ~1400 and the mountain inner slope rises from ~1460:
+   without a transition the world reads flat-to-wall. This band drapes a low
+   rolling hill skirt between them — smooth humps (not crag facets), colored
+   meadow to forest to dry crest so it blends into both the fields and the
+   ridge behind it. */
+export function buildFoothills(scene) {
+  const pos = [], col = [];
+  const cMeadow = new THREE.Color("#7d9464"), cForest = new THREE.Color("#4f6b43"),
+        cDry = new THREE.Color("#98906a");
+  const vc = new THREE.Color();
+  const N = 220, R0 = 1330, R1 = 1560;
+  const HH = (a, t) => {
+    const base = t * t * (30 + 16 * Math.sin(5 * a + 1.2) + 9 * Math.sin(11 * a + .4)
+              + 5 * Math.sin(23 * a));
+    return Math.max(.12, base) + .25;
+  };
+  const RR = (a, t) => R0 + t * (R1 - R0) + 60 * Math.sin(6 * a + 2.1) * t;
+  const colAt = (y, a) => {
+    const t = Math.min(1, y / 46);
+    vc.copy(cMeadow).lerp(cForest, Math.min(1, t * 1.6));
+    if (t > .72) vc.lerp(cDry, (t - .72) / .28 * .8);
+    const streak = .5 + .5 * Math.sin(9 * a + y * .05);
+    if (streak > .62) vc.lerp(cForest, .4);
+    col.push(vc.r, vc.g, vc.b);
+  };
+  const V = (a, t) => { const r = RR(a, t); pos.push(Math.cos(a) * r, HH(a, t), Math.sin(a) * r); colAt(HH(a, t), a); };
+  const rows = [0, .3, .62, 1];
+  for (let i = 0; i < N; i++) {
+    const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2;
+    for (let rI = 0; rI < rows.length - 1; rI++) {
+      const t0 = rows[rI], t1 = rows[rI + 1];
+      V(a0, t0); V(a1, t0); V(a0, t1);
+      V(a0, t1); V(a1, t0); V(a1, t1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, VCOL());
+  m.receiveShadow = true;
+  scene.add(m);
+}
+
 
 /* ---------------- bird flocks ---------------- */
 let birds = null;

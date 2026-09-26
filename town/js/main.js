@@ -12,6 +12,7 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildLights, buildWater, buildPark, buildPlaza, buildPeople,
          buildProps, occupyRect, isFree, buildAthleticPark, buildTraffic,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
+         buildFoothills,
          tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
          groundOverlayTexture, uTime, WATERFX } from './lib.js';
@@ -85,7 +86,7 @@ loadEnvironment(renderer, { mode: TIME, skyTex }).then(e => {
 const envScale = TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0;
 scene.fog = new THREE.FogExp2(
   TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258 : 0xd4e2ec,
-  TIME === 'dusk' ? 0.00032 : 0.00017);
+  TIME === 'dusk' ? 0.00032 : TIME === 'golden' ? 0.00014 : 0.00012);
 
 /* ---------- sun + fill ---------- */
 const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a : 0xfff2dd,
@@ -110,7 +111,7 @@ scene.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
 // large-scale blotch overlay so the lawn never reads as flat tiling
 const ovM = new THREE.MeshStandardMaterial({ map: groundOverlayTexture(), transparent: true,
   roughness: 1, depthWrite: false });
-const ov = plane(3400, 3400, ovM, 0, .14, 0, -Math.PI / 2, 0);
+const ov = plane(5200, 5200, ovM, 0, .14, 0, -Math.PI / 2, 0);
 ov.userData.noMerge = true;
 scene.add(ov);
 
@@ -185,6 +186,7 @@ buildPeople(scene);
 buildFences(scene);
 buildCountryside(scene);
 buildMountains(scene);
+buildFoothills(scene);
 if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
 // sprint-02 atmo module: cumulus billboards, height-haze + aerial fog patch,
 // dusk lamp pools/halos — all render-side over B's objects (js/render/atmo.js)

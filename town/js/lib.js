@@ -142,26 +142,35 @@ export function plazaTexture() {
 export function groundOverlayTexture() {
   const [c, x] = makeCanvas(1024, 1024);
   x.clearRect(0, 0, 1024, 1024);
-  for (let i = 0; i < 260; i++) {
-    const bx = R() * 1024, by = R() * 1024, br = 40 + R() * 150;
-    const cols = ['88,110,62', '112,138,80', '96,120,66', '124,148,88', '80,102,58'];
+  // macro meadow patches — wide hue spread so the lawn reads as real turf
+  for (let i = 0; i < 340; i++) {
+    const bx = R() * 1024, by = R() * 1024, br = 40 + R() * 170;
+    const cols = ['78,96,52', '92,114,64', '112,138,80', '86,106,58',
+                  '124,148,88', '96,118,66', '70,88,48'];
     const col = cols[Math.floor(R() * cols.length)];
     const gr = x.createRadialGradient(bx, by, 0, bx, by, br);
-    gr.addColorStop(0, `rgba(${col},.30)`); gr.addColorStop(1, `rgba(${col},0)`);
+    gr.addColorStop(0, `rgba(${col},.42)`); gr.addColorStop(1, `rgba(${col},0)`);
     x.fillStyle = gr;
     for (const [ox, oy] of [[0, 0], [1024, 0], [-1024, 0], [0, 1024], [0, -1024]]) {
       x.beginPath(); x.arc(bx + ox, by + oy, br, 0, 7); x.fill();
     }
   }
-  // faint dirt patches
-  for (let i = 0; i < 60; i++) {
-    const bx = R() * 1024, by = R() * 1024, br = 15 + R() * 45;
+  // dry/dirt patches
+  for (let i = 0; i < 110; i++) {
+    const bx = R() * 1024, by = R() * 1024, br = 14 + R() * 55;
+    const warm = R() < .5 ? '142,124,86' : '126,112,74';
     const gr = x.createRadialGradient(bx, by, 0, bx, by, br);
-    gr.addColorStop(0, 'rgba(140,124,92,.20)'); gr.addColorStop(1, 'rgba(140,124,92,0)');
+    gr.addColorStop(0, `rgba(${warm},.28)`); gr.addColorStop(1, `rgba(${warm},0)`);
     x.fillStyle = gr;
     for (const [ox, oy] of [[0, 0], [1024, 0], [-1024, 0], [0, 1024], [0, -1024]]) {
       x.beginPath(); x.arc(bx + ox, by + oy, br, 0, 7); x.fill();
     }
+  }
+  // fine turf speckle — breaks the billboard-flat read at ground level
+  for (let i = 0; i < 9000; i++) {
+    const v = 70 + R() * 90;
+    x.fillStyle = `rgba(${v},${v + 18},${v * .62},.10)`;
+    x.fillRect(R() * 1024, R() * 1024, 1 + R() * 2.5, 1 + R() * 2.5);
   }
   const t = canvasTex(c, { repeat: [7, 7] });
   t.wrapS = t.wrapT = THREE.RepeatWrapping;

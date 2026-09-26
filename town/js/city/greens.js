@@ -7,6 +7,7 @@ import { GREENS } from '../layout.js';
 import { plane, mat, colored, VCOL, instances, waterMaterial, signTexture,
          makeCanvas, canvasTex, R, rr, pick } from '../lib.js';
 import { pbr } from '../mats.js';
+import { vegKit } from '../veg.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
 
@@ -204,39 +205,34 @@ export function buildGreens(scene) {
     });
   }
 
-  // instanced parcel vegetation (same species system style as buildTrees)
+  // instanced parcel vegetation — same veg.js archetypes as the street trees
   if (out.trees.length) {
-    const trunkG = new THREE.CylinderGeometry(.24, .44, 4.2, 6); trunkG.translate(0, 2.1, 0);
-    const trunkM = new M({ color: '#6e5c48', roughness: .95 });
-    const folG = new THREE.IcosahedronGeometry(2.3, 0); folG.translate(0, 5.6, 0);
-    const conG = new THREE.ConeGeometry(1.9, 7.4, 7); conG.translate(0, 4.6, 0);
-    const folM = new M({ color: '#fff', roughness: .95, flatShading: true });
-    const oaks = out.trees.filter(t => t.t !== 'p' && t.t !== 'c');
-    const cons = out.trees.filter(t => t.t === 'p' || t.t === 'c');
-    if (oaks.length) scene.add(instances(trunkG, trunkM, oaks));
-    if (oaks.length) {
-      const im = new THREE.InstancedMesh(folG, folM, oaks.length);
-      const Mx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
-      oaks.forEach((t, i) => {
-        p.set(t.x, 0, t.z); sc.set(t.s * rr(.8, 1.2), t.s * rr(.8, 1.1), t.s * rr(.8, 1.2));
+    const { kit: VK, leafM, cardM, needleM, trunkM } = vegKit();
+    const byT = {};
+    for (const t of out.trees) (byT[t.t] ||= []).push(t);
+    const put = (geo, m, list, hue, sat, lit) => {
+      const im = new THREE.InstancedMesh(geo, m, list.length);
+      const Mx = new THREE.Matrix4(), q = new THREE.Quaternion(),
+            sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
+      list.forEach((t, i) => {
+        p.set(t.x, 0, t.z);
+        sc.set(t.s * rr(.8, 1.2), t.s * rr(.8, 1.1), t.s * rr(.8, 1.2));
         q.setFromEuler(new THREE.Euler(0, rr(0, 6.28), 0)); Mx.compose(p, q, sc);
         im.setMatrixAt(i, Mx);
-        col.setHSL(.25 + rr(-.05, .05), .45 + rr(-.1, .1), .24 + rr(-.05, .07)); im.setColorAt(i, col);
+        if (hue) { col.setHSL(hue + rr(-.05, .05), sat + rr(-.1, .1), lit + rr(-.05, .07)); im.setColorAt(i, col); }
       });
       im.castShadow = im.receiveShadow = true; scene.add(im);
+    };
+    for (const [k, list] of Object.entries(byT)) {
+      const broad = k !== 'p' && k !== 'c' && VK[k].canopy;
+      put(VK[k].trunk, trunkM, list, 0);
+      if (broad) {
+        put(VK[k].canopy, leafM, list, .26, .4, .6);
+        if (VK[k].cards) put(VK[k].cards, cardM, list, .26, .4, .68);
+      } else {
+        put(VK[k].conifer || VK.p.conifer, needleM, list, .34, .38, .44);
+      }
     }
-    if (cons.length) {
-      const im = new THREE.InstancedMesh(conG, folM, cons.length);
-      const Mx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
-      cons.forEach((t, i) => {
-        p.set(t.x, 0, t.z); sc.set(t.s * rr(.85, 1.15), t.s, t.s * rr(.85, 1.15));
-        q.setFromEuler(new THREE.Euler(0, rr(0, 6.28), 0)); Mx.compose(p, q, sc);
-        im.setMatrixAt(i, Mx);
-        col.setHSL(.34 + rr(-.04, .04), .42 + rr(-.08, .08), .15 + rr(-.03, .05)); im.setColorAt(i, col);
-      });
-      im.castShadow = im.receiveShadow = true; scene.add(im);
-    }
-      scene.add(instances(trunkG, trunkM, cons));
   }
   if (out.flowers.length) {
     const flG = new THREE.IcosahedronGeometry(.24, 0); flG.translate(0, .4, 0);
