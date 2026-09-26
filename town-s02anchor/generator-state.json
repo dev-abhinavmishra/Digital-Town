@@ -1,0 +1,31 @@
+{
+  "agent": "generator-render-a",
+  "sprint": "sprint-02",
+  "stream": "RENDER",
+  "updated": "2026-09-26T10:20Z",
+  "checkpoint": "f1cd21c (sprint-01 final; tree verified clean)",
+  "log": [
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "sprint-02 GO (Atmosphere & Depth): sky/clouds v2, height+distance fog + aerial perspective, per-time grading, dusk night-look (lit windows + streetlight pools); carry-forwards: AO foliage ghost watch, green reshoot on healthy network"
+    },
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "recon: clouds are details.js sprites animated by B's tickWorld - plan is render-side billboard upgrade (new texture/material on existing sprite objects, zero B-file edits); lamps are lampIM InstancedMesh from buildLights, emissive-toggled at dusk already - light pools derivable from instanceMatrix positions; FogExp2 already per-time, needs height-fog + aerial perspective via ShaderChunk patch or post pass"
+    },
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "committed sprint-02 pre-edit checkpoint (this state log only)"
+    }
+  ],
+  "caps": {
+    "contractExchanges": 4,
+    "evalRounds": 4,
+    "restarts": 2
+  },
+  "used": {
+    "contractExchanges": 0,
+    "evalRounds": 0,
+    "restarts": 0
+  }
+}

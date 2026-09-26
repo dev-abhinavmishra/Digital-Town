@@ -1,0 +1,628 @@
+// main.js — Havenbrook 3D town: procedural sky, cinematic post fx, fly-spectator controls
+import * as THREE from 'three';
+import { createPipeline } from './render/pipeline.js';
+import { loadEnvironment } from './render/env.js';
+import { installAtmo } from './render/atmo.js';
+import { TOWN, BUILDINGS, APARTMENTS, HOUSE_BLOCKS, COTTAGE_ROWS, PLAZA,
+         CATEGORY_COLORS, FILLER, ROADS } from './layout.js';
+import { makeBuilding } from './buildings.js';
+import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
+         buildLights, buildWater, buildPark, buildPlaza, buildPeople,
+         buildProps, occupyRect, isFree, buildAthleticPark, buildTraffic,
+         buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
+         tickWorld } from './details.js';
+import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
+         groundOverlayTexture, uTime } from './lib.js';
+import { M_GRASS, pbr, texReport } from './mats.js';
+
+const params = new URLSearchParams(location.search);
+const VIEW = params.get('view') || 'aerial';
+const TIME = params.get('time') || 'day';
+const LABELS = params.get('labels') === '1';
+const NOFX = params.get('nofx') === '1';
+const NOAO = params.get('noao') === '1';
+const NOATMO = params.get('noatmo') === '1';  // master: fog patch + clouds + lamp glows
+const NOFOG = params.get('nofog') === '1';   // granular: fog patch only
+const DEBUG = params.get('debug') === '1';
+const FPSDBG = params.get('fps') === '1';
+const CAMP = params.get('cam');   // ?cam=px,py,pz,tx,ty,tz — deterministic eval camera
+const CAM_BOUND = 1200;   // fly-cam stays inside the mountain ring
+
+/* ---------- renderer ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true,
+  powerPreference: 'high-performance' });
+renderer.setSize(innerWidth, innerHeight);
+const MAX_RATIO = Math.min(devicePixelRatio, 2);
+let pixelRatio = MAX_RATIO;
+renderer.setPixelRatio(pixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : 1.0;
+document.getElementById('app').appendChild(renderer.domElement);
+// survive GPU OOM context loss on weak iGPUs — allow restore, then reload clean
+renderer.domElement.addEventListener('webglcontextlost', e => e.preventDefault());
+renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
+
+const scene = new THREE.Scene();
+
+/* ---------- sun + sky (procedural — no HDR fetch, no NaN bloom artifacts) ---------- */
+const sunDir = new THREE.Vector3();
+if (TIME === 'golden') sunDir.set(-1500, 210, 700);
+else if (TIME === 'dusk') sunDir.set(-1200, 120, 500);
+else sunDir.set(900, 750, 620);
+sunDir.normalize();
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+const skyTex = skyTexture({
+  mode: TIME,
+  sunAz: Math.atan2(sunDir.z, sunDir.x),
+  sunEl: Math.asin(sunDir.y),
+});
+scene.background = skyTex;
+scene.backgroundIntensity = TIME === 'golden' ? 1.0 : 0.95;
+scene.environment = pmrem.fromEquirectangular(skyTex).texture;
+scene.environmentIntensity = TIME === 'golden' ? .9 : .8;
+// HDR image-based lighting — vendored Poly Haven sky feeds PBR reflections.
+// Background stays procedural so the visible sun matches the directional light.
+const envInfo = { envType: 'fallback', envSrc: 'procedural-sky',
+                  envIntensity: TIME === 'golden' ? .9 : TIME === 'dusk' ? .6 : .8 };
+loadEnvironment(renderer, { mode: TIME, skyTex }).then(e => {
+  if (e.envType === 'hdr') scene.environment = e.texture;
+  envInfo.envType = e.envType; envInfo.envSrc = e.envSrc;
+  envInfo.envIntensity = e.envIntensity;
+  if (window.__fx) { window.__fx.envType = e.envType; window.__fx.envSrc = e.envSrc;
+                     window.__fx.envIntensity = e.envIntensity; }
+});
+// per-time env gain applied to materials post-build (r160 has no
+// scene.environmentIntensity — multiply envMapIntensity instead)
+const envScale = TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0;
+scene.fog = new THREE.FogExp2(
+  TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258 : 0xd4e2ec,
+  TIME === 'dusk' ? 0.00032 : 0.00017);
+
+/* ---------- sun + fill ---------- */
+const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a : 0xfff2dd,
+  TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : 2.6);
+sun.position.copy(sunDir).multiplyScalar(1800);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.camera.left = -700; sun.shadow.camera.right = 700;
+sun.shadow.camera.top = 700; sun.shadow.camera.bottom = -700;
+sun.shadow.camera.near = 200; sun.shadow.camera.far = 3600;
+sun.shadow.bias = -0.00018; sun.shadow.normalBias = .35;
+scene.add(sun); scene.add(sun.target);
+// hemisphere fill lifts shadows gently toward sky color
+scene.add(new THREE.HemisphereLight(
+  TIME === 'golden' ? 0xd8b088 : 0xbdd6e8,
+  TIME === 'golden' ? 0x7a6848 : 0x5d7050,
+  TIME === 'dusk' ? .6 : TIME === 'golden' ? .72 : .55));
+
+/* ---------- ground ---------- */
+const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');
+scene.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
+// large-scale blotch overlay so the lawn never reads as flat tiling
+const ovM = new THREE.MeshStandardMaterial({ map: groundOverlayTexture(), transparent: true,
+  roughness: 1, depthWrite: false });
+const ov = plane(3400, 3400, ovM, 0, .14, 0, -Math.PI / 2, 0);
+ov.userData.noMerge = true;
+scene.add(ov);
+
+/* ---------- occupancy then build ---------- */
+const _tb = performance.now();
+registerOccupancy();
+buildRoads(scene);
+buildLots(scene);
+buildWater(scene);
+buildPark(scene);
+buildAthleticPark(scene);
+buildPlaza(scene, PLAZA);
+buildProps(scene);
+
+for (const b of BUILDINGS) if (b.w) scene.add(makeBuilding(b));
+for (const f of FILLER) { scene.add(makeBuilding({ name: '', ...f })); occupyRect(f.x, f.z, f.w, f.d, 4); }
+for (const a of APARTMENTS) scene.add(makeBuilding({ ...a, type: 'apartment' }));
+
+for (const blk of HOUSE_BLOCKS) {
+  const W = blk.x1 - blk.x0, D = blk.z1 - blk.z0;
+  const typeFor = () => blk.duplex ? 'duplex' : (R() < .24 ? 'ranch' : 'house');
+  // occupancy mirrors the real footprint (body + garage wing + porch + driveway)
+  // so scattered trees/bushes never land on a driveway or inside a garage
+  const occupy = (t, x, z, sgn) => {
+    if (t === 'duplex') occupyRect(x, z + sgn, 19, 15, 2);
+    else if (t === 'ranch') occupyRect(x + sgn * 4, z + sgn * 3, 28, 20, 2);
+    else occupyRect(x + sgn * 2, z + sgn * 3, 22, 20, 2);
+  };
+  if (blk.face === 'v') {
+    for (let i = 0; i < blk.count; i++) {
+      const z = blk.z0 + (i + .5) * D / blk.count;
+      const spec = { type: typeFor(), x: blk.x1 - 12, z, rot: Math.PI / 2 };
+      scene.add(makeBuilding(spec));
+      // rot π/2: front & driveway face +x, garage wing extends -z
+      if (spec.type === 'ranch') occupyRect(spec.x + 3.5, z - 4, 20, 28, 2);
+      else occupyRect(spec.x + 3.5, z - 2.5, 20, 20, 2);
+    }
+  } else {
+    const twoRows = D > 80, rows = twoRows ? 2 : 1;
+    for (let rI = 0; rI < rows; rI++) {
+      const n = Math.ceil(blk.count / rows);
+      const z = twoRows ? (rI === 0 ? blk.z0 + 13 : blk.z1 - 13) : blk.z1 - 13;
+      const rot = twoRows ? (rI === 0 ? Math.PI : 0) : 0;
+      const sgn = rot ? -1 : 1;
+      for (let i = 0; i < n; i++) {
+        const x = blk.x0 + 14 + i * (W - 28) / Math.max(1, n - 1);
+        if (!isFree(x, z, 8)) continue;
+        const t = typeFor();
+        scene.add(makeBuilding({ type: t, x, z, rot }));
+        occupy(t, x, z, sgn);
+      }
+    }
+  }
+}
+for (const row of COTTAGE_ROWS) {
+  const W = row.x1 - row.x0;
+  const sgn = row.face === 'n' ? -1 : 1;
+  for (let i = 0; i < row.count; i++) {
+    const x = row.x0 + 12 + i * (W - 24) / Math.max(1, row.count - 1);
+    scene.add(makeBuilding({ type: 'cottage', x, z: row.z, rot: row.face === 'n' ? Math.PI : 0 }));
+    occupyRect(x + sgn * 2, row.z + sgn * 3, 22, 20, 2);
+  }
+}
+
+const lampIM = buildLights(scene);
+if (TIME === 'golden' || TIME === 'dusk')
+  lampIM.material.emissive = new THREE.Color('#ffdf9e'), lampIM.material.emissiveIntensity = 1.4;
+buildTrees(scene);
+buildCars(scene);
+buildTraffic(scene);
+buildPeople(scene);
+buildFences(scene);
+buildCountryside(scene);
+buildMountains(scene);
+if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
+// sprint-02 atmo module: cumulus billboards, height-haze + aerial fog patch,
+// dusk lamp pools/halos — all render-side over B's objects (js/render/atmo.js)
+let atmoInfo = null;
+if (VIEW !== 'map' && !NOATMO)
+  atmoInfo = installAtmo(scene, { lampIM, TIME, fogPatch: !NOFOG });
+// ?noatmo fallback — sprint-01 behaviour: tint the unlit orb sprites into the
+// sky palette (kept for evaluator A/B pairs)
+else if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
+  if (!o.isSprite) return;
+  o.material.color.set(TIME === 'golden' ? '#d8a37e' : '#6e5a74');
+  o.material.opacity *= TIME === 'golden' ? .78 : .65;
+});
+(window.__prof ||= []).push(['buildWorld', Math.round(performance.now() - _tb)]);
+
+/* campus quad — sized to sit clear of the med hall & the campus lot */
+const quadM = pbr('grass_ground'); quadM.color = new THREE.Color('#93b377');
+scene.add(plane(190, 92, quadM, -480, .31, -532, -Math.PI / 2, 10));
+const qp = pbr('precast_stone_paving'); qp.color = new THREE.Color('#c4b49a');
+for (const a of [.62, -.62]) {
+  const g = new THREE.PlaneGeometry(6, 170); g.rotateX(-Math.PI / 2); g.rotateY(a);
+  const p = new THREE.Mesh(g, qp); p.position.set(-480, .33, -532); p.receiveShadow = true;
+  scene.add(p);
+}
+scene.add(plane(190, 6, qp, -480, .33, -532, -Math.PI / 2, 3));
+scene.add(cyl(4, 4.4, .9, mat('#9aa0a3'), -480, .3, -532, 20));
+
+/* collapse all static geometry into one mesh per material */
+const _tm = performance.now();
+mergeStatic(scene);
+(window.__prof ||= []).push(['mergeStatic', Math.round(performance.now() - _tm)]);
+
+/* lit windows + material-upgrade pass on the shared cached materials:
+   - userData.lit → emissiveIntensity follows time of day
+   - map.userData.v2 → attach roughness/normal maps + glass env boost (facade v2)
+   - envScale → real per-time env gain (scene.environmentIntensity is r163+) */
+const matStats = { withNormal: 0, withRough: 0 };
+{
+  const litI = TIME === 'dusk' ? 1.7 : TIME === 'golden' ? .95 : .12;
+  const seen = new Set();
+  scene.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m || seen.has(m)) continue;
+      seen.add(m);
+      if (m.userData && m.userData.lit) m.emissiveIntensity = litI;
+      const v2 = m.map && m.map.userData && m.map.userData.v2;
+      if (v2) {
+        if (v2.normal && !m.normalMap) { m.normalMap = v2.normal; m.normalScale.set(.85, .85); }
+        if (v2.rough && !m.roughnessMap) { m.roughnessMap = v2.rough; }
+        // normalMap supersedes the bump map — dropping it keeps the 512px
+        // bump canvas off the GPU entirely on the eval iGPU
+        if (v2.bump && m.bumpMap === v2.bump) m.bumpMap = null;
+        m.needsUpdate = true;
+      }
+      // count by actual material state — v2 upgrade AND natively-mapped PBR
+      if (m.normalMap) matStats.withNormal++;
+      if (m.roughnessMap) matStats.withRough++;
+      if (m.isMeshStandardMaterial)
+        m.envMapIntensity = (v2 && v2.glass ? 1.7 : (m.envMapIntensity || 1)) * envScale;
+    }
+  });
+}
+
+/* ---------- cameras + fly controls ---------- */
+const asp = innerWidth / innerHeight;
+const camera = new THREE.PerspectiveCamera(55, asp, 1, 12000);
+const P = {
+  aerial:     { p: [540, 620, 660],   t: [-30, 0, -40] },
+  aerialW:    { p: [-660, 540, 620],  t: [30, 0, -60] },
+  aerialfull: { p: [60, 1250, 640],   t: [0, 0, -20] },
+  medical:    { p: [430, 210, -120],  t: [60, 25, -510] },
+  campus:     { p: [-170, 180, -160], t: [-470, 20, -540] },
+  downtown:   { p: [380, 150, 150],   t: [50, 10, -210] },
+  park:       { p: [250, 200, 330],   t: [580, 8, 120] },
+  senior:     { p: [740, 210, -60],   t: [560, 12, -520] },
+  commercial: { p: [280, 300, 760],   t: [290, 8, 430] },
+  school:     { p: [-720, 180, 320],  t: [-510, 10, 560] },
+  housing:    { p: [-620, 210, 420],  t: [-440, 8, 120] },
+  mainstreet: { p: [-150, 6.5, -34],  t: [140, 8, -60] },
+  univclose:  { p: [-270, 70, -330],  t: [-480, 22, -540] },
+  hospital:   { p: [240, 90, -300],   t: [70, 30, -500] },
+  dusk:       { p: [820, 200, 260],   t: [-350, 60, 120] },
+};
+let orthoCam = null;
+if (VIEW === 'map') {
+  orthoCam = new THREE.OrthographicCamera(-890, 890, 800, -800, 1, 6000);
+  orthoCam.position.set(0, 1500, 0); orthoCam.up.set(0, 0, -1);
+  orthoCam.lookAt(0, 0, 0);
+}
+let activeCam = orthoCam || camera;
+if (!orthoCam) {
+  const v = P[VIEW] || P.aerial;
+  camera.position.set(...v.p);
+  camera.lookAt(...v.t);
+}
+
+/* fly/spectator controls — drag look + WASD */
+const fly = {
+  yaw: 0, pitch: -0.5, vel: new THREE.Vector3(), speed: 60,
+  keys: {}, dragging: false, lx: 0, ly: 0,
+  // skip auto-orbit for street-level views (it would sweep the camera through buildings)
+  auto: !orthoCam && !params.get('still') && (P[VIEW] || P.aerial).p[1] > 60,
+};
+function syncAnglesFromCam() {
+  const d = camera.getWorldDirection(new THREE.Vector3());
+  fly.pitch = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+  fly.yaw = Math.atan2(-d.x, -d.z);
+}
+syncAnglesFromCam();
+addEventListener('mousedown', e => { fly.dragging = true; fly.lx = e.clientX; fly.ly = e.clientY; fly.auto = false; });
+addEventListener('mouseup', () => fly.dragging = false);
+addEventListener('mousemove', e => {
+  if (!fly.dragging) return;
+  fly.yaw -= (e.clientX - fly.lx) * .0032;
+  fly.pitch -= (e.clientY - fly.ly) * .0032;
+  fly.pitch = Math.max(-1.45, Math.min(1.45, fly.pitch));
+  fly.lx = e.clientX; fly.ly = e.clientY;
+});
+addEventListener('wheel', e => { fly.speed = Math.max(6, Math.min(400, fly.speed * (e.deltaY < 0 ? 1.15 : .87))); });
+addEventListener('keydown', e => fly.keys[e.code] = true);
+addEventListener('keyup', e => fly.keys[e.code] = false);
+addEventListener('dblclick', () => fly.auto = !fly.auto);
+
+/* deterministic eval camera — ?cam=px,py,pz,tx,ty,tz or window.__setCam(...).
+   Disables auto-orbit; fly drag/keys still work afterwards. */
+function setCam(px, py, pz, tx, ty, tz) {
+  if (orthoCam) return;
+  camera.position.set(px, py, pz);
+  camera.lookAt(tx, ty, tz);
+  fly.auto = false;
+  syncAnglesFromCam();
+}
+window.__setCam = setCam;
+if (CAMP && !orthoCam) {
+  const v = CAMP.split(',').map(Number);
+  if (v.length === 6 && v.every(Number.isFinite)) setCam(...v);
+}
+
+/* ---------- labels ---------- */
+const labelDivs = [];
+if (LABELS) {
+  const holder = document.getElementById('labels');
+  const mk = (txt, x, y, z, cat, num, minor) => {
+    const d = document.createElement('div');
+    d.className = 'lbl' + (cat === 'free' ? ' free' : '') + (minor ? ' minor' : '');
+    d.innerHTML = `<span class="dot" style="background:${CATEGORY_COLORS[cat] || '#555'}"></span>` +
+      (num ? `<span class="num">${num}</span>` : '') + `<span>${txt}</span>`;
+    holder.appendChild(d);
+    labelDivs.push({ d, p: new THREE.Vector3(x, y, z) });
+  };
+  for (const b of BUILDINGS) {
+    if (b.type === 'zone' || b.type === 'parkzone') { mk(b.name, b.x, 4, b.z, b.cat, b.num); continue; }
+    if (b.nolabel) continue;
+    mk(b.name, b.x, (b.h || 8) + 8, b.z, b.cat, b.num);
+  }
+  for (const a of APARTMENTS) mk(a.name, a.x, a.h + 6, a.z, 'res', 0, true);
+  const dists = [
+    ['UNIVERSITY DISTRICT', -480, -700], ['MEDICAL DISTRICT', 200, -555],
+    ['SENIOR DISTRICT', 585, -620], ['DOWNTOWN', 62, -255],
+    ['COMMERCIAL CORRIDOR', 160, 555], ['RESIDENTIAL WEST', -460, 40],
+    ['SCHOOL DISTRICT', -510, 705],
+  ];
+  if (VIEW === 'map') {
+    for (const [t, x, z] of dists) {
+      const d = document.createElement('div');
+      d.className = 'lbl dist'; d.textContent = t;
+      document.getElementById('labels').appendChild(d);
+      labelDivs.push({ d, p: new THREE.Vector3(x, 2, z), norelax: true });
+    }
+    for (const r of ROADS) {
+      const d = document.createElement('div');
+      d.className = 'lbl roadname' + (r.axis === 'v' ? ' vert' : '');
+      d.textContent = r.name.toUpperCase();
+      document.getElementById('labels').appendChild(d);
+      const mx = r.axis === 'v' ? r.c : (r.a0 + r.a1) / 2;
+      const mz = r.axis === 'v' ? (r.a0 + r.a1) / 2 : r.c;
+      labelDivs.push({ d, p: new THREE.Vector3(mx, 2, mz), norelax: true });
+    }
+  }
+  const lg = document.getElementById('legend');
+  lg.style.display = 'block';
+  const counts = { free: 0, health: 0, community: 0 };
+  BUILDINGS.forEach(b => { if (b.num) counts[b.cat] = (counts[b.cat] || 0) + 1; });
+  lg.innerHTML = `<h3>${TOWN.name} — LEGEND</h3>` +
+    `<div class="cat"><span class="dot" style="background:${CATEGORY_COLORS.free}"></span>Provided free (${counts.free})</div>` +
+    `<div class="cat"><span class="dot" style="background:${CATEGORY_COLORS.health}"></span>Healthcare facilities (${counts.health})</div>` +
+    `<div class="cat"><span class="dot" style="background:${CATEGORY_COLORS.community}"></span>Community locations (${counts.community})</div>` +
+    `<div class="cat"><span class="dot" style="background:${CATEGORY_COLORS.res}"></span>Residential &amp; districts</div>`;
+  document.getElementById('titlecard').style.display = 'block';
+  document.getElementById('compass').style.display = 'block';
+}
+const v3 = new THREE.Vector3();
+function updateLabels() {
+  const items = [];
+  for (const it of labelDivs) {
+    const { d, p } = it;
+    v3.copy(p).project(activeCam);
+    const behind = v3.z > 1;
+    const x = (v3.x * .5 + .5) * innerWidth, y = (-v3.y * .5 + .5) * innerHeight;
+    if (behind || x < -100 || x > innerWidth + 100 || y < -60 || y > innerHeight + 60) {
+      d.style.display = 'none'; continue;
+    }
+    // measure once per frame — w/h are position-independent; the old code
+    // re-read live rects inside the relax loop, so pass 0 saw *last frame's*
+    // displaced boxes and symmetric overlaps alternated between two states
+    const r = d.getBoundingClientRect();
+    it.w = r.width; it.h = r.height;
+    it.x = x; it.y = y; it.dy = 0;
+    d.style.display = 'flex';
+    items.push(it);
+  }
+  const solid = items.filter(i => !i.norelax);
+  if (solid[0] && solid[0]._ord === undefined)
+    labelDivs.forEach((it, i) => it._ord = i);
+  // pure-math relaxation (centred boxes) — deterministic, no DOM feedback
+  for (let pass = 0; pass < 14; pass++) {
+    let moved = false;
+    for (const a of solid) {
+      const ay = a.y + a.dy;
+      const al = a.x - a.w / 2, ar = a.x + a.w / 2, at = ay - a.h / 2, ab = ay + a.h / 2;
+      for (const b of solid) {
+        if (a === b) continue;
+        const by = b.y + b.dy;
+        const ox = Math.min(ar, b.x + b.w / 2) - Math.max(al, b.x - b.w / 2);
+        const oy = Math.min(ab, by + b.h / 2) - Math.max(at, by - b.h / 2);
+        if (ox > 0 && oy > 0) {
+          const push = oy / 2 + 1;
+          if (ay < by || (ay === by && a._ord < b._ord)) a.dy -= push;
+          else a.dy += push;
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  for (const it of items) {
+    it.d.style.left = it.x + 'px';
+    it.d.style.top = (it.norelax ? it.y : it.y + it.dy) + 'px';
+  }
+}
+
+/* ---------- post processing (js/render/pipeline.js) ---------- */
+const MSAAQ = params.get('msaa');    // eval/perf override — default 4x
+const msaaSamples = MSAAQ === null ? 4 : Math.max(0, Math.min(8, +MSAAQ || 0));
+const POSTSKIP = params.get('postskip');  // diagnostics: ?postskip=bloom,smaa
+let composer = null, pipe = null;
+if (!NOFX) {
+  pipe = createPipeline(renderer, scene, activeCam,
+    { time: TIME, ao: !NOAO, pixelRatio, msaa: msaaSamples,
+      skip: POSTSKIP ? new Set(POSTSKIP.split(',')) : null });
+  composer = pipe.composer;
+}
+
+/* ---------- evaluator probe ---------- */
+const __fx = {
+  get ao() { return !!(pipe && pipe.gtao && pipe.gtao.enabled); },
+  aoPresent: !!(pipe && pipe.gtao),     // pass exists in chain even if map-view disables it
+  get aoState() { return pipe && pipe.gtao ? (pipe.gtao.enabled ? pipe.gtao._state : 'map-off') : 'off'; },
+  msaa: NOFX ? 0 : msaaSamples,
+  shadowType: 'PCFSoftShadowMap', shadowMapSize: sun.shadow.mapSize.x,
+  bloom: pipe ? { threshold: pipe.bloom.threshold, strength: pipe.bloom.strength,
+                  radius: pipe.bloom.radius } : null,
+  envType: envInfo.envType, envSrc: envInfo.envSrc, envIntensity: envInfo.envIntensity,
+  atmo: {
+    enabled: !NOATMO && VIEW !== 'map',
+    noatmo: NOATMO, nofog: NOFOG,
+    fog: atmoInfo ? atmoInfo.fog : { type: 'exp2-stock' },
+    fogDensity: scene.fog ? scene.fog.density : 0,
+    clouds: atmoInfo ? atmoInfo.clouds : null,
+    grade: TIME,
+    lampPools: atmoInfo ? atmoInfo.lampPools : 0,
+    lampHalos: atmoInfo ? atmoInfo.lampHalos : 0,
+  },
+  tex: {}, mats: matStats,
+  calls: 0, tris: 0, fps: 0,
+};
+window.__fx = __fx;
+
+/* ---------- adaptive shadow box: follows the camera, snaps to texels ---------- */
+const _focus = new THREE.Vector3(), _fwd = new THREE.Vector3();
+let shHalf = 700, _shFrame = 0;
+const _lastFocus = new THREE.Vector2(1e9, 1e9);
+let _lastHalf = 0;
+renderer.shadowMap.autoUpdate = false;   // refresh on movement or periodically
+renderer.shadowMap.needsUpdate = true;   // first frame must bake
+function updateShadow() {
+  if (++_shFrame % 12 === 0) renderer.shadowMap.needsUpdate = true;  // moving props ~2Hz
+  if (orthoCam) return;
+  camera.getWorldDirection(_fwd); _fwd.y = 0;
+  const fl = _fwd.lengthSq() > .01 ? _fwd.normalize() : _fwd.set(0, 0, -1);
+  // focus point on the ground ahead of the camera — but once the box covers
+  // the whole town (aerial), tracking is pure waste: pin it at town centre
+  // and let the periodic refresh handle moving props.
+  const townWide = shHalf > 640;
+  if (townWide) _focus.set(0, 0, 0);
+  else {
+    const ahead = Math.min(camera.position.y * 1.1, 500);
+    _focus.copy(camera.position).addScaledVector(fl, ahead);
+    _focus.y = 0;
+  }
+  // box grows with altitude: crisp up close, still covers the town from above
+  const want = THREE.MathUtils.clamp(camera.position.y * 1.05, 130, 900);
+  shHalf += (want - shHalf) * .08;
+  // snap focus to shadow texels to stop shimmer
+  const texel = (shHalf * 2) / sun.shadow.mapSize.x;
+  _focus.x = Math.round(_focus.x / texel) * texel;
+  _focus.z = Math.round(_focus.z / texel) * texel;
+  sun.position.copy(_focus).addScaledVector(sunDir, 1800);
+  sun.target.position.copy(_focus);
+  const sc = sun.shadow.camera;
+  if (Math.abs(sc.right - shHalf) > 1) {
+    sc.left = -shHalf; sc.right = shHalf; sc.top = shHalf; sc.bottom = -shHalf;
+    sc.updateProjectionMatrix();
+  }
+  // rebuild only when the tracked box moved (snapped to texels), and at most
+  // every 3rd frame while in motion — a 4096 map on an iGPU is the budget
+  const boxMoved = Math.abs(_focus.x - _lastFocus.x) > texel ||
+    Math.abs(_focus.z - _lastFocus.y) > texel || Math.abs(shHalf - _lastHalf) > 1;
+  if (boxMoved && (townWide || _shFrame % 3 === 0)) {
+    renderer.shadowMap.needsUpdate = true;
+    _lastFocus.set(_focus.x, _focus.z); _lastHalf = shHalf;
+  }
+}
+
+/* resize paths MUST repaint in the same task — setPixelRatio/setSize clear
+   the canvas, and a compositor paint between the clear and the next tick's
+   render would present a black frame (this landed in the __ready window) */
+const resync = () => {
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(pixelRatio);
+  if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight);
+    if (pipe && pipe.gtao) pipe.gtao.dirty = true;   // RTs realloc'd — rebuild AO, never composite stale
+    composer.render(); }
+  else renderer.render(scene, activeCam);
+};
+
+/* ---------- debug HUD ---------- */
+const hud = document.getElementById('hud');
+let fpsEMA = 60, frames = 0, lastHud = 0;
+let veilGone = false, veilFreeFrames = 0;
+
+/* ---------- loop ---------- */
+const clock = new THREE.Clock();
+window.__ready = false;
+const fwd = new THREE.Vector3(), right = new THREE.Vector3();
+let lastRatioCheck = 0, callsEMA = 0;
+renderer.info.autoReset = false;
+function tick() {
+  requestAnimationFrame(tick);
+  renderer.info.reset();
+  const dt = Math.min(clock.getDelta(), .05);
+  const t = clock.elapsedTime;
+  if (!orthoCam) {
+    if (fly.auto) {
+      const v = P[VIEW] || P.aerial;
+      const a = t * .05;
+      camera.position.x = v.p[0] * Math.cos(a) - v.p[2] * Math.sin(a);
+      camera.position.z = v.p[0] * Math.sin(a) + v.p[2] * Math.cos(a);
+      camera.position.y = v.p[1];
+      camera.lookAt(...v.t);
+      syncAnglesFromCam();
+    } else {
+      const sp = fly.speed * (fly.keys.ShiftLeft || fly.keys.ShiftRight ? 3 : 1);
+      fwd.set(-Math.sin(fly.yaw) * Math.cos(fly.pitch), Math.sin(fly.pitch), -Math.cos(fly.yaw) * Math.cos(fly.pitch));
+      right.set(-Math.sin(fly.yaw - Math.PI / 2), 0, -Math.cos(fly.yaw - Math.PI / 2));
+      const mv = new THREE.Vector3();
+      if (fly.keys.KeyW || fly.keys.ArrowUp) mv.add(fwd);
+      if (fly.keys.KeyS || fly.keys.ArrowDown) mv.sub(fwd);
+      if (fly.keys.KeyA || fly.keys.ArrowLeft) mv.sub(right);
+      if (fly.keys.KeyD || fly.keys.ArrowRight) mv.add(right);
+      if (fly.keys.KeyE || fly.keys.Space) mv.y += 1;
+      if (fly.keys.KeyQ || fly.keys.KeyC) mv.y -= 1;
+      if (mv.lengthSq() > 0) mv.normalize().multiplyScalar(sp);
+      fly.vel.lerp(mv, .12);
+      camera.position.addScaledVector(fly.vel, dt);
+      camera.position.y = Math.max(2.2, camera.position.y);
+      // hard world boundary: stay inside the mountain ring (inner base ~1290)
+      const hr = Math.hypot(camera.position.x, camera.position.z);
+      if (hr > CAM_BOUND) {
+        const k = CAM_BOUND / hr;
+        camera.position.x *= k; camera.position.z *= k;
+        fly.vel.multiplyScalar(.25);          // bleed off outward momentum
+      }
+      camera.position.y = Math.min(camera.position.y, 1400);
+      camera.quaternion.setFromEuler(new THREE.Euler(fly.pitch, fly.yaw, 0, 'YXZ'));
+    }
+  }
+  updateShadow();
+  tickWorld(t, dt);
+  if (composer) {
+    if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
+      composer.passes[0].camera = activeCam;
+      if (composer.passes[1] && composer.passes[1].camera) composer.passes[1].camera = activeCam;
+    }
+    // AO off in the ortho map view — the map is a schematic overlay, and
+    // GTAO assumes a perspective projection anyway
+    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam;
+    if (composer._grade) composer._grade.uniforms.uTime.value = t;
+    composer.render();
+  } else {
+    renderer.render(scene, activeCam);
+  }
+  updateLabels();
+  // fps + dynamic resolution
+  fpsEMA = fpsEMA * .95 + (1 / Math.max(dt, .001)) * .05;
+  callsEMA = callsEMA * .9 + renderer.info.render.calls * .1;
+  __fx.calls = renderer.info.render.calls;
+  __fx.callsAvg = Math.round(callsEMA);
+  __fx.tris = renderer.info.render.triangles;
+  __fx.fps = Math.round(fpsEMA * 10) / 10;
+  if ((DEBUG || FPSDBG) && hud && t - lastHud > .25) {
+    lastHud = t;
+    const i = renderer.info.render;
+    hud.style.display = 'block';
+    hud.textContent = `${fpsEMA.toFixed(0)} fps · ${i.calls} calls · ` +
+      `${(i.triangles / 1e6).toFixed(2)}M tris · ratio ${pixelRatio} · ` +
+      `${renderer.info.memory.geometries} geo / ${renderer.info.memory.textures} tex`;
+  }
+  if (t - lastRatioCheck > 2.5) {
+    lastRatioCheck = t;
+    if (fpsEMA < 42 && pixelRatio > .55) {
+      pixelRatio = Math.max(.42, pixelRatio - .2); resync();
+    } else if (fpsEMA > 57 && pixelRatio < MAX_RATIO) {
+      pixelRatio = Math.min(MAX_RATIO, pixelRatio + .25); resync();
+    }
+  }
+  if (++frames === 40) {
+    __fx.tex = texReport();
+    const lo = document.getElementById('loading');
+    // fade the veil, then count frames tick-side: __ready must not flip until
+    // real composer frames have PRESENTED with the veil gone — a capture at
+    // the flip sees whatever was last composited
+    if (lo) { lo.style.opacity = '0';
+      setTimeout(() => { lo.remove(); veilGone = true; }, 700); }
+    else veilGone = true;
+  }
+  if (veilGone && !window.__ready && ++veilFreeFrames >= 2)
+    window.__ready = true;
+}
+tick();
+addEventListener('resize', () => {
+  if (camera.isPerspectiveCamera) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+  resync();
+});
+window.__cam = camera; window.__scene = scene; window.__renderer = renderer;

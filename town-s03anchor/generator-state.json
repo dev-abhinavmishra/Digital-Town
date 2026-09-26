@@ -1,0 +1,47 @@
+{
+  "agent": "generator-render-a",
+  "sprint": "sprint-02",
+  "stream": "RENDER",
+  "updated": "2026-09-26T10:20Z",
+  "checkpoint": "f1cd21c (sprint-01 final; tree verified clean)",
+  "log": [
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "sprint-02 GO (Atmosphere & Depth): sky/clouds v2, height+distance fog + aerial perspective, per-time grading, dusk night-look (lit windows + streetlight pools); carry-forwards: AO foliage ghost watch, green reshoot on healthy network"
+    },
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "recon: clouds are details.js sprites animated by B's tickWorld - plan is render-side billboard upgrade (new texture/material on existing sprite objects, zero B-file edits); lamps are lampIM InstancedMesh from buildLights, emissive-toggled at dusk already - light pools derivable from instanceMatrix positions; FogExp2 already per-time, needs height-fog + aerial perspective via ShaderChunk patch or post pass"
+    },
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "committed sprint-02 pre-edit checkpoint (this state log only)"
+    },
+    {
+      "t": "2026-09-26T11:45Z",
+      "ev": "s02 build done: atmo.js (cumulus billboards x4 variants + child puffs, ShaderChunk fog patch height-haze+aerial, lamp pools/halos w/ lampIM-empty fallback synthesized from ROADS), pipeline dusk grade/bloom presets, main.js wiring + ?noatmo/?nofog + __fx.atmo. Verified live: aerial clouds+fog good, dusk pools=222+lit windows+bloom .85; dusk clouds too dominant - softened (sc 1.05, op .26, tint #716880). lampIM.count===0 found: B occupancy rework zeroes all lamp poles (isFree swallows streetPad band) - pools synth from ROADS instead."
+    },
+    {
+      "t": "2026-09-26T11:45Z",
+      "ev": "ERR_NETWORK_CHANGED flap persisting - eval verification slow, watchdog cycling loads"
+    },
+    {
+      "t": "2026-09-26T14:25Z",
+      "ev": "r02: eval FAIL C3(rect clipping)+C4(day haze) -> vignette destination-in elliptical mask on all cumulus variants, day kids 2-4->0-2 + op .88, hazeW .30->.20 airLo 240->300; verified blocker cam clean, aerial 567c/21.9f, dusk unchanged"
+    },
+    {
+      "t": "2026-09-26T15:05Z",
+      "ev": "eval r02 CONTRACT PASS 11/11 on 451543a - stream rubric 7.80; RENDER done for sprint-02. B's 20091b6 un-zero lamps fix landed post-commit -> lampIM populated, pools auto-followed to 191 real heads (synthesized count was 222 while empty). Carry: AO foliage ghost watch, green reshoot pending network, lamp pole near blocker cam = B-side placement quirk."
+    }
+  ],
+  "caps": {
+    "contractExchanges": 4,
+    "evalRounds": 4,
+    "restarts": 2
+  },
+  "used": {
+    "contractExchanges": 0,
+    "evalRounds": 0,
+    "restarts": 0
+  }
+}
