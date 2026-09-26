@@ -132,8 +132,8 @@ function radialTex(size, inner, outer, stops) {
 const FOGP = {
   day:    { hazeH: 95,  hazeK: .00042, hazeW: .15, airLo: 400, airHi: 1650,
             tint: '0.788,0.847,0.902', desat: .17 },
-  golden: { hazeH: 110, hazeK: .0005, hazeW: .30, airLo: 240, airHi: 1500,
-            tint: '0.914,0.769,0.608', desat: .13 },
+  golden: { hazeH: 110, hazeK: .00045, hazeW: .24, airLo: 320, airHi: 1500,
+            tint: '0.914,0.769,0.608', desat: .12 },
   dusk:   { hazeH: 80,  hazeK: .00070, hazeW: .40, airLo: 160, airHi: 1100,
             tint: '0.333,0.310,0.408', desat: .35 },
 };
