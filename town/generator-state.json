@@ -1,0 +1,55 @@
+{
+  "agent": "generator-render-a",
+  "sprint": "sprint-03",
+  "stream": "RENDER",
+  "updated": "2026-09-26T15:40Z",
+  "checkpoint": "48d5cd0 (sprint-03 start HEAD; tree clean)",
+  "log": [
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "sprint-02 GO (Atmosphere & Depth): sky/clouds v2, height+distance fog + aerial perspective, per-time grading, dusk night-look (lit windows + streetlight pools); carry-forwards: AO foliage ghost watch, green reshoot on healthy network"
+    },
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "recon: clouds are details.js sprites animated by B's tickWorld - plan is render-side billboard upgrade (new texture/material on existing sprite objects, zero B-file edits); lamps are lampIM InstancedMesh from buildLights, emissive-toggled at dusk already - light pools derivable from instanceMatrix positions; FogExp2 already per-time, needs height-fog + aerial perspective via ShaderChunk patch or post pass"
+    },
+    {
+      "t": "2026-09-26T10:20Z",
+      "ev": "committed sprint-02 pre-edit checkpoint (this state log only)"
+    },
+    {
+      "t": "2026-09-26T11:45Z",
+      "ev": "s02 build done: atmo.js (cumulus billboards x4 variants + child puffs, ShaderChunk fog patch height-haze+aerial, lamp pools/halos w/ lampIM-empty fallback synthesized from ROADS), pipeline dusk grade/bloom presets, main.js wiring + ?noatmo/?nofog + __fx.atmo. Verified live: aerial clouds+fog good, dusk pools=222+lit windows+bloom .85; dusk clouds too dominant - softened (sc 1.05, op .26, tint #716880). lampIM.count===0 found: B occupancy rework zeroes all lamp poles (isFree swallows streetPad band) - pools synth from ROADS instead."
+    },
+    {
+      "t": "2026-09-26T11:45Z",
+      "ev": "ERR_NETWORK_CHANGED flap persisting - eval verification slow, watchdog cycling loads"
+    },
+    {
+      "t": "2026-09-26T14:25Z",
+      "ev": "r02: eval FAIL C3(rect clipping)+C4(day haze) -> vignette destination-in elliptical mask on all cumulus variants, day kids 2-4->0-2 + op .88, hazeW .30->.20 airLo 240->300; verified blocker cam clean, aerial 567c/21.9f, dusk unchanged"
+    },
+    {
+      "t": "2026-09-26T15:05Z",
+      "ev": "eval r02 CONTRACT PASS 11/11 on 451543a - stream rubric 7.80; RENDER done for sprint-02. B's 20091b6 un-zero lamps fix landed post-commit -> lampIM populated, pools auto-followed to 191 real heads (synthesized count was 222 while empty). Carry: AO foliage ghost watch, green reshoot pending network, lamp pole near blocker cam = B-side placement quirk."
+    },
+    {
+      "t": "2026-09-26T15:40Z",
+      "ev": "s03 GO (Landmarks & Hero Detail): water shader v2, glass/reflections v2, near-cam occluder cull; carry AO ghost + green reshoot + perf >=90% s03 anchor. recon: waterMaterial(lib.js:708) already uTime-hooked + freeze-safe via B tickWorld pin; glassFacadeMaps/glassV2 A-owned; birds = 1 InstancedMesh frustumCulled=false ~30 inst - cull post-tickWorld in main.js. contract-render draft posted, negotiating with Evaluator (resp 7181be90)."
+    },
+    {
+      "t": "2026-09-26T16:10Z",
+      "ev": "contract v2 LANDED (eval conditional approval, all amendments folded). WIND DOWN directive mid-build: partial s03 implementation committed as WIP - waterMaterial v2 (multi-octave normals, fresnel depth tint, rim fade/foam, sun-vector glint, ?nowaterfx), glass upgrade pass (render/glass.js, ?noglassfx), bird occluder cull (render/cull.js, 30m/3% rule, ?nocull), __fx.water/.glass/.cull/.frameHash probes. Live-verified before freeze: aerial 574c/22.7f, water 5 bodies, glass 17-20 mats (count varies w/ scene state - investigate next session), cull targets=1. NOT eval-submitted; sprint-03 suspended."
+    }
+  ],
+  "caps": {
+    "contractExchanges": 4,
+    "evalRounds": 4,
+    "restarts": 2
+  },
+  "used": {
+    "contractExchanges": 0,
+    "evalRounds": 0,
+    "restarts": 0
+  }
+}
