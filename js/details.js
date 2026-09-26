@@ -13,6 +13,7 @@ import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './c
 import { GeoBin } from './city/geo.js';
 import { buildStreetscape, intersections } from './city/streetscape.js';
 import { buildGreens } from './city/greens.js';
+import { buildYards } from './city/yards.js';
 import { publishCity } from './city/stats.js';
 export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
@@ -32,6 +33,7 @@ export function buildRoads(scene) {
 }
 export function buildLots(scene) {
   const bin = new GeoBin();
+  const parts = [];
   const white = mat('#dfe3e6');
   const bump = mat('#d4b23a');
   for (const l of LOTS) {
@@ -52,9 +54,35 @@ export function buildLots(scene) {
     if (l.w > 60) {
       bin.plane(3.4, 5.5, mat('#2e6b9a'), l.x - l.w / 2 + 4, Y + .004, l.z - l.d / 2 + 3.2);
     }
+    // raised planter islands down the middle of the bigger slabs — curb ring,
+    // soil, shrub + small crown; breaks the uninterrupted asphalt read
+    if (!l.plain && l.w > 90 && l.d > 40) {
+      const nI = Math.floor(l.w / 60);
+      for (let i = 0; i < nI; i++) {
+        const ix = l.x - l.w / 2 + (i + .5) * l.w / nI;
+        const iw = Math.min(16, l.w / nI - 12);
+        if (iw < 5) continue;
+        bin.plane(iw, 4.6, soilMat(), ix, Y + .02, l.z);
+        parts.push({ geo: new THREE.BoxGeometry(iw + .6, .3, 5.2), color: '#9a9488',
+          x: ix, y: .1, z: l.z });
+        parts.push({ geo: new THREE.CylinderGeometry(.2, .3, 2.6, 6), color: '#4a3527',
+          x: ix, y: 1.3, z: l.z });
+        parts.push({ geo: new THREE.IcosahedronGeometry(1.7, 0), color: '#5d8a3c',
+          x: ix, y: 3.4, z: l.z });
+        for (const sxx of [-iw / 4, iw / 4])
+          parts.push({ geo: new THREE.IcosahedronGeometry(.7, 0), color: '#4e6b3e',
+            x: ix + sxx, y: .55, z: l.z });
+      }
+    }
   }
   bin.build(scene);
+  if (parts.length) {
+    const m = new THREE.Mesh(colored(parts), VCOL());
+    m.castShadow = m.receiveShadow = true; scene.add(m);
+  }
 }
+let _soilM = null;
+function soilMat() { return _soilM ||= mat('#5a4632', { roughness: 1 }); }
 
 /* ---------------- trees (instanced) ---------------- */
 export function buildTrees(scene) {
@@ -113,7 +141,7 @@ export function buildTrees(scene) {
   // tapered, slightly irregular trunk
   const trunkG = new THREE.CylinderGeometry(.26, .5, 4.6, 6);
   trunkG.translate(0, 2.3, 0);
-  const folG = new THREE.IcosahedronGeometry(2.4, 0);
+  const folG = new THREE.IcosahedronGeometry(2.4, 1);   // main crown: smoother silhouette
   const folG2 = new THREE.IcosahedronGeometry(1.7, 0);
   const conG = new THREE.ConeGeometry(2.0, 8.2, 7);
   const conG2 = new THREE.ConeGeometry(1.3, 5.4, 7);
@@ -1007,6 +1035,7 @@ export function buildFences(scene) {
   const m = new THREE.Mesh(colored(parts), VCOL());
   m.castShadow = m.receiveShadow = true;
   scene.add(m);
+  buildYards(scene);   // interior-block fenced backyards + commons (city/yards.js)
 }
 
 /* ---------------- farmland ring ---------------- */
@@ -1074,17 +1103,24 @@ export function buildMountains(scene) {
         .5 + .24 * Math.sin(3 * t + 1.9) + .17 * Math.sin(7 * t + .7) + .19 * Math.sin(15 * t + 2.9));
     };
     const R0 = a => rMid + 150 * Math.sin(4 * a + seed * 2) + 80 * Math.sin(9 * a + seed);
+    // mid-slope jitter: craggy facets instead of flat slabs
+    const J = a => 26 * Math.sin(23 * a + seed * 3) + 14 * Math.sin(41 * a + seed);
     const V = (a, r, y) => { pos.push(Math.cos(a) * r, y, Math.sin(a) * r); colAt(y, hMax, snowAt); };
     for (let i = 0; i < N; i++) {
       const a0 = i / N * 6.2831853, a1 = (i + 1) / N * 6.2831853;
       const h0 = H(a0), h1 = H(a1);
       const rm0 = R0(a0), rm1 = R0(a1);
+      const j0 = J(a0), j1 = J(a1);
       // inner slope (faces town) â€” wound to face inward
-      V(a0, rm0 - width, 0); V(a1, rm1 - width, 0); V(a0, rm0, h0);
-      V(a0, rm0, h0);       V(a1, rm1 - width, 0); V(a1, rm1, h1);
+      V(a0, rm0 - width, 0); V(a1, rm1 - width, 0); V(a0, rm0 - width * .45 + j0, h0 * .55);
+      V(a0, rm0 - width * .45 + j0, h0 * .55); V(a1, rm1 - width, 0); V(a1, rm1 - width * .45 + j1, h1 * .55);
+      V(a0, rm0 - width * .45 + j0, h0 * .55); V(a1, rm1 - width * .45 + j1, h1 * .55); V(a0, rm0, h0);
+      V(a0, rm0, h0); V(a1, rm1 - width * .45 + j1, h1 * .55); V(a1, rm1, h1);
       // outer slope â€” wound to face outward
-      V(a0, rm0, h0);       V(a1, rm1, h1);        V(a0, rm0 + width, 0);
-      V(a0, rm0 + width, 0); V(a1, rm1, h1);       V(a1, rm1 + width, 0);
+      V(a0, rm0, h0);       V(a1, rm1, h1);        V(a0, rm0 + width * .45 + j0, h0 * .55);
+      V(a0, rm0 + width * .45 + j0, h0 * .55); V(a1, rm1, h1); V(a1, rm1 + width * .45 + j1, h1 * .55);
+      V(a0, rm0 + width * .45 + j0, h0 * .55); V(a1, rm1 + width * .45 + j1, h1 * .55); V(a0, rm0 + width, 0);
+      V(a0, rm0 + width, 0); V(a1, rm1 + width * .45 + j1, h1 * .55); V(a1, rm1 + width, 0);
     }
   };
   ridge(1700, 350, 240, 0.0, .80);   // near green foothills

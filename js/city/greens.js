@@ -17,7 +17,7 @@ const GRASS_A = '#9db27e', GRASS_B = '#a9bd83', GRASS_C = '#8aa868';
 const BED = '#5a4632', PATHC = '#b8a888';
 
 function lawnPlane(bin, g, tint) {
-  const gm = pbr('grass_ground', { repeat: [6, 6], color: tint });
+  const gm = pbr('grass_ground', { repeat: [6, 6], color: tint, envMapIntensity: .12 });
   bin.plane(g.x1 - g.x0, g.z1 - g.z0, gm,
     (g.x0 + g.x1) / 2, Y - .005, (g.z0 + g.z1) / 2);
 }
@@ -34,7 +34,7 @@ function pathStrip(bin, x0, z0, x1, z1, w = 2.2) {
   }
 }
 let _pathM = null;
-function pathMat() { return _pathM || (_pathM = pbr('gravel', { repeat: [2, 2], color: PATHC })); }
+function pathMat() { return _pathM || (_pathM = pbr('gravel', { repeat: [2, 2], color: PATHC, envMapIntensity: .12 })); }
 
 function bench(parts, x, z, ry) {
   const c = Math.cos(ry), s = Math.sin(ry);
@@ -67,18 +67,44 @@ function hedgeLine(parts, x0, z0, x1, z1) {
 /* ---------- per-use renderers ---------- */
 // each returns { trees:[{x,z,s,t}], bushes:[], flowers:[] } for instancing
 
+let _plazaM = null;
+function plazaMat() { return _plazaM ||= pbr('precast_stone_paving', { repeat: [3, 3], color: '#b8ac98', envMapIntensity: .12 }); }
+
 function rPocketPark(g, bin, parts, out) {
   lawnPlane(bin, g, GRASS_B);
-  // curved path + benches + a couple trees
-  pathStrip(bin, g.x0 + 6, (g.z0 + g.z1) / 2, g.x1 - 6, (g.z0 + g.z1) / 2);
-  for (let i = 0; i < 3; i++)
-    bench(parts, rr(g.x0 + 10, g.x1 - 10), (g.z0 + g.z1) / 2 + rr(-8, 8), rr(0, 6.28));
-  const nT = Math.max(4, Math.floor((g.x1 - g.x0) / 13));
+  const cx = (g.x0 + g.x1) / 2, cz = (g.z0 + g.z1) / 2;
+  const W = g.x1 - g.x0, D = g.z1 - g.z0;
+  // paved plaza pad at the west end — reads as a destination from aerial
+  const pr = Math.min(9, W * .14, D * .3);
+  const pg = new THREE.CircleGeometry(pr, 18);
+  pg.rotateX(-Math.PI / 2); pg.translate(g.x0 + pr + 4, Y + .004, cz);
+  let pb = bin.b.get(plazaMat()); if (!pb) { pb = []; bin.b.set(plazaMat(), pb); }
+  pb.push(pg);
+  // plaza focal: small fountain ring + centre column
+  parts.push({ geo: new THREE.CylinderGeometry(1.9, 2.1, .6, 12), color: '#9aa0a3',
+    x: g.x0 + pr + 4, y: .3, z: cz });
+  parts.push({ geo: new THREE.CylinderGeometry(.3, .4, 1.6, 8), color: '#8a9094',
+    x: g.x0 + pr + 4, y: 1.1, z: cz });
+  // perimeter walking loop (ellipse of gravel discs)
+  const er = Math.max(6, Math.min(W, D) / 2 - 5);
+  for (let t = 0; t < 1; t += .04) {
+    const a = t * Math.PI * 2;
+    const dg = new THREE.CircleGeometry(1.7, 8);
+    dg.rotateX(-Math.PI / 2);
+    dg.translate(cx + Math.cos(a) * (W / 2 - 6), Y + .006,
+                 cz + Math.sin(a) * Math.min(D / 2 - 5, er));
+    let bb = bin.b.get(pathMat()); if (!bb) { bb = []; bin.b.set(pathMat(), bb); }
+    bb.push(dg);
+  }
+  pathStrip(bin, g.x0 + 6, cz, g.x1 - 6, cz);
+  for (let i = 0; i < 4; i++)
+    bench(parts, rr(g.x0 + 10, g.x1 - 10), cz + rr(-8, 8), rr(0, 6.28));
+  const nT = Math.max(6, Math.floor(W / 8));
   for (let i = 0; i < nT; i++)
     out.trees.push({ x: rr(g.x0 + 8, g.x1 - 8), z: rr(g.z0 + 8, g.z1 - 8), s: rr(1, 1.5),
       t: pick(['o', 'm', 'b']) });
   // ring of understory shrubs inside the hedge line
-  for (let i = 0; i < Math.floor((g.x1 - g.x0) / 10); i++)
+  for (let i = 0; i < Math.floor(W / 8); i++)
     out.flowers.push({ x: rr(g.x0 + 3, g.x1 - 3), z: g.z1 - rr(2, 5), s: rr(.8, 1.4),
       color: pick(['#5d8a3c', '#4e7d46', '#7aa04a']) });
   hedgeLine(parts, g.x0, g.z1 - 1, g.x1, g.z1 - 1);

@@ -2,6 +2,7 @@
 // Imports the real layout module (requires "type":"module" in package.json) so the
 // audit can never drift out of sync with what the scene actually builds.
 import { ROADS, LOTS, WATER, BUILDINGS, APARTMENTS, HOUSE_BLOCKS, COTTAGE_ROWS, PLAZA, PARK_ZONE, FILLER, GREENS } from './js/layout.js';
+import { yardLots } from './js/city/yardsData.js';
 
 const rect = (x, z, w, d) => ({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 });
 const overlap = (a, b) => {
@@ -147,4 +148,35 @@ console.log('\n=== GREENS vs GREENS ===');
 for (let i = 0; i < greenRects.length; i++) for (let j = i + 1; j < greenRects.length; j++) {
   const o = overlap(greenRects[i], greenRects[j]); if (o) console.log(`${greenRects[i].name}  x  ${greenRects[j].name}   ov ${o.ox} x ${o.oz}`);
 }
+// fenced yards + interior commons (round-2 infill): rect model shared with
+// the renderer via js/city/yardsData.js. The renderer only builds a lot when
+// its centre is on free interior ground (isFree r=4 at buildYards time) —
+// model the same skip here, then verify kept rects are clear of everything.
+const yardOcc = [
+  ...occupied,
+  ...bRects.map(b => ({ x0: b.x0 - .5, x1: b.x1 + .5, z0: b.z0 - .5, z1: b.z1 + .5 })),
+  ...features.map(f => ({ ...f })),
+  { ...plazaR },
+];
+const ptFree = (x, z, r) => !yardOcc.some(o =>
+  x + r > o.x0 && x - r < o.x1 && z + r > o.z0 && z - r < o.z1);
+const yardFree = y => ptFree(y.x, y.z, 1.2) &&
+  ptFree(y.x - y.w / 2 + 1, y.z - y.d / 2 + 1, 1) && ptFree(y.x + y.w / 2 - 1, y.z - y.d / 2 + 1, 1) &&
+  ptFree(y.x - y.w / 2 + 1, y.z + y.d / 2 - 1, 1) && ptFree(y.x + y.w / 2 - 1, y.z + y.d / 2 - 1, 1);
+const allYards = yardLots().map((y, i) => ({ name: `yard:${i}(${y.kind})`,
+  x: y.x, z: y.z, w: y.w, d: y.d, ...rect(y.x, y.z, y.w, y.d), kind: y.kind }));
+const keptYards = allYards.filter(yardFree), skippedYards = allYards.length - keptYards.length;
+console.log('\n=== YARDS vs BUILDINGS/LOTS/WATER/FEATURES/PLAZA/GREENS (kept lots) ===');
+for (const y of keptYards) for (const b of [...bRects, ...lotRects, ...watRects, ...features, plazaR, ...greenRects]) {
+  const o = overlap(y, b); if (o) console.log(`${y.name}  x  ${b.name}   ov ${o.ox} x ${o.oz}`);
+}
+console.log('\n=== YARDS vs STREETSCAPE BAND (kept lots) ===');
+for (const y of keptYards) for (const b of bandRects) {
+  const o = overlap(y, b); if (o) console.log(`${y.name}  x  ${b.name}   ov ${o.ox} x ${o.oz}`);
+}
+console.log('\n=== YARDS vs YARDS (kept lots) ===');
+for (let i = 0; i < keptYards.length; i++) for (let j = i + 1; j < keptYards.length; j++) {
+  const o = overlap(keptYards[i], keptYards[j]); if (o) console.log(`${keptYards[i].name}  x  ${keptYards[j].name}   ov ${o.ox} x ${o.oz}`);
+}
+console.log(`\nyard lots: ${allYards.length} modelled, ${keptYards.length} kept, ${skippedYards} skipped by occupancy (${keptYards.filter(y=>y.kind==='commons').length} commons)`);
 console.log('\ndone');
