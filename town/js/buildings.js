@@ -154,10 +154,22 @@ function facadeDress(g, w, d, h, o = {}) {
    recessed while lit panes keep their dusk emissive (nothing covers the paint).
    faces: 'f' = +z street face, 'b' = back, 's' = ±x flanks.
    storefront:true clips the grid at the painted shopfront band (px 322). */
+/* shared semi-transparent facade glass — every winDress pane lands in ONE
+   merged bucket. Painted lit windows beneath still bleed through. */
+const _FGLASS = new M({ vertexColors: true, roughness: .14, metalness: .35,
+  transparent: true, opacity: .78 });
+function glassMesh(g, gp) {
+  if (!gp.length) return;
+  const m = new THREE.Mesh(colored(gp), _FGLASS);
+  m.receiveShadow = true; g.add(m);
+}
+const PANE_TINTS = ['#22303a', '#26333b', '#31404a', '#3a3129', '#1d272e'];
+
 function winDress(parts, w, d, h, { rows = 2, cols = 4, storefront = false,
                                     faces = 'fb', trim = '#e5e0d4',
                                     transom = false, spandrel = false,
-                                    fins = false } = {}) {
+                                    fins = false, deep = true,
+                                    reveal = false } = {}, gp = null) {
   const TOP = storefront ? 190 : 14, BAND = storefront ? 322 : 512;
   const cw = 512 / cols, rh = (512 - TOP - 14) / rows;
   // face table: ry = box rotation to lie on the face; at(u, n) maps a lateral
@@ -186,22 +198,39 @@ function winDress(parts, w, d, h, { rows = 2, cols = 4, storefront = false,
       const cf = (c + .5) / cols - .5;
       for (const F of list) {
         const ww = cw * .68 / 512 * F.W, u = cf * F.W;
-        const [lx, lz] = F.at(u, .1);              // lintel
-        parts.push({ geo: new THREE.BoxGeometry(ww + .24, .18, .2), color: trim,
-          x: lx, y: yT + .07, z: lz, ry: F.ry });
-        const [sx, sz] = F.at(u, .12);             // sill
-        parts.push({ geo: new THREE.BoxGeometry(ww + .3, .14, .26), color: '#d5cfc0',
-          x: sx, y: yB - .07, z: sz, ry: F.ry });
+        const span = yT - yB;
+        const [lx, lz] = F.at(u, deep ? .18 : .1); // lintel
+        parts.push({ geo: new THREE.BoxGeometry(ww + .34, .2, deep ? .36 : .2),
+          color: trim, x: lx, y: yT + .07, z: lz, ry: F.ry });
+        const [sx, sz] = F.at(u, deep ? .18 : .12); // sill
+        parts.push({ geo: new THREE.BoxGeometry(ww + .36, .16, deep ? .4 : .26),
+          color: '#d5cfc0', x: sx, y: yB - .07, z: sz, ry: F.ry });
         for (const sd of [-1, 1]) {                // jambs
-          const [jx, jz] = F.at(u + sd * (ww / 2 + .06), .08);
-          parts.push({ geo: new THREE.BoxGeometry(.1, yT - yB, .16), color: trim,
-            x: jx, y: (yT + yB) / 2, z: jz, ry: F.ry });
+          const [jx, jz] = F.at(u + sd * (ww / 2 + .07), deep ? .16 : .08);
+          parts.push({ geo: new THREE.BoxGeometry(.14, span, deep ? .32 : .16),
+            color: trim, x: jx, y: (yT + yB) / 2, z: jz, ry: F.ry });
+        }
+        if (reveal) {                              // dark inner reveal ring
+          const [rx, rz] = F.at(u, .09);
+          parts.push({ geo: new THREE.BoxGeometry(ww + .1, .09, .14), color: '#3c4348',
+            x: rx, y: yT - .04, z: rz, ry: F.ry });
+          for (const sd of [-1, 1]) {
+            const [rx2, rz2] = F.at(u + sd * (ww / 2 + .03), .09);
+            parts.push({ geo: new THREE.BoxGeometry(.09, span, .14), color: '#3c4348',
+              x: rx2, y: (yT + yB) / 2, z: rz2, ry: F.ry });
+          }
+        }
+        if (gp) {                                  // inset glass pane (one shared bucket)
+          const [px, pz] = F.at(u, .02);
+          gp.push({ geo: new THREE.BoxGeometry(ww - .04, span - .04, .05),
+            color: PANE_TINTS[(r * cols + c + list.indexOf(F)) % 5],
+            x: px, y: (yT + yB) / 2, z: pz, ry: F.ry });
         }
         if (transom && yT - yB > 1.4) {            // mid-rail splits tall panes
           const ty = yB + (yT - yB) * .38;
-          const [tx, tz] = F.at(u, .07);
-          parts.push({ geo: new THREE.BoxGeometry(ww + .16, .11, .14), color: trim,
-            x: tx, y: ty, z: tz, ry: F.ry });
+          const [tx, tz] = F.at(u, deep ? .12 : .07);
+          parts.push({ geo: new THREE.BoxGeometry(ww + .16, .11, deep ? .18 : .14),
+            color: trim, x: tx, y: ty, z: tz, ry: F.ry });
         }
       }
     }
@@ -227,7 +256,7 @@ function winDress(parts, w, d, h, { rows = 2, cols = 4, storefront = false,
 /* ground-floor shopfront articulation over the painted storefront band —
    bay mullions, header fascia, kick plate. Matches the painter's bay grid. */
 function storefrontKit(parts, w, d, h, { cols = 4, faces = 'f',
-                                        band = '#3a4147', trim = '#ddd6c8' } = {}) {
+                                        band = '#3a4147', trim = '#ddd6c8' } = {}, gp = null) {
   const bandTop = h * (1 - 322 / 512);             // painted shopfront height
   const FDEF = {
     f: { ry: 0,            W: w, at: (u, n) => [u,  d / 2 + n] },
@@ -255,8 +284,51 @@ function storefrontKit(parts, w, d, h, { cols = 4, faces = 'f',
           edge ? .2 : .14), color: edge ? trim : band,
           x: mx, y: .4 + (bandTop - .4) / 2, z: mz, ry: FF.ry });
       }
+      // transom rail + glass pane per bay (pane → shared transparent bucket)
+      const bayW = FF.W / cols;
+      for (let c = 0; c < cols; c++) {
+        const u = ((c + .5) / cols - .5) * FF.W;
+        const [tx, tz] = FF.at(u, .09);
+        parts.push({ geo: new THREE.BoxGeometry(bayW - .2, .11, .14), color: band,
+          x: tx, y: bandTop * .62, z: tz, ry: FF.ry });
+        if (gp) {
+          const [px, pz] = FF.at(u, .02);
+          gp.push({ geo: new THREE.BoxGeometry(bayW - .26, bandTop - .85, .05),
+            color: PANE_TINTS[(c + (FF.ry ? 1 : 0)) % 5],
+            x: px, y: .55 + (bandTop - .75) / 2, z: pz, ry: FF.ry });
+        }
+      }
     }
   }
+}
+
+/* corner quoins — alternating stone blocks, up to maxH. faces 'all' wraps
+   every corner, 'f' only the two street-face corners (shared side walls). */
+function quoins(parts, w, d, h, { color = '#e3dcc8', maxH = 7.6, faces = 'all' } = {}) {
+  const top = Math.min(h, maxH); let lv = 0;
+  for (let y = .5; y < top - .3; y += .8, lv++) {
+    const long = lv % 2 === 0;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      if (faces === 'f' && sz !== 1) continue;
+      parts.push({ geo: new THREE.BoxGeometry(.18, .46, long ? .78 : .42), color,
+        x: sx * (w / 2 + .07), y, z: sz * (d / 2 - (long ? .3 : .13)) });
+      parts.push({ geo: new THREE.BoxGeometry(long ? .78 : .42, .46, .18), color,
+        x: sx * (w / 2 - (long ? .3 : .13)), y, z: sz * (d / 2 + .07) });
+    }
+  }
+}
+
+/* blade sign — perpendicular panel projecting off the front face, hung on
+   two bracket rods. Classic main-street marker. */
+function bladeSign(parts, w, d, h, { x = w / 2 - 1.3, color = '#b8433a',
+                                     edge = '#f0e9da' } = {}) {
+  const y = Math.min(h - 2.3, 5.1), z = d / 2 + .66;
+  parts.push({ geo: new THREE.BoxGeometry(.12, 2.3, .95), color, x, y, z });
+  parts.push({ geo: new THREE.BoxGeometry(.14, .12, 1.0), color: edge, x, y: y + 1.16, z });
+  parts.push({ geo: new THREE.BoxGeometry(.14, .12, 1.0), color: edge, x, y: y - 1.16, z });
+  for (const dy of [1.15, -1.15])
+    parts.push({ geo: new THREE.BoxGeometry(.05, .05, .66), color: '#2e3134',
+      x, y: y + dy, z: d / 2 + .3 });
 }
 
 /* bolt-on steel fire escape for 2–4 storey commercial/apartment blocks —
@@ -300,11 +372,15 @@ function fireEscape(parts, w, d, h, { side = 1, z0 = null } = {}) {
 
 /* mesh wrappers — each funnels into one colored() mesh (one merge bucket) */
 function winDressMesh(g, w, d, h, o) {
-  const parts = [];
-  winDress(parts, w, d, h, o);
-  if (!parts.length) return;
-  const m = new THREE.Mesh(colored(parts), VCOL());
-  m.castShadow = m.receiveShadow = true; g.add(m);
+  const parts = [], gp = [];
+  winDress(parts, w, d, h, o, gp);
+  if (o.quoins) quoins(parts, w, d, h, typeof o.quoins === 'object' ? o.quoins : {});
+  if (o.blade) bladeSign(parts, w, d, h, typeof o.blade === 'object' ? o.blade : {});
+  if (parts.length) {
+    const m = new THREE.Mesh(colored(parts), VCOL());
+    m.castShadow = m.receiveShadow = true; g.add(m);
+  }
+  glassMesh(g, gp);
 }
 function fireEscapeMesh(g, w, d, h, o) {
   const parts = [];
@@ -314,11 +390,13 @@ function fireEscapeMesh(g, w, d, h, o) {
   m.castShadow = m.receiveShadow = true; g.add(m);
 }
 function storefrontKitMesh(g, w, d, h, o) {
-  const parts = [];
-  storefrontKit(parts, w, d, h, o);
-  if (!parts.length) return;
-  const m = new THREE.Mesh(colored(parts), VCOL());
-  m.castShadow = m.receiveShadow = true; g.add(m);
+  const parts = [], gp = [];
+  storefrontKit(parts, w, d, h, o, gp);
+  if (parts.length) {
+    const m = new THREE.Mesh(colored(parts), VCOL());
+    m.castShadow = m.receiveShadow = true; g.add(m);
+  }
+  glassMesh(g, gp);
 }
 
 /* rooftop clutter beyond hvac(): exhaust fans, vent stacks, skylight rows,
@@ -430,6 +508,15 @@ function door(g, w, h, x, z, ry = 0, color = '#2c3a42', o = {}) {
       g.add(br);
     }
   }
+  if (o.portico) { // column pair + entablature slab — true entry portico
+    const PH = h + .9, PC = o.porticoC || '#e3ded2';
+    for (const sx of [-1, 1]) {
+      g.add(cyl(.1, .13, PH, mat(PC), x + sx * (w / 2 + .8), 0, z + 1.6, 10));
+      g.add(box(.34, .3, .34, mat(PC), x + sx * (w / 2 + .8), PH, z + 1.6));
+      g.add(box(.4, .24, .4, mat(PC), x + sx * (w / 2 + .8), 0, z + 1.6));
+    }
+    g.add(box(w + 2.4, .42, 2.2, mat(PC), x, PH + .15, z + .95));
+  }
 }
 const awnCache = new Map();
 function awningMat(color, striped) {
@@ -510,7 +597,7 @@ function hospital(s) {
   parapet(g, tw * .72, td * .8, 12 + s.h, { ph: 1.4 });
   clutter(g, w, d, 12, { solar: false });   // podium roof clutter around heli
   winDressMesh(g, w, d, 12, { rows: 2, cols: 12, storefront: true, faces: 'fbs',
-    transom: true, fins: true });
+    transom: true, fins: true, reveal: true });
   storefrontKitMesh(g, w, d, 12, { cols: 12, faces: 'fbs' });
   // podium roof edge band
   g.add(box(w + .6, .5, d + .6, mat('#8a949a'), 0, 12, 0));
@@ -612,7 +699,7 @@ function medhall(s) { // university main hall with clock tower
   // sills/lintels on back + flanks (front already carries 3D window strips)
   winDressMesh(g, w, d, s.h, { rows: Math.max(3, Math.round(s.h / 4)),
     cols: Math.max(6, Math.round(w / 8)), faces: 'bs', trim: '#e8e2d4',
-    transom: true, spandrel: true, fins: true });
+    transom: true, spandrel: true, fins: true, reveal: true });
   door(g, 8, 6.4, 0, d / 2 + .4, 0, '#2c3a42', { recess: true });
   // entry stairs
   g.add(box(12, .4, 2.4, mat('#b9b2a2'), 0, 0, d / 2 + 5));
@@ -631,8 +718,10 @@ function campusb(s) { // campus brick academic block
   const r = gableRoof(w, 4.5, d, roofM); r.position.y = s.h; g.add(r);
   g.add(box(w * .3, 1.2, .8, mat('#e8e2d4'), 0, s.h * .55, d / 2 + .2)); // limestone band
   winDressMesh(g, w, d, s.h, { rows: 3, cols: Math.round(w / 7), faces: 'fbs',
-    trim: '#e8e2d4', transom: true, spandrel: true, fins: true });
-  door(g, 6, 4.5, 0, d / 2 + .3, 0, '#2c3a42', { recess: true });
+    trim: '#e8e2d4', transom: true, spandrel: true, fins: true, reveal: true,
+    quoins: { color: '#e8e2d4' } });
+  door(g, 6, 4.5, 0, d / 2 + .3, 0, '#2c3a42', { recess: true, portico: true,
+    porticoC: '#e8e2d4' });
   // steps + hedges flanking entry
   g.add(box(9, .35, 2, mat('#b9b2a2'), 0, 0, d / 2 + 1.4));
   return g;
@@ -651,10 +740,11 @@ function medoffice(s, opts = {}) {
   facadeDress(g, w, d, s.h, { pilasters: R() < .5, courses: s.h > 12 });
   winDressMesh(g, w, d, s.h, { rows: Math.max(2, Math.round(s.h / 3.4)),
     cols: Math.round(w / 6), storefront: true, faces: 'fbs',
-    transom: true, spandrel: true, fins: true });
+    transom: true, spandrel: true, fins: true, reveal: true,
+    blade: { color: opts.signBg || '#3b5568' } });
   storefrontKitMesh(g, w, d, s.h, { cols: Math.round(w / 6), faces: 'fbs' });
   if (s.h > 8.5 && R() < .65) fireEscapeMesh(g, w, d, s.h, { side: R() < .5 ? -1 : 1 });
-  door(g, 5, 4.2, 0, d / 2 + .2, 0, '#2c3a42', { recess: true });
+  door(g, 5, 4.2, 0, d / 2 + .2, 0, '#2c3a42', { recess: true, portico: true });
   awning(g, w * .8, 0, 4.6, d / 2 + 1.2, opts.awn || '#41618a', true, s.num ? true : false);
   // sprint-03 entrance dress: awning posts + step + flanking planters (named offices only)
   if (s.num) {
@@ -677,7 +767,7 @@ function ems(s) {
   b.material = wallMats(facadeMaps({ base: '#a8453a', rows: 1, cols: 6, brickLines: true }), flatRoofMat());
   g.add(b);
   parapet(g, w, d, s.h); facadeDress(g, w, d, s.h, { cornice: true });
-  winDressMesh(g, w, d, s.h, { rows: 1, cols: 6, faces: 'b' });   // front face is all bay doors
+  winDressMesh(g, w, d, s.h, { rows: 1, cols: 6, faces: 'b', reveal: true });   // front face is all bay doors
   // 3 garage bays
   for (let i = -1; i <= 1; i++) {
     const door = box(7, 6, .6, new M({ map: garageDoorTexture(), color: '#d7dde0' }), i * 9, 0, d / 2 + .1);
@@ -726,7 +816,8 @@ function hospice(s) {
   const b = box(w, s.h, d, null);
   b.material = wallMats(facadeMaps({ base: '#e3d5b8', rows: 1, cols: 9, win: '#3a4a55', brickLines: false }), roofM);
   g.add(b);
-  winDressMesh(g, w, d, s.h, { rows: 1, cols: 9, faces: 'fb', trim: '#efe8da', transom: true });
+  winDressMesh(g, w, d, s.h, { rows: 1, cols: 9, faces: 'fb', trim: '#efe8da',
+    transom: true, reveal: true });
   const r = gableRoof(w, 5.5, d, roofM); r.position.y = s.h; g.add(r);
   // porch
   g.add(box(w * .7, .5, 5, mat('#a58a68'), 0, .4, d / 2 + 2.5));
@@ -748,7 +839,8 @@ function civicb(s, signTxt) {
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: true, downspouts: false });
   winDressMesh(g, w, d, s.h, { rows: Math.max(2, Math.round(s.h / 3.6)),
     cols: Math.round(w / 6.5), faces: 'fbs', trim: '#ddd6c0',
-    transom: true, spandrel: true, fins: true });
+    transom: true, spandrel: true, fins: true, reveal: true,
+    quoins: { color: '#ddd6c0' } });
   // entry steps + columns
   for (let i = -1; i <= 1; i++) {
     g.add(cyl(.5, .55, 5, mat('#d9d2c0'), i * 4, 0, d / 2 + 1.8));
@@ -794,7 +886,8 @@ function storefront(s, style = {}) {
   parapet(g, w, d, s.h, R() < .4 ? { style: 'pediment' } : {});
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: R() < .45 });
   winDressMesh(g, w, d, s.h, { rows: 1, cols: 4, storefront: true, faces: 'fbs',
-    trim: '#ddd6c8', transom: true });
+    trim: '#ddd6c8', transom: true, reveal: true,
+    quoins: true, blade: { color: s.signBg || '#b8433a' } });
   storefrontKitMesh(g, w, d, s.h, { cols: 4, faces: 'fbs' });
   if (s.h > 8.5 && R() < .7) fireEscapeMesh(g, w, d, s.h, { side: R() < .5 ? -1 : 1 });
   awning(g, w * .85, 0, 4.4, d / 2 + 1.1, st.awn || '#3f5e78', true, true);
@@ -818,7 +911,7 @@ function bigbox(s, brand) {
   clutter(g, w, d, s.h, { solar: true });
   facadeDress(g, w, d, s.h, { pilasters: true, courses: false });
   winDressMesh(g, w, d, s.h, { rows: 1, cols: 10, storefront: true, faces: 'fbs',
-    transom: true, fins: true });
+    transom: true, fins: true, reveal: true });
   storefrontKitMesh(g, w, d, s.h, { cols: 10, faces: 'fbs' });
   if (isTarget) {
     g.add(box(w, 2.6, .8, mat('#cc0000'), 0, s.h - 4, d / 2 + .2));
@@ -863,7 +956,7 @@ function mall(s) {
   clutter(g, w, d, s.h, { solar: true, skylights: false });
   facadeDress(g, w, d, s.h, { pilasters: false });
   winDressMesh(g, w, d, s.h, { rows: 2, cols: 14, storefront: true, faces: 'fbs',
-    transom: true, fins: true });
+    transom: true, fins: true, reveal: true });
   storefrontKitMesh(g, w, d, s.h, { cols: 14, faces: 'fbs' });
   // clerestory spine on roof
   g.add(box(w * .6, 3, 8, mat('#8a8070'), 0, s.h, 0));
@@ -970,7 +1063,8 @@ function fastfood(s) {
   g.add(b);
   parapet(g, w, d, s.h, { color: '#8a4b2d' });
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: false });
-  winDressMesh(g, w, d, s.h, { rows: 1, cols: 4, storefront: true, faces: 'fbs', transom: true });
+  winDressMesh(g, w, d, s.h, { rows: 1, cols: 4, storefront: true, faces: 'fbs',
+    transom: true, reveal: true, blade: { color: '#c0392b' } });
   storefrontKitMesh(g, w, d, s.h, { cols: 4, faces: 'fbs' });
   awning(g, w * .9, 0, 4.2, d / 2 + 1, '#c0392b', true, true);
   // drive-thru canopy on side + menu board
@@ -999,9 +1093,10 @@ function apartment(s) {
   hvac(g, w, d, s.h, 2);
   clutter(g, w, d, s.h, { solar: true, tank: true });
   // balconies with railings — vertex-colored so they merge globally
-  const parts = [];
+  const parts = [], gp = [];
   winDress(parts, w, d, s.h, { rows: Math.round(s.h / 3.2), cols: Math.round(w / 5.5),
-    faces: 'fbs', transom: true, spandrel: true, fins: true });
+    faces: 'fbs', transom: true, spandrel: true, fins: true, reveal: true }, gp);
+  quoins(parts, w, d, s.h, { color: '#d8cdbb' });
   fireEscape(parts, w, d, s.h, { side: s.x > 0 ? -1 : 1 });
   const cols = Math.round(w / 8);
   for (let i = 0; i < cols; i++) for (let r = 0; r < Math.round(s.h / 3.2); r++) {
@@ -1019,8 +1114,10 @@ function apartment(s) {
     rail.castShadow = rail.receiveShadow = true;
     g.add(rail);
   }
+  glassMesh(g, gp);
   // recessed lobby + canopy + mailboxes
-  door(g, 6, 4.6, 0, d / 2 + .2, 0, '#2c3a42', { recess: true });
+  door(g, 6, 4.6, 0, d / 2 + .2, 0, '#2c3a42', { recess: true, portico: true,
+    porticoC: '#8a939a' });
   g.add(box(8, .4, 3, mat('#5d6d7e'), 0, 4.8, d / 2 + 1.4));
   g.add(cyl(.16, .16, 4.8, mat('#4a5154'), -3.4, 0, d / 2 + 2.6));
   g.add(cyl(.16, .16, 4.8, mat('#4a5154'), 3.4, 0, d / 2 + 2.6));
@@ -1044,7 +1141,7 @@ function tower(s) {
   clutter(g, w, d, podH, { skylights: false });
   facadeDress(g, w, d, podH, { pilasters: true });
   winDressMesh(g, w, d, podH, { rows: 1, cols: Math.round(w / 7), storefront: true,
-    faces: 'fbs', transom: true, fins: true });
+    faces: 'fbs', transom: true, fins: true, reveal: true });
   storefrontKitMesh(g, w, d, podH, { cols: Math.round(w / 7), faces: 'fbs' });
   // shaft(s) — setback tiers
   let y = podH, ww = w * .82, dd = d * .82, cx = 0, cz = -d * .05;
@@ -1352,7 +1449,7 @@ function skyscraper(s) {
   clutter(g, w, d, podH, { skylights: false });
   facadeDress(g, w, d, podH, { pilasters: true });
   winDressMesh(g, w, d, podH, { rows: 2, cols: Math.round(w / 6), storefront: true,
-    faces: 'fbs', transom: true, fins: true });
+    faces: 'fbs', transom: true, fins: true, reveal: true });
   storefrontKitMesh(g, w, d, podH, { cols: Math.round(w / 6), faces: 'fbs' });
   // shaft — 3 setback tiers of glass curtain wall
   let y = podH, ww = w * .88, dd = d * .88;
@@ -1444,11 +1541,12 @@ function townhouse(s = {}) {
   // cornice + low parapet + roof hatch
   g.add(box(w + .5, .7, d + .5, mat('#e8e0d0'), 0, h, 0));
   g.add(box(w + .2, .7, d + .2, mat('#cfc4b0'), 0, h + .55, 0));
-  const parts = [], glass = [];
+  const parts = [], glass = [], fglass = [];
   // lintels/sills on the street face + downspout at the front corner
   // (side walls are shared — nothing protrudes on ±x)
   winDress(parts, w, d, h, { rows: Math.max(2, Math.round(h / 3.1)), cols: 3,
-    faces: 'f', trim: '#e8e0d0', transom: true });
+    faces: 'f', trim: '#e8e0d0', transom: true, reveal: true }, fglass);
+  quoins(parts, w, d, h, { color: '#e8e0d0', faces: 'f' });
   parts.push({ geo: new THREE.BoxGeometry(.14, h, .16), color: '#6d7276', x: w / 2 - .4, y: h / 2, z: d / 2 + .08 });
   parts.push({ geo: new THREE.BoxGeometry(w * .7, .5, d * .7), color: '#4d5154', x: 0, y: h + 1.15, z: 0 });
   parts.push({ geo: new THREE.BoxGeometry(1.6, 1.4, 1.8), color: '#5d6165', x: w * .2, y: h + 2, z: -d * .15 });
@@ -1471,6 +1569,7 @@ function townhouse(s = {}) {
   const tm = new THREE.Mesh(colored(parts), VCOL());
   tm.castShadow = tm.receiveShadow = true; g.add(tm);
   if (glass.length) g.add(new THREE.Mesh(colored(glass), GLASSM));
+  glassMesh(g, fglass);
   door(g, 1.7, 2.5, sx, d / 2 + .75, 0, pick(['#3a2e28', '#54382a', '#2e3e50', '#443726']), { recess: true });
   return g;
 }
