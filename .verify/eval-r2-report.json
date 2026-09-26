@@ -1,0 +1,183 @@
+[
+ {
+  "name": "blocker-day",
+  "ready": false,
+  "calls": 244,
+  "ao": "cached",
+  "atmo": {
+   "enabled": true,
+   "noatmo": false,
+   "nofog": false,
+   "fog": {
+    "type": "exp2+height+aerial",
+    "hazeH": 95,
+    "hazeK": 0.00045,
+    "hazeW": 0.2,
+    "airLo": 300,
+    "airHi": 1500,
+    "desat": 0.22
+   },
+   "fogDensity": 0.00017,
+   "clouds": {
+    "sprites": 18,
+    "variants": 4
+   },
+   "grade": "day",
+   "lampPools": 0,
+   "lampHalos": 0
+  },
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 39,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "aerial-day",
+  "ready": false,
+  "calls": 2130,
+  "ao": "rebuild",
+  "atmo": {
+   "enabled": true,
+   "noatmo": false,
+   "nofog": false,
+   "fog": {
+    "type": "exp2+height+aerial",
+    "hazeH": 95,
+    "hazeK": 0.00045,
+    "hazeW": 0.2,
+    "airLo": 300,
+    "airHi": 1500,
+    "desat": 0.22
+   },
+   "fogDensity": 0.00017,
+   "clouds": {
+    "sprites": 18,
+    "variants": 4
+   },
+   "grade": "day",
+   "lampPools": 0,
+   "lampHalos": 0
+  },
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 33,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "blocker-golden",
+  "ready": false,
+  "atmo": null,
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 36,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "blocker-dusk",
+  "ready": true,
+  "atmo": null,
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 21,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "dusk-main",
+  "ready": false,
+  "ao": null,
+  "atmo": null,
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "aerial-noatmo",
+  "ready": false,
+  "calls": 569,
+  "ao": "cached",
+  "atmo": {
+   "enabled": false,
+   "noatmo": true,
+   "nofog": false,
+   "fog": {
+    "type": "exp2-stock"
+   },
+   "fogDensity": 0.00017,
+   "clouds": null,
+   "grade": "day",
+   "lampPools": 0,
+   "lampHalos": 0
+  },
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 36,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "aerial-nofog",
+  "ready": false,
+  "calls": 1002,
+  "ao": "cached",
+  "atmo": {
+   "enabled": true,
+   "noatmo": false,
+   "nofog": true,
+   "fog": {
+    "type": "exp2-stock"
+   },
+   "fogDensity": 0.00017,
+   "clouds": {
+    "sprites": 18,
+    "variants": 4
+   },
+   "grade": "day",
+   "lampPools": 0,
+   "lampHalos": 0
+  },
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 39,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "downtown-day",
+  "ready": false,
+  "calls": 371,
+  "ao": "cached",
+  "atmo": {
+   "enabled": true,
+   "noatmo": false,
+   "nofog": false,
+   "fog": {
+    "type": "exp2+height+aerial",
+    "hazeH": 95,
+    "hazeK": 0.00045,
+    "hazeW": 0.2,
+    "airLo": 300,
+    "airHi": 1500,
+    "desat": 0.22
+   },
+   "fogDensity": 0.00017,
+   "clouds": {
+    "sprites": 18,
+    "variants": 4
+   },
+   "grade": "day",
+   "lampPools": 0,
+   "lampHalos": 0
+  },
+  "grade": null,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null
+ }
+]

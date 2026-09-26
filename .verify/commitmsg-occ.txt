@@ -1,0 +1,21 @@
+fix(city): tag/kind occupancy + isFree skip — un-zero lamps, furniture, frontage hedges
+
+Evaluator confirmed lampIM.count===0 at runtime: the sprint-01 streetscape
+band pad (w/2+1+streetPad) covers every intentional band slot. Same defect
+silently zeroed sprint-02's furniture scatter and building-frontage hedges.
+
+occupyRect now carries tag (registering object) + kind ('road','bldg','lot',
+'water','green'); isFree(x,z,r,skip) exempts matching rects for that check.
+Lamps and sidewalk furniture skip only their own road's band (cross-road
+junction zones, buildings, lots, water, greens, features still veto);
+frontage hedges skip own building + the road band (downtown frontage sits
+on the walk band by design).
+
+Sim (.verify/sim-occ.mjs) + live probe: lamps 0->191 placed (pole+head IMs
+repopulate; atmo pools/halos auto-follow real matrices), furniture 457,
+hedges 74, planters 58, signals 10/10, shelters 6, signs 14. audit.mjs
+unchanged-clean (grandfathered Mercy Dr x ER bay only).
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>

@@ -1,0 +1,390 @@
+[
+ {
+  "name": "aerial-noao",
+  "ready": true,
+  "attempts": 1,
+  "calls": 572,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": {
+   "medianMs": 49.8,
+   "fps": 20.1,
+   "n": 83
+  },
+  "city": {
+   "roads": 18,
+   "curbRuns": 247,
+   "gutterRuns": 344,
+   "sidewalkRuns": 247,
+   "vergeRuns": 134,
+   "ramps": 230,
+   "tactilePads": 230,
+   "aprons": 97,
+   "markings": {
+    "dyellow": 620,
+    "dash": 2433,
+    "edge": 16,
+    "stopbar": 115,
+    "crosswalkBars": 690,
+    "arrows": 46,
+    "twltlArrows": 37
+   },
+   "drains": 354,
+   "manholes": 199,
+   "parcels": [
+    {
+     "id": "westwood-grove",
+     "use": "grove",
+     "w": 45,
+     "d": 152
+    },
+    {
+     "id": "scholar-pocket",
+     "use": "pocketpark",
+     "w": 167,
+     "d": 79
+    },
+    {
+     "id": "research-green",
+     "use": "pocketpark",
+     "w": 115,
+     "d": 65
+    },
+    {
+     "id": "tranquil-grove",
+     "use": "grove",
+     "w": 145,
+     "d": 58
+    },
+    {
+     "id": "northsenior",
+     "use": "meadow",
+     "w": 147,
+     "d": 84
+    },
+    {
+     "id": "heritage-garden",
+     "use": "garden",
+     "w": 145,
+     "d": 53
+    },
+    {
+     "id": "commons-orchard",
+     "use": "orchard",
+     "w": 103,
+     "d": 180
+    },
+    {
+     "id": "sunrise-meadow",
+     "use": "meadow",
+     "w": 450,
+     "d": 110
+    },
+    {
+     "id": "northwoods",
+     "use": "grove",
+     "w": 290,
+     "d": 50
+    }
+   ],
+   "greens": 9,
+   "props": {
+    "furniture": 464,
+    "signals": 10,
+    "shelters": 6,
+    "signs": 14
+   },
+   "veg": {
+    "hedges": 74,
+    "planters": 61
+   },
+   "trees": {
+    "archetypes": [
+     "o",
+     "m",
+     "b",
+     "c",
+     "p",
+     "s",
+     "e",
+     "u",
+     "w",
+     "d"
+    ],
+    "total": 1637,
+    "districts": [
+     "downtown",
+     "campus",
+     "senior",
+     "commercial",
+     "residential-w",
+     "grove",
+     "park"
+    ]
+   },
+   "traffic": {
+    "parked": 901,
+    "pedestrians": 204,
+    "idlers": 74,
+    "moving": 86,
+    "signals": [
+     {
+      "jxn": "Main St x University Ave",
+      "phase": "v-green",
+      "queued": 0
+     },
+     {
+      "jxn": "Main St x Scholar Ln",
+      "phase": "v-green",
+      "queued": 2
+     },
+     {
+      "jxn": "Elm St x Cedar Ave",
+      "phase": "v-green",
+      "queued": 0
+     },
+     {
+      "jxn": "Commerce Blvd x University Ave",
+      "phase": "v-green",
+      "queued": 1
+     },
+     {
+      "jxn": "Commerce Blvd x Cedar Ave",
+      "phase": "v-green",
+      "queued": 0
+     },
+     {
+      "jxn": "Midtown Ave x University Ave",
+      "phase": "v-green",
+      "queued": 0
+     },
+     {
+      "jxn": "Schoolhouse Rd x Cedar Ave",
+      "phase": "v-green",
+      "queued": 0
+     },
+     {
+      "jxn": "Commerce Blvd x Parkside Dr",
+      "phase": "v-green",
+      "queued": 0
+     },
+     {
+      "jxn": "Wellness Way x Parkside Dr",
+      "phase": "v-green",
+      "queued": 0
+     },
+     {
+      "jxn": "Wellness Way x University Ave",
+      "phase": "v-green",
+      "queued": 0
+     }
+    ]
+   },
+   "yards": {
+    "lots": 149,
+    "fenced": 149,
+    "sheds": 55,
+    "patios": 49,
+    "gardens": 40,
+    "playsets": 28,
+    "commons": 39,
+    "yardTrees": 77
+   }
+  }
+ },
+ {
+  "name": "street-noao",
+  "ready": true,
+  "attempts": 3,
+  "calls": 694,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "jxn-main-univ",
+  "ready": true,
+  "attempts": 3,
+  "calls": 324,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null,
+  "signalsT0": [
+   {
+    "jxn": "Main St x University Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Main St x Scholar Ln",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Elm St x Cedar Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Commerce Blvd x University Ave",
+    "phase": "h-green",
+    "queued": 1
+   },
+   {
+    "jxn": "Commerce Blvd x Cedar Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Midtown Ave x University Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Schoolhouse Rd x Cedar Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Commerce Blvd x Parkside Dr",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Wellness Way x Parkside Dr",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Wellness Way x University Ave",
+    "phase": "h-green",
+    "queued": 2
+   }
+  ],
+  "signalsT1": [
+   {
+    "jxn": "Main St x University Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Main St x Scholar Ln",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Elm St x Cedar Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Commerce Blvd x University Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Commerce Blvd x Cedar Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Midtown Ave x University Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Schoolhouse Rd x Cedar Ave",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Commerce Blvd x Parkside Dr",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Wellness Way x Parkside Dr",
+    "phase": "h-green",
+    "queued": 0
+   },
+   {
+    "jxn": "Wellness Way x University Ave",
+    "phase": "h-green",
+    "queued": 1
+   }
+  ]
+ },
+ {
+  "name": "jxn-elm-cedar",
+  "ready": true,
+  "attempts": 1,
+  "calls": 330,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "jxn-commerce-cedar",
+  "ready": true,
+  "attempts": 1,
+  "calls": 154,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "commerce-closeup",
+  "ready": true,
+  "attempts": 1,
+  "calls": 327,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "campus-elms",
+  "ready": true,
+  "attempts": 1,
+  "calls": 143,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null
+ },
+ {
+  "name": "dusk-main",
+  "ready": true,
+  "attempts": 1,
+  "calls": 352,
+  "appErrors": 0,
+  "envFlaps": 0,
+  "errors": [],
+  "fps": null,
+  "lampPools": 191
+ },
+ {
+  "name": "freeze-0",
+  "ready": true,
+  "attempts": 1,
+  "errors": []
+ },
+ {
+  "name": "freeze-1",
+  "ready": true,
+  "attempts": 1,
+  "errors": []
+ },
+ {
+  "name": "freeze-diff",
+  "w": 1600,
+  "h": 900,
+  "diffPx": 1556,
+  "pct": 0.108
+ }
+]
