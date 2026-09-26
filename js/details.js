@@ -3,7 +3,7 @@
 // repeated street furniture is instanced; traffic & pedestrians animate.
 import * as THREE from 'three';
 import { ROADS, LOTS, WATER, PARK_ZONE, BUILDINGS, APARTMENTS,
-         HOUSE_BLOCKS } from './layout.js';
+         HOUSE_BLOCKS, FILLER } from './layout.js';
 import { box, cyl, plane, mat, signTexture, fieldTexture, colored, VCOL,
          instances, waterMaterial, cloudSpriteTexture, uTime,
          R, rr, pick } from './lib.js';
@@ -23,6 +23,7 @@ const PAVE = pbr('precast_stone_paving'); PAVE.color = new THREE.Color('#a8a499'
 const GRVL = pbr('gravel');
 
 const M = THREE.MeshStandardMaterial;
+const FREEZE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('freeze');
 const Y = 0.28; // surface lift â€” must clear depth-buffer epsilon at aerial range
 
 /* ---------------- roads â†’ city/streetscape.js ---------------- */
@@ -85,48 +86,65 @@ let _soilM = null;
 function soilMat() { return _soilM ||= mat('#5a4632', { roughness: 1 }); }
 
 /* ---------------- trees (instanced) ---------------- */
+/* district palettes - corridors/districts read differently by canopy */
+const DISTRICT_TREES = [
+  { name: 'downtown',      x0: -170, x1: 340,  z0: -350, z1: -40,  mix: [['u', .55], ['d', .3], ['b', .15]] },
+  { name: 'campus',        x0: -800, x1: -330, z0: -720, z1: -400, mix: [['e', .5], ['o', .25], ['u', .25]] },
+  { name: 'senior',        x0: 340,  x1: 800,  z0: -700, z1: -200, mix: [['w', .35], ['d', .3], ['o', .2], ['s', .15]] },
+  { name: 'commercial',    x0: -140, x1: 345,  z0: 430,  z1: 710,  mix: [['u', .4], ['b', .3], ['d', .3]] },
+  { name: 'residential-w', x0: -800, x1: -160, z0: 40,   z1: 430,  mix: [['o', .4], ['m', .25], ['e', .25], ['w', .1]] },
+  { name: 'grove',         x0: -130, x1: 310,  z0: -30,  z1: 310,  mix: [['o', .35], ['e', .3], ['m', .2], ['d', .15]] },
+  { name: 'park',          x0: 340,  x1: 800,  z0: -60,  z1: 310,  mix: [['o', .4], ['s', .2], ['w', .2], ['e', .2]] },
+];
+const districtOf = (x, z) => DISTRICT_TREES.find(d => x >= d.x0 && x <= d.x1 && z >= d.z0 && z <= d.z1) || null;
+const pickFrom = mix => { let r = R(); if (Array.isArray(mix[0])) { for (const [k, w] of mix) { if ((r -= w) <= 0) return k; } return mix[0][0]; } for (let i = 1; i < mix.length; i += 2) { if ((r -= mix[i]) <= 0) return mix[i - 1]; } return mix[0]; };
+const speciesFor = (x, z, fallback) => { const d = districtOf(x, z); return d ? pickFrom(d.mix) : fallback; };
+
 export function buildTrees(scene) {
   const spots = [];
-  // species keys: o oak Â· m maple (autumn) Â· b birch Â· c spruce Â· p pine Â· s sakura
+  // species keys: o oak | m maple | b birch | c spruce | p pine | s sakura
+  //               e elm | u poplar | w willow | d dogwood
   for (const r of ROADS) {
     const step = r.arterial ? 26 : 34;
     const treeline = streetBand(r) + 1.4;   // just outside the sidewalk band
+    // road takes its signature mix from the district it runs through
+    const roadMix = districtOf(r.axis === 'v' ? r.c : (r.a0 + r.a1) / 2,
+                             r.axis === 'v' ? (r.a0 + r.a1) / 2 : r.c);
     for (let a = r.a0 + 8; a < r.a1 - 8; a += step) for (const s of [-1, 1]) {
       const off = treeline * s;
       const x = r.axis === 'v' ? r.c + off : a;
       const z = r.axis === 'v' ? a : r.c + off;
-      // street mix: mostly oak, maple accents, birch on the commercial stretch
-      const t = R() < .58 ? 'o' : R() < .7 ? 'm' : 'b';
+      const t = roadMix ? pickFrom(roadMix.mix) : (R() < .58 ? 'o' : R() < .7 ? 'm' : 'b');
       if (isFree(x, z, 1) && R() < .8) spots.push({ x, z, s: rr(.8, 1.15), t });
     }
   }
   for (let i = 0; i < 340; i++) {
     const x = rr(PARK_ZONE.x0 + 8, PARK_ZONE.x1 - 8), z = rr(PARK_ZONE.z0 + 8, PARK_ZONE.z1 - 8);
-    // park: oaks + sakura groves + a few pines
-    const t = R() < .6 ? 'o' : R() < .55 ? 's' : 'p';
+    // park: oaks + sakura groves + willow/elm accents
+    const t = R() < .5 ? 'o' : R() < .5 ? 's' : R() < .5 ? 'w' : 'e';
     if (isFree(x, z, 3)) spots.push({ x, z, s: rr(.9, 1.8), t });
   }
   for (let i = 0; i < 220; i++) {
     const x = rr(-800, -700), z = rr(-720, 700);
-    // west greenbelt: conifer forest â€” pines & spruce
     if (isFree(x, z, 3)) spots.push({ x, z, s: rr(1.0, 1.9), t: R() < .6 ? 'p' : 'c' });
   }
   for (const b of HOUSE_BLOCKS) {
     const n = Math.floor((b.x1 - b.x0) * (b.z1 - b.z0) / 1400);
     for (let i = 0; i < n; i++) {
       const x = rr(b.x0 + 6, b.x1 - 6), z = rr(b.z0 + 6, b.z1 - 6);
-      const t = R() < .55 ? 'o' : R() < .6 ? 'm' : 'b';
+      const t = pickFrom([['o', .4], ['m', .25], ['e', .25], ['w', .1]]);
       if (isFree(x, z, 4)) spots.push({ x, z, s: rr(.8, 1.3), t });
     }
   }
   for (let i = 0; i < 140; i++) {
     const x = rr(-130, 335), z = rr(430, 705);
-    // commercial corridor: slim birches + maples
-    if (isFree(x, z, 3)) spots.push({ x, z, s: rr(.9, 1.5), t: R() < .55 ? 'b' : 'm' });
+    // commercial corridor: columnar poplars + ornamentals + birches
+    const t = R() < .4 ? 'u' : R() < .5 ? 'd' : 'b';
+    if (isFree(x, z, 3)) spots.push({ x, z, s: rr(.9, 1.5), t });
   }
   for (let i = 0; i < 380; i++) {
     const x = rr(-800, 800), z = rr(-740, 740);
-    const t = R() < .5 ? 'o' : R() < .5 ? 'm' : R() < .5 ? 'b' : 'p';
+    const t = speciesFor(x, z, R() < .5 ? 'o' : R() < .5 ? 'm' : R() < .5 ? 'b' : 'p');
     if (isFree(x, z, 3.5)) spots.push({ x, z, s: rr(.8, 1.4), t });
   }
   for (let i = 0; i < 260; i++) {
@@ -137,7 +155,9 @@ export function buildTrees(scene) {
 
   const oak = spots.filter(s => s.t === 'o'), con = spots.filter(s => s.t === 'c'),
         maple = spots.filter(s => s.t === 'm'), birch = spots.filter(s => s.t === 'b'),
-        pine = spots.filter(s => s.t === 'p'), sakura = spots.filter(s => s.t === 's');
+        pine = spots.filter(s => s.t === 'p'), sakura = spots.filter(s => s.t === 's'),
+        elm = spots.filter(s => s.t === 'e'), poplar = spots.filter(s => s.t === 'u'),
+        willow = spots.filter(s => s.t === 'w'), dogwood = spots.filter(s => s.t === 'd');
   // tapered, slightly irregular trunk
   const trunkG = new THREE.CylinderGeometry(.26, .5, 4.6, 6);
   trunkG.translate(0, 2.3, 0);
@@ -201,6 +221,53 @@ export function buildTrees(scene) {
   mk(folG, folM, sakura, 4.6, true, 0, .93, .42, .58, .95);
   mk(folG2, folM, sakura, 5.8, true, 1.8, .95, .38, .62, .9);
   mk(folG2, folM, sakura, 4.0, true, 2.4, .91, .45, .55, .9);
+  // elm - vase silhouette: lobes ringed around a high crown
+  const elmCrown = mergeGeometries([
+    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(1.6, 5.6, 0),
+    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(-1.6, 5.6, 0),
+    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(0, 5.6, 1.6),
+    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .72, 1).translate(0, 5.6, -1.6),
+    new THREE.IcosahedronGeometry(1.8, 0).scale(1, .8, 1).translate(0, 7.0, 0),
+  ], false);
+  mk(trunkG2, trunkM2, elm, 0, false);
+  mk(elmCrown, folM, elm, 0, true, 0, .30, .4, .22);
+  // columnar poplar - tight vertical crown stack (downtown/commercial street tree)
+  const popCrown = mergeGeometries([
+    new THREE.IcosahedronGeometry(1.35, 0).scale(1, 1.15, 1).translate(0, 4.4, 0),
+    new THREE.IcosahedronGeometry(1.7, 0).scale(1, 1.3, 1).translate(0, 6.0, 0),
+    new THREE.IcosahedronGeometry(1.15, 0).scale(1, 1.2, 1).translate(0, 7.7, 0),
+  ], false);
+  mk(trunkG2, trunkM2, poplar, 0, false);
+  mk(popCrown, folM, poplar, 0, true, 0, .29, .38, .24);
+  // weeping willow - broad flat crown + drooping skirt lobes
+  const wilCrown = mergeGeometries([
+    new THREE.IcosahedronGeometry(2.6, 1).scale(1, .55, 1).translate(0, 4.7, 0),
+    new THREE.IcosahedronGeometry(1.05, 0).translate(2.1, 3.4, 0),
+    new THREE.IcosahedronGeometry(1.05, 0).translate(-2.1, 3.4, 0),
+    new THREE.IcosahedronGeometry(1.05, 0).translate(0, 3.4, 2.1),
+    new THREE.IcosahedronGeometry(1.05, 0).translate(0, 3.4, -2.1),
+    new THREE.IcosahedronGeometry(1.05, 0).translate(1.5, 3.2, 1.5),
+    new THREE.IcosahedronGeometry(1.05, 0).translate(-1.5, 3.2, -1.5),
+  ], false);
+  mk(trunkG, trunkM, willow, 0, false);
+  mk(wilCrown, folM, willow, 0, true, 0, .24, .45, .2);
+  // dogwood - low ornamental crown + offset blossom puff
+  const dogCrown = mergeGeometries([
+    new THREE.IcosahedronGeometry(1.5, 0).scale(1, .8, 1).translate(0, 3.4, 0),
+    new THREE.IcosahedronGeometry(1.0, 0).scale(1, .7, 1).translate(.9, 4.2, .4),
+  ], false);
+  mk(trunkG2, trunkM2, dogwood, 0, false);
+  mk(dogCrown, folM, dogwood, 0, true, 0, .33, .42, .3);
+
+  if (window.__city) {
+    window.__city.trees = {
+      archetypes: [oak, maple, birch, con, pine, sakura, elm, poplar, willow, dogwood]
+        .filter(l => l.length).map(l => l[0].t),
+      total: spots.length,
+      districts: DISTRICT_TREES.map(d => d.name),
+    };
+  }
+
 
   /* bushes & hedges â€” instanced squashed blobs along facades & park edges */
   const bushes = [];
@@ -316,10 +383,30 @@ export function buildCars(scene) {
       if (R() > .45) parked.push({ x: px, z: l.z + l.d / 2 - 3.2, ry: Math.PI / 2, color: pick(CAR_COLORS) });
     }
   }
-  // parallel parked along Main St & Commerce Blvd curbs
-  for (const [c, a0, a1, w] of [[-40, -120, 300, 16], [320, -300, 700, 20]]) {
+  // parallel parked curbs — {c: road centreline, axis, along-range, w}
+  const CURB_PARK = [
+    { c: -40, a0: -120, a1: 300, w: 16, axis: 'h' },   // Main St
+    { c: 320, a0: -300, a1: 700, w: 20, axis: 'h' },   // Commerce Blvd
+    { c: 140, a0: -780, a1: -160, w: 10, axis: 'h' },  // Elm St
+    { c: 425, a0: -780, a1: -160, w: 11, axis: 'h' },  // Schoolhouse Rd
+    { c: -180, a0: -700, a1: -160, w: 10, axis: 'h' }, // Midtown Ave
+    { c: -640, a0: -700, a1: -160, w: 11, axis: 'h' }, // Campus Dr
+    { c: 150, a0: -140, a1: 320, w: 10, axis: 'h' },   // Juniper Ave
+    { c: -460, a0: 320, a1: 780, w: 10, axis: 'h' },   // Sunset Ridge Rd
+    { c: -240, a0: 320, a1: 780, w: 10, axis: 'h' },   // Meadowlark Ln
+    { c: -640, a0: -40, a1: 400, w: 10, axis: 'v' },   // Cedar Ave
+    { c: -420, a0: -40, a1: 400, w: 10, axis: 'v' },   // Maple St
+    { c: -440, a0: -360, a1: -50, w: 10, axis: 'v' },  // Scholar Ln
+    { c: 560, a0: -700, a1: -360, w: 11, axis: 'v' },  // Silver Oak Dr
+    { c: 80, a0: -30, a1: 320, w: 10, axis: 'v' },     // Grove St
+  ];
+  for (const { c, a0, a1, w, axis } of CURB_PARK) {
     for (let a = a0; a < a1; a += rr(9, 16)) for (const s of [-1, 1]) {
-      if (R() < .45) parked.push({ x: a, z: c + s * (w / 2 - 1.9), ry: Math.PI / 2, color: pick(CAR_COLORS) });
+      if (R() < .45) {
+        parked.push(axis === 'h'
+          ? { x: a, z: c + s * (w / 2 - 1.9), ry: 0, color: pick(CAR_COLORS) }
+          : { x: c + s * (w / 2 - 1.9), z: a, ry: Math.PI / 2, color: pick(CAR_COLORS) });
+      }
     }
   }
   const pBody = instances(body, bodyM, parked);
@@ -347,6 +434,9 @@ export function buildCars(scene) {
     bm.position.set(bx, 0, 452); bm.rotation.y = Math.PI / 2; bm.castShadow = true;
     scene.add(bm);
   }
+  if (window.__city) window.__city.traffic = {
+    ...(window.__city.traffic || {}), parked: parked.length,
+  };
 }
 
 /* ---- moving traffic on a road graph ---- */
@@ -393,6 +483,30 @@ export function buildTraffic(scene) {
       });
     }
   }
+  // signalized nodes for traffic causality (same junction list as the bulbs)
+  const skey = (x, z) => Math.round(x / 4) + ',' + Math.round(z / 4);
+  const sigNodes = new Map();
+  {
+    const allIx = intersections();
+    const WANT_SIG2 = [
+      ['Main St', 'University Ave'], ['Main St', 'Scholar Ln'],
+      ['Elm St', 'Cedar Ave'], ['Commerce Blvd', 'University Ave'],
+      ['Commerce Blvd', 'Cedar Ave'], ['Midtown Ave', 'University Ave'],
+      ['Schoolhouse Rd', 'Cedar Ave'], ['Commerce Blvd', 'Parkside Dr'],
+      ['Wellness Way', 'Parkside Dr'], ['Wellness Way', 'University Ave'],
+    ];
+    for (const [a, b] of WANT_SIG2) {
+      const i = allIx.find(j => (j.vn === a && j.hn === b) || (j.vn === b && j.hn === a));
+      if (i) sigNodes.set(skey(i.x, i.z), { jxn: a + ' x ' + b, queued: 0 });
+    }
+  }
+  // cars grouped per edge+direction for cheap following logic
+  const lanes = new Map();
+  cars.forEach(c => {
+    const k = c.e;
+    if (!lanes.has(k)) lanes.set(k, { 1: [], '-1': [] });
+    lanes.get(k)[c.dir].push(c);
+  });
   const bodyIM = new THREE.InstancedMesh(body, new M({ color: '#fff', roughness: .35, metalness: .5 }), cars.length);
   const trimIM = new THREE.InstancedMesh(trim, VCOL(), cars.length);
   bodyIM.castShadow = trimIM.castShadow = true;
@@ -418,7 +532,7 @@ export function buildTraffic(scene) {
   cars.forEach(place);
   bodyIM.instanceMatrix.needsUpdate = trimIM.instanceMatrix.needsUpdate = true;
 
-  traffic = { cars, bodyIM, trimIM, place };
+  traffic = { cars, bodyIM, trimIM, place, sigNodes, lanes, skey };
 }
 function nextEdge(node, cur) {
   const opts = node.edges.filter(e => e !== cur);
@@ -606,6 +720,7 @@ export function buildPark(scene) {
         color: pick(['#d4526e', '#e8b13a', '#e8e6df', '#8e44ad', '#c0392b']) });
     }
   }
+
   const propMesh = new THREE.Mesh(colored(parts), VCOL());
   propMesh.castShadow = propMesh.receiveShadow = true;
   scene.add(propMesh);
@@ -763,13 +878,17 @@ export function buildPeople(scene) {
 
   // spots: static idlers + sidewalk walkers on the road graph
   const idlers = [
-    ...Array.from({ length: 10 }, () => [60 + rr(-30, 30), -205 + rr(-25, 25)]),
-    ...Array.from({ length: 12 }, () => [-480 + rr(-60, 60), -530 + rr(-40, 40)]),
-    ...Array.from({ length: 6 }, () => [rr(380, 700), rr(345, 430)]),
+    ...Array.from({ length: 14 }, () => [60 + rr(-35, 35), -205 + rr(-28, 28)]),
+    ...Array.from({ length: 14 }, () => [-480 + rr(-65, 65), -530 + rr(-45, 45)]),
+    ...Array.from({ length: 10 }, () => [rr(380, 700), rr(345, 430)]),
+    ...Array.from({ length: 10 }, () => [rr(-580, -420), rr(80, 280)]),
+    ...Array.from({ length: 8 }, () => [rr(360, 700), rr(-470, -380)]),
+    ...Array.from({ length: 10 }, () => [rr(-60, 300), rr(335, 425)]),
+    ...Array.from({ length: 8 }, () => [rr(-160, 320), rr(60, 240)]),
   ];
   const edges = roadGraph();
   const walkers = [];
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 130; i++) {
     const e = edges[Math.floor(R() * edges.length)];
     if (e.a1 - e.a0 < 30) { i--; continue; }
     walkers.push({ e, t: rr(0, 1), dir: pick([1, -1]), v: rr(1.1, 1.9), ph: rr(0, 6.28),
@@ -815,12 +934,26 @@ export function buildPeople(scene) {
   });
   scene.add(legLIM, legRIM, torsoIM, headIM);
   people = { walkers, legLIM, legRIM, torsoIM, headIM, n0: idlers.length };
+  if (window.__city) window.__city.traffic = {
+    ...(window.__city.traffic || {}), pedestrians: total, idlers: idlers.length,
+  };
 }
 
 /* ---------------- misc street props ---------------- */
 let signals = null;
 export function buildProps(scene) {
-  const ix = intersections().filter(i => i.wv >= 16 && i.wh >= 16);
+  const allIx = intersections();
+  const WANT_SIG = [
+    ['Main St', 'University Ave'], ['Main St', 'Scholar Ln'],
+    ['Elm St', 'Cedar Ave'], ['Commerce Blvd', 'University Ave'],
+    ['Commerce Blvd', 'Cedar Ave'], ['Midtown Ave', 'University Ave'],
+    ['Schoolhouse Rd', 'Cedar Ave'], ['Commerce Blvd', 'Parkside Dr'],
+    ['Wellness Way', 'Parkside Dr'], ['Wellness Way', 'University Ave'],
+  ];
+  const wanted = WANT_SIG.map(([a, b]) => allIx.find(i =>
+    (i.vn === a && i.hn === b) || (i.vn === b && i.hn === a))).filter(Boolean);
+  const ix = wanted.length >= 8 ? wanted
+    : allIx.filter(i => i.wv >= 16 && i.wh >= 16).slice(0, 10);
   // traffic signal: merged pole+arm+head geometry (vertex colors), instanced;
   // bulbs are a separate InstancedMesh with a per-instance 'lit' attribute.
   const sigParts = [
@@ -834,7 +967,7 @@ export function buildProps(scene) {
   const sigGeo = colored(sigParts);
   const bulbGeo = new THREE.CircleGeometry(.13, 10); bulbGeo.rotateY(0); bulbGeo.translate(0, 0, .22);
   const sigT = [], bulbs = [];
-  for (const i of ix.slice(0, 10)) {
+  for (const i of ix) {
     for (const [cx, cz, ry] of [[-1, -1, 0], [1, 1, Math.PI]]) {
       const x = i.x + cx * (i.wv / 2 + 1.8), z = i.z + cz * (i.wh / 2 + 1.8);
       sigT.push({ x, z, ry: ry + Math.PI / 4 });
@@ -902,8 +1035,9 @@ export function buildProps(scene) {
   // blue mailboxes near post office & downtown
   for (const [x, z] of [[148, -298], [30, -300], [-95, -70]])
     parts.push({ geo: new THREE.BoxGeometry(.7, 1, .6), color: '#2e5b8a', x, y: .55, z });
-  // bus stop shelters (2)
-  for (const [x, z, ry] of [[-140, -345, 0], [310, 305, Math.PI]]) {
+  // bus stop shelters on Commerce Blvd & University Ave
+  for (const [x, z, ry] of [[-140, -345, 0], [310, 305, Math.PI],
+      [-128.4, -260, 0], [-151.6, 60, Math.PI], [-300, 307.4, Math.PI], [100, 332.6, 0]]) {
     parts.push({ geo: new THREE.BoxGeometry(.15, 2.6, .15), color: '#3d4145', x: x - 2, y: 1.3, z });
     parts.push({ geo: new THREE.BoxGeometry(.15, 2.6, .15), color: '#3d4145', x: x + 2, y: 1.3, z });
     parts.push({ geo: new THREE.BoxGeometry(4.6, .12, 1.6), color: '#3d4145', x, y: 2.7, z });
@@ -938,6 +1072,111 @@ export function buildProps(scene) {
     }
     prev = z;
   }
+  /* ---- sprint-02: sidewalk furniture scatter ----
+     cycle: bench | hydrant | bin | planter | bin | bench | newsbox | bollards
+     all on the walk band, occupancy-checked, never on crossing/ramp landings */
+  const allJ = intersections();
+  const nearJxn = (x, z) => allJ.some(j =>
+    Math.abs(x - j.x) < j.wv / 2 + 10 && Math.abs(z - j.z) < j.wh / 2 + 10);
+  let nFurn = 0, nPlanters = 0, nHedges = 0;
+  const SHRUB = new THREE.IcosahedronGeometry(.55, 0);
+  const addFurn = (x, z, ry, kind) => {
+    nFurn++;
+    if (kind === 0 || kind === 5) {           // bench facing street
+      const bx = new THREE.BoxGeometry(1.8, .09, .5).rotateY(ry);
+      const bk = new THREE.BoxGeometry(1.8, .5, .09).rotateY(ry);
+      const off = .28;
+      parts.push({ geo: bx, color: '#7a5a3a', x, y: .55, z });
+      parts.push({ geo: bk, color: '#7a5a3a', x: x + Math.sin(ry) * off, y: .95, z: z + Math.cos(ry) * off });
+      parts.push({ geo: new THREE.BoxGeometry(.09, .5, .45).rotateY(ry), color: '#3d4145', x: x - .7 * Math.cos(ry), y: .3, z: z + .7 * Math.sin(ry) });
+      parts.push({ geo: new THREE.BoxGeometry(.09, .5, .45).rotateY(ry), color: '#3d4145', x: x + .7 * Math.cos(ry), y: .3, z: z - .7 * Math.sin(ry) });
+    } else if (kind === 1) {                  // hydrant
+      parts.push({ geo: new THREE.CylinderGeometry(.2, .24, .85, 8), color: '#c0392b', x, y: .42, z });
+      parts.push({ geo: new THREE.CylinderGeometry(.09, .09, .28, 8), color: '#c0392b', x, y: .96, z });
+      parts.push({ geo: new THREE.SphereGeometry(.11, 8, 6), color: '#e8b13a', x, y: 1.12, z });
+    } else if (kind === 2 || kind === 4) {    // litter bin
+      parts.push({ geo: new THREE.CylinderGeometry(.38, .32, .95, 10), color: '#3d4a42', x, y: .47, z });
+      parts.push({ geo: new THREE.CylinderGeometry(.4, .4, .07, 10), color: '#2c3531', x, y: .98, z });
+    } else if (kind === 3) {                  // sidewalk planter + shrub
+      nPlanters++;
+      parts.push({ geo: new THREE.BoxGeometry(1.3, .75, 1.3), color: '#6e5138', x, y: .37, z });
+      parts.push({ geo: new THREE.BoxGeometry(1.1, .08, 1.1), color: '#4a3527', x, y: .72, z });
+      parts.push({ geo: SHRUB, color: '#4e6b3e', x, y: 1.15, z });
+    } else if (kind === 6) {                  // newspaper box
+      parts.push({ geo: new THREE.BoxGeometry(.55, 1.0, .5), color: '#8a2f2f', x, y: .55, z });
+      parts.push({ geo: new THREE.BoxGeometry(.5, .12, .45), color: '#e8e6df', x, y: 1.12, z });
+    } else {                                  // bollard trio at walk edge
+      for (const d of [-1.2, 0, 1.2])
+        parts.push({ geo: new THREE.CylinderGeometry(.09, .11, .95, 8), color: '#4a4f52',
+          x: x + Math.cos(ry) * d, y: .48, z: z - Math.sin(ry) * d });
+    }
+  };
+  for (const r of ROADS) {
+    const step = r.arterial ? 30 : 38;
+    const walkOff = r.w / 2 + (r.arterial ? 2.5 : 2.1);   // inside sidewalk, off curb face
+    let k = 0;
+    for (let a = r.a0 + 20; a < r.a1 - 20; a += step + rr(-4, 4)) {
+      for (const s of [-1, 1]) {
+        const x = r.axis === 'v' ? r.c + walkOff * s : a;
+        const z = r.axis === 'v' ? a : r.c + walkOff * s;
+        if (nearJxn(x, z) || !isFree(x, z, .9) || R() > .62) continue;
+        const ry = r.axis === 'v' ? (s > 0 ? Math.PI / 2 : -Math.PI / 2) : (s > 0 ? 0 : Math.PI);
+        addFurn(x, z, ry, k++ % 8);
+      }
+    }
+  }
+
+  /* ---- storefront blade signs + awning bands on signable FILLER ---- */
+  const SIGN_TEXT = ['CAFE', 'SHOP', 'MARKET', 'BOOKS', 'BAKERY', 'CLINIC',
+                     'DINER', 'PHARMACY', 'BARBER', 'DELI', 'FLORIST', 'MART'];
+  let nSigns = 0;
+  FILLER.filter(f => f.type === 'storefront' || f.type === 'medoffice' || f.type === 'gas')
+    .slice(0, 14).forEach((f, fi) => {
+      const rot = f.rot || 0;
+      const fx = Math.sin(rot), fz = Math.cos(rot);            // facade normal
+      const rx = Math.cos(rot), rz = -Math.sin(rot);           // along-facade right
+      // awning band over the entrance
+      parts.push({ geo: new THREE.BoxGeometry(f.w * .7, .35, 1.3).rotateY(rot),
+        color: pick(['#33526b', '#7a3030', '#3e5a34', '#6e5138']),
+        x: f.x + fx * (f.d / 2 + .65), y: 3.15, z: f.z + fz * (f.d / 2 + .65) });
+      // blade sign at the front corner, plane parallel to street direction
+      const sx = f.x + rx * (f.w / 2 - 1.2) + fx * (f.d / 2 + .7);
+      const sz = f.z + rz * (f.w / 2 - 1.2) + fz * (f.d / 2 + .7);
+      const sign = new THREE.Mesh(
+        new THREE.BoxGeometry(1.7, .95, .1),
+        new M({ map: signTexture(SIGN_TEXT[fi % SIGN_TEXT.length], { bg: '#2f3d4a', fg: '#e8e6df' }) }));
+      sign.position.set(sx, 4.4, sz); sign.rotation.y = rot + Math.PI / 2;
+      sign.castShadow = true; scene.add(sign);
+      nSigns++;
+    });
+
+  /* ---- hedges along building frontages ---- */
+  for (const b of BUILDINGS) {
+    if (!b.w || b.type === 'zone' || b.type === 'parkzone') continue;
+    const hl = Math.min(9, b.w * .22);
+    const hz = b.z + b.d / 2 + .9;
+    if (!isFree(b.x, hz, 1.5)) continue;
+    for (const sx of [-1, 1]) {
+      nHedges++;
+      parts.push({ geo: new THREE.BoxGeometry(hl, .85, .8), color: '#3e5a34',
+        x: b.x + sx * (b.w / 2 - hl / 2 - .5), y: .42, z: hz });
+    }
+  }
+  // hedge runs along townhouse rows too
+  for (const f of FILLER) {
+    if (f.type !== 'townhouse') continue;
+    nHedges++;
+    parts.push({ geo: new THREE.BoxGeometry(f.w * .55, .8, .7), color: '#46603a',
+      x: f.x, y: .4, z: f.z + f.d / 2 + .8 });
+  }
+
+  if (window.__city) {
+    window.__city.props = {
+      furniture: nFurn, signals: ix.length, shelters: 6, signs: nSigns,
+    };
+    window.__city.veg = { hedges: nHedges, planters: nPlanters };
+  }
+
   const propMesh = new THREE.Mesh(colored(parts), VCOL());
   propMesh.castShadow = propMesh.receiveShadow = true;
   scene.add(propMesh);
@@ -1183,15 +1422,46 @@ export function buildClouds(scene) {
 const _mx = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(),
       _s1 = new THREE.Vector3(1, 1, 1), _eul = new THREE.Euler();
 export function tickWorld(t, dt) {
-  uTime.value = t;
+  uTime.value = FREEZE ? 0 : t;
+  if (FREEZE) return;
   // traffic
   if (traffic) {
-    const { cars, bodyIM, trimIM, place } = traffic;
+    const { cars, bodyIM, trimIM, place, sigNodes, lanes, skey } = traffic;
+    const cyc = t % 19;
+    const vGo = cyc < 9.6, hGo = cyc >= 10.4 && cyc < 19;   // matches bulb windows
+    for (const s of sigNodes.values()) s.queued = 0;
+    // leader-following: regroup per edge each tick (cars change edges),
+    // sort by progress along direction, clamp follower speed at gap < 8m
+    const lane2 = new Map();
+    cars.forEach(c => {
+      let l = lane2.get(c.e); if (!l) lane2.set(c.e, l = []);
+      l.push(c);
+    });
+    for (const [e, lane] of lane2) {
+      if (lane.length < 2) continue;
+      const len = e.a1 - e.a0;
+      for (const d of [1, -1]) {
+        const dir = lane.filter(c => c.dir === d);
+        if (dir.length < 2) continue;
+        dir.sort((a, b) => (a.t - b.t) * d);
+        for (let k = 1; k < dir.length; k++) {
+          const lead = dir[k - 1], fol = dir[k];
+          if ((lead.t - fol.t) * len * d < 8) fol.capV = lead.capV ?? lead.v * .8;
+        }
+      }
+    }
     cars.forEach((c, i) => {
       const len = c.e.a1 - c.e.a0;
-      // ease off near intersections
       const dEnd = c.dir > 0 ? (1 - c.t) * len : c.t * len;
-      const v = c.v * (dEnd < 18 ? (.55 + .45 * dEnd / 18) : 1);
+      const node = c.dir > 0 ? c.e.n1 : c.e.n0;
+      const sig = sigNodes.get(skey(node.x, node.z));
+      let v = c.v * (dEnd < 18 ? (.55 + .45 * dEnd / 18) : 1);
+      // red phase for this approach: decelerate to a 9m stopline, queue
+      if (sig && dEnd < 20 && !(c.e.axis === 'v' ? vGo : hGo)) {
+        v = Math.min(v, Math.max(0, (dEnd - 9) * c.v / 11));
+        if (dEnd < 14 && v < .5) sig.queued++;
+      }
+      if (c.capV !== undefined) { v = Math.min(v, c.capV); if ((c.capT = (c.capT || 0) - dt) <= 0) delete c.capV; }
       c.t += c.dir * v * dt / len;
       if (c.t > 1 || c.t < 0) {
         const node = c.dir > 0 ? c.e.n1 : c.e.n0;
@@ -1206,6 +1476,13 @@ export function tickWorld(t, dt) {
     });
     bodyIM.instanceMatrix.needsUpdate = true;
     trimIM.instanceMatrix.needsUpdate = true;
+    if (window.__city) {
+      const phase = cyc < 9.6 ? 'v-green' : cyc < 10.4 ? 'all-red' : 'h-green';
+      window.__city.traffic = {
+        ...(window.__city.traffic || {}), moving: cars.length,
+        signals: [...sigNodes.values()].map(s => ({ jxn: s.jxn, phase, queued: s.queued })),
+      };
+    }
   }
   // pedestrians
   if (people) {
