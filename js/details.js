@@ -562,7 +562,9 @@ export function buildLights(scene) {
       const off = (r.w / 2 + 1.6) * s;
       const x = r.axis === 'v' ? r.c + off : a;
       const z = r.axis === 'v' ? a : r.c + off;
-      if (!isFree(x, z, 1)) continue;
+      // poles live on the streetscape band — exempt only this road's own rect
+      // (cross roads/junction quads and all other occupancy still veto)
+      if (!isFree(x, z, 1, r)) continue;
       // arm points toward road center
       const ry = r.axis === 'v' ? (s > 0 ? Math.PI : 0) : (s > 0 ? -Math.PI / 2 : Math.PI / 2);
       poles.push({ x, z, ry });
@@ -1119,7 +1121,7 @@ export function buildProps(scene) {
       for (const s of [-1, 1]) {
         const x = r.axis === 'v' ? r.c + walkOff * s : a;
         const z = r.axis === 'v' ? a : r.c + walkOff * s;
-        if (nearJxn(x, z) || !isFree(x, z, .9) || R() > .62) continue;
+        if (nearJxn(x, z) || !isFree(x, z, .9, r) || R() > .62) continue;
         const ry = r.axis === 'v' ? (s > 0 ? Math.PI / 2 : -Math.PI / 2) : (s > 0 ? 0 : Math.PI);
         addFurn(x, z, ry, k++ % 8);
       }
@@ -1155,7 +1157,10 @@ export function buildProps(scene) {
     if (!b.w || b.type === 'zone' || b.type === 'parkzone') continue;
     const hl = Math.min(9, b.w * .22);
     const hz = b.z + b.d / 2 + .9;
-    if (!isFree(b.x, hz, 1.5)) continue;
+    // frontage hedges sit inside the building's own pad (and may edge the
+    // streetscape band downtown) — exempt own rect + road band; lots/water/
+    // greens/features and neighbouring buildings still veto
+    if (!isFree(b.x, hz, 1.5, [b, 'road'])) continue;
     for (const sx of [-1, 1]) {
       nHedges++;
       parts.push({ geo: new THREE.BoxGeometry(hl, .85, .8), color: '#3e5a34',
