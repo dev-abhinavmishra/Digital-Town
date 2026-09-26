@@ -19,8 +19,10 @@ import { publishCity } from './city/stats.js';
 import { buildHero } from './city/hero.js';
 export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
-const ASPH = pbr('asphalt_02');          // tile via plane(..., tile)
-ASPH.color = new THREE.Color('#484c52'); ASPH.roughness = .97;
+// lot asphalt gets its own cache entry (color differs from streetscape's roads
+// so neither tint stomps the other's)
+const ASPH = pbr('asphalt_02', { color: '#5d6167' });  // tile via plane(..., tile)
+ASPH.roughness = .94;
 const PAVE = pbr('precast_stone_paving'); PAVE.color = new THREE.Color('#a8a499');
 const GRVL = pbr('gravel');
 

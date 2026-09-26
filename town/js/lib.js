@@ -779,11 +779,11 @@ export function waterMaterial({ color = '#2b4a58', deep = null, roughness = .12 
           diffuseColor.rgb = mix(diffuseColor.rgb, uDeep, fres * .7);          // depth tint at grazing angles
           vec3 sV = normalize((viewMatrix * vec4(uSunDir, 0.)).xyz);
           vec3 H = normalize(sV + Vv);
-          float spec = pow(max(dot(normal, H), 0.), 320.);
+          float spec = pow(max(dot(normal, H), 0.), 120.);
           vec2 toFrag = vWp.xz - cameraPosition.xz;
-          float az = max(dot(toFrag / max(length(toFrag), 1e-3), normalize(uSunDir.xz)), 0.);
-          float flick = .55 + .45 * sin(uT*6.5 + vWp.x*2.9 + vWp.z*2.3);
-          totalEmissiveRadiance += uSunCol * spec * az * az * flick * uGlint;  // sun streak toward sun azimuth
+          float az = pow(max(dot(toFrag / max(length(toFrag), 1e-3), normalize(uSunDir.xz)), 0.), 3.);
+          float flick = .72 + .28 * sin(uT*5.2 + vWp.x*2.9 + vWp.z*2.3);
+          totalEmissiveRadiance += uSunCol * spec * az * flick * uGlint;  // sun streak toward sun azimuth
         }`);
   };
   return m;
