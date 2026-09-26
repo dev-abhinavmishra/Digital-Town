@@ -1,0 +1,12 @@
+{
+  "stream": "CITY",
+  "agent": "a218bd74-54bb-4bf0-bd12-7b397150a314",
+  "sprint": "sprint-01",
+  "log": [
+    { "t": "2026-09-25", "ev": "checkpoint", "note": "baseline 6484b05 inherited; tree clean; tagged city-s01-checkpoint before any edits" },
+    { "t": "2026-09-25", "ev": "recon", "note": "baseline already has: flat-plane curbs+sidewalks, dbl-yellow/dash markings, crosswalks+stop bars, parapet(1m fixed)+hvac on flat roofs, occupancy model in details.js mirrored by audit.mjs. Sprint work: real curb/gutter geometry, marking kit v2, parapet/roofline variation, programmed green parcels." }
+  ],
+  "contractExchanges": 0,
+  "evalRounds": 0,
+  "restarts": 0
+}
