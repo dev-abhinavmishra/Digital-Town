@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { box, cyl, plane, gableRoof, hipRoof, mat, facadeMaps, glassFacadeMaps,
          sidingTexture, brickTexture, garageDoorTexture, awningTexture,
          signTexture, crossTexture, clockTexture, colored, VCOL, flagMaterial,
-         R, rr, pick } from './lib.js';
+         makeCanvas, canvasTex, R, rr, pick } from './lib.js';
 import { M_CONCRETE, M_ROOFGRAY, M_ROOFCLAY } from './mats.js';
 import { CITY, heroLeaf, heroCrown } from './city/stats.js';
 
@@ -24,9 +24,9 @@ function wallMat(maps) {
   const { map, bump, emis, rough, normal } = maps;
   const k = map.uuid + ':' + (bump ? bump.uuid : '') + ':' + (normal ? normal.uuid : '') + ':' + (rough ? rough.uuid : '');
   if (!wallCache.has(k)) {
-    const m = new M({ map, bumpMap: bump || null, bumpScale: .05, roughness: .88 });
+    const m = new M({ map, bumpMap: bump || null, bumpScale: .08, roughness: .88 });
     if (rough) { m.roughnessMap = rough; m.roughness = 1; }
-    if (normal) { m.normalMap = normal; m.normalScale = new THREE.Vector2(.65, .65); }
+    if (normal) { m.normalMap = normal; m.normalScale = new THREE.Vector2(.85, .85); }
     if (emis) {
       m.emissiveMap = emis;
       m.emissive = new THREE.Color('#ffd9a0');
@@ -100,6 +100,69 @@ function parapet(g, w, d, h, opts = {}) {
   return h + ph;
 }
 
+/* tar-gravel roof skin — speckle + membrane seams + blotch stains. One shared
+   set of canvases tints all flat-roof finishes without breaking the cache. */
+const _roofSkin = { map: null, bump: null, rough: null };
+function roofSkin() {
+  if (!_roofSkin.map) {
+    const [cm, xm] = makeCanvas(256, 256);
+    xm.fillStyle = '#f4f2ee'; xm.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 1600; i++) {                 // gravel speckle
+      const v = 120 + R() * 110;
+      xm.fillStyle = `rgba(${v},${v},${v * .94},${.12 + R() * .2})`;
+      xm.fillRect(R() * 256, R() * 256, 1 + R() * 2, 1 + R() * 2);
+    }
+    for (let i = 0; i < 12; i++) {                   // blotch stains
+      xm.fillStyle = `rgba(70,62,50,${.05 + R() * .1})`;
+      xm.fillRect(R() * 256, R() * 256, 24 + R() * 60, 18 + R() * 44);
+    }
+    xm.strokeStyle = 'rgba(0,0,0,.10)'; xm.lineWidth = 1;   // membrane seams
+    for (let s = 32; s < 256; s += 32) {
+      xm.beginPath(); xm.moveTo(0, s); xm.lineTo(256, s); xm.stroke();
+    }
+    const [cbk, xbk] = makeCanvas(256, 256);
+    xbk.fillStyle = '#808080'; xbk.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 1400; i++) {
+      const v = 96 + R() * 96;
+      xbk.fillStyle = `rgb(${v},${v},${v})`;
+      xbk.fillRect(R() * 256, R() * 256, 1 + R() * 2, 1 + R() * 2);
+    }
+    const [crq, xrq] = makeCanvas(128, 128);
+    xrq.fillStyle = '#e6e6e6'; xrq.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 10; i++) {                   // stained spots run glossier
+      xrq.fillStyle = `rgba(90,90,90,${.15 + R() * .2})`;
+      xrq.fillRect(R() * 128, R() * 128, 16 + R() * 30, 12 + R() * 24);
+    }
+    _roofSkin.map = canvasTex(cm);
+    _roofSkin.bump = canvasTex(cbk, { srgb: false });
+    _roofSkin.rough = canvasTex(crq, { srgb: false });
+  }
+  return _roofSkin;
+}
+
+/* bump + rough partners for the flat siding/brick wall textures — without
+   them house walls render as a single unlit color plane. */
+const _sidSkin = { bump: null, rough: null };
+function sidingSkin() {
+  if (!_sidSkin.bump) {
+    const [cb, xb] = makeCanvas(128, 128);
+    xb.fillStyle = '#808080'; xb.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 128; y += 10) {              // plank grooves + ridge
+      const j = 118 + Math.floor((R() - .5) * 30);
+      xb.fillStyle = `rgb(${j},${j},${j})`; xb.fillRect(0, y, 128, 8);
+      xb.fillStyle = '#383838'; xb.fillRect(0, y + 8, 128, 2);
+      xb.fillStyle = '#a8a8a8'; xb.fillRect(0, y, 128, 1);
+    }
+    const [cr, xr] = makeCanvas(64, 64);
+    xr.fillStyle = '#d2d2d2'; xr.fillRect(0, 0, 64, 64);
+    xr.fillStyle = '#b8b8b8';
+    for (let y = 4; y < 64; y += 5) xr.fillRect(0, y, 64, 1);
+    _sidSkin.bump = canvasTex(cb, { srgb: false });
+    _sidSkin.rough = canvasTex(cr, { srgb: false });
+  }
+  return _sidSkin;
+}
+
 /* flat-roof finish palette — membrane / gravel / asphalt, cached 3 ways */
 const _flatRoofs = [null, null, null];
 function flatRoofMat() {
@@ -107,6 +170,10 @@ function flatRoofMat() {
   if (!_flatRoofs[i]) {
     const finish = [['#c8ccc5', .55], ['#84827c', 1], ['#4a4d51', .97]][i];
     _flatRoofs[i] = mat(finish[0], { roughness: finish[1] });
+    const skin = roofSkin();
+    _flatRoofs[i].map = skin.map;
+    _flatRoofs[i].bumpMap = skin.bump; _flatRoofs[i].bumpScale = .04;
+    _flatRoofs[i].roughnessMap = skin.rough; _flatRoofs[i].roughness = 1;
   }
   return _flatRoofs[i];
 }
@@ -421,6 +488,7 @@ function clutter(g, w, d, h, o = {}) {
         const fx = rr(-w / 2 + 4, w / 2 - 4), fz = rr(-d / 2 + 4, d / 2 - 4);
         parts.push({ geo: new THREE.BoxGeometry(1.5, .8, 1.5), color: '#7d858a', x: fx, y: h + .4, z: fz });
         parts.push({ geo: new THREE.CylinderGeometry(.5, .5, .3, 10), color: '#5c6367', x: fx, y: h + .95, z: fz });
+        parts.push({ geo: new THREE.BoxGeometry(2.1, .02, 2.1), color: '#43484a', x: fx, y: h + .01, z: fz });   // oil stain pad
       }
     if (kind === 'vents')
       for (let i = 0; i < 3; i++)
@@ -436,6 +504,7 @@ function clutter(g, w, d, h, o = {}) {
       const bx = rr(-w / 4, w / 4);
       parts.push({ geo: new THREE.BoxGeometry(4.4, 2.6, 3.4), color: '#8a8f94', x: bx, y: h + 1.3, z: -d / 4 });
       parts.push({ geo: new THREE.BoxGeometry(.9, 2.0, .15), color: '#3c4145', x: bx, y: h + 1.0, z: -d / 4 + 1.75 });
+      parts.push({ geo: new THREE.BoxGeometry(5.4, .02, 4.4), color: '#43484a', x: bx, y: h + .01, z: -d / 4 });
     }
     if (kind === 'condensers') {
       // row of small AC condenser pads along the rear setback
@@ -443,6 +512,7 @@ function clutter(g, w, d, h, o = {}) {
       for (let i = 0; i < nC; i++) {
         const cx = -w / 2 + 3 + i * 2.4 + rr(-.3, .3);
         if (cx > w / 2 - 3) break;
+        parts.push({ geo: new THREE.BoxGeometry(1.6, .02, 1.6), color: '#43484a', x: cx, y: h + .01, z: cz });   // oil stain pad
         parts.push({ geo: new THREE.BoxGeometry(1.1, .75, 1.1), color: '#9aa0a3', x: cx, y: h + .38, z: cz });
         parts.push({ geo: new THREE.CylinderGeometry(.38, .38, .14, 8), color: '#6d7276', x: cx, y: h + .82, z: cz });
       }
@@ -718,8 +788,7 @@ function campusb(s) { // campus brick academic block
   const r = gableRoof(w, 4.5, d, roofM); r.position.y = s.h; g.add(r);
   g.add(box(w * .3, 1.2, .8, mat('#e8e2d4'), 0, s.h * .55, d / 2 + .2)); // limestone band
   winDressMesh(g, w, d, s.h, { rows: 3, cols: Math.round(w / 7), faces: 'fbs',
-    trim: '#e8e2d4', transom: true, spandrel: true, fins: true, reveal: true,
-    quoins: { color: '#e8e2d4' } });
+    trim: '#e8e2d4', transom: true, spandrel: true, fins: true, reveal: true });
   door(g, 6, 4.5, 0, d / 2 + .3, 0, '#2c3a42', { recess: true, portico: true,
     porticoC: '#e8e2d4' });
   // steps + hedges flanking entry
@@ -1249,7 +1318,7 @@ function house(s = {}) {
   const roofM = (R() < .55 ? M_ROOFGRAY(w / 6, d / 6, roofHex) : M_ROOFCLAY(w / 6, d / 6, roofHex));
   const useSiding = R() < .6;
   const wallMaps = useSiding
-    ? { map: sidingTexture(wallC), bump: null }
+    ? { map: sidingTexture(wallC), bump: sidingSkin().bump, rough: sidingSkin().rough }
     : facadeMaps({ base: wallC, rows: 2, cols: 4, win: '#33424e', brickLines: false, cornice: false });
   // foundation strip
   g.add(box(w + .3, .6, d + .3, mat('#9aa0a3'), 0, 0, 0));
@@ -1394,7 +1463,7 @@ function duplex(s = {}) {
   const w = s.w || 16, d = s.d || 11, h = rr(6, 7.5);
   const roofM = (R() < .5 ? M_ROOFGRAY(w / 7, d / 7, pick(ROOF_COLORS)) : M_ROOFCLAY(w / 7, d / 7, pick(ROOF_COLORS)));
   const wallMaps = R() < .5
-    ? { map: sidingTexture(pick(HOUSE_COLORS)), bump: null }
+    ? { map: sidingTexture(pick(HOUSE_COLORS)), bump: sidingSkin().bump, rough: sidingSkin().rough }
     : facadeMaps({ base: pick(HOUSE_COLORS), rows: 2, cols: 5, win: '#33424e', brickLines: false, cornice: false });
   g.add(box(w + .3, .5, d + .3, mat('#9aa0a3'), 0, 0, 0));
   const body = box(w, h, d, null, 0, .4, 0);
@@ -1582,7 +1651,7 @@ function ranch(s = {}) {
   const roofM = (R() < .5 ? M_ROOFGRAY(w / 6, d / 6, pick(ROOF_COLORS))
                           : M_ROOFCLAY(w / 6, d / 6, pick(ROOF_COLORS)));
   const wallMaps = R() < .55
-    ? { map: sidingTexture(wallC), bump: null }
+    ? { map: sidingTexture(wallC), bump: sidingSkin().bump, rough: sidingSkin().rough }
     : facadeMaps({ base: wallC, rows: 1, cols: 8, win: '#33424e', brickLines: R() < .4, cornice: false });
   g.add(box(w + .3, .5, d + .3, mat('#9aa0a3'), 0, 0, 0));
   const body = box(w, h, d, null, 0, .4, 0);

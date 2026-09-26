@@ -207,6 +207,18 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
     vg.addColorStop(0, 'rgba(255,255,255,.05)'); vg.addColorStop(.7, 'rgba(0,0,0,0)');
     vg.addColorStop(1, 'rgba(20,16,12,.10)');
     x.fillStyle = vg; x.fillRect(0, 0, W, H);
+    // sun-bleach on the crown + faint panel tone patches (rougher where weathered)
+    const sb = x.createLinearGradient(0, 0, 0, H * .45);
+    sb.addColorStop(0, 'rgba(255,250,235,.08)'); sb.addColorStop(1, 'rgba(255,250,235,0)');
+    x.fillStyle = sb; x.fillRect(0, 0, W, H * .45);
+    for (let i = 0; i < 7; i++) {
+      const px = R() * W, py = R() * H, pw = 60 + R() * 150, ph = 40 + R() * 130;
+      x.fillStyle = `rgba(${R() < .5 ? '255,244,225' : '30,25,18'},${.03 + R() * .05})`;
+      x.fillRect(px, py, pw, ph);
+      xr.fillStyle = 'rgba(255,255,255,.08)';
+      xr.fillRect(px, py, pw, ph);
+    }
+    streaks(x, W, 6, 110, 5, .05);    // drip lines bleeding down from the parapet
     grain(x, W, H, 9000, .05);
 
     if (brickLines) {
