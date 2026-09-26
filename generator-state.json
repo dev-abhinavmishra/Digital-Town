@@ -1,0 +1,39 @@
+{
+  "agent": "generator-render-a",
+  "sprint": "sprint-01",
+  "stream": "RENDER",
+  "updated": "2026-09-25T09:10Z",
+  "checkpoint": "6484b05 (baseline commit; tree verified clean — checkpoint IS baseline)",
+  "log": [
+    {
+      "t": "2026-09-25T09:00Z",
+      "ev": "boot; read role docs, spec, rubric, sprint; verified baseline 6484b05 clean"
+    },
+    {
+      "t": "2026-09-25T09:00Z",
+      "ev": "recon: three@0.160.0 ships GTAOPass/SSAOPass/SMAAPass/TAARenderPass; tex/ has 2K PBR sets + sky_day_2k.hdr + sky_gold_2k.hdr local; composer currently LDR RT + bloom + grade + SMAA; shadows PCF 2048 adaptive box; facades are canvas-painted {map,bump,emis} via lib.js consumed through buildings.js wallMats(); material upgrade path chosen: additive maps + post-build material-upgrade pass in main.js (mirrors userData.lit mechanism) so no B-file changes required"
+    },
+    {
+      "t": "2026-09-25T09:05Z",
+      "ev": "found tex/ files are all 1024px (not 2K as assumed); contract amended: selective 2K diffuse upgrade for grass/asphalt/paving/concrete/plaster/brick via dl.polyhaven.org (pattern confirmed in ../tex/a2.json), vendored locally, 1K fallback kept"
+    },
+    {
+      "t": "2026-09-25T09:10Z",
+      "ev": "research: GTAOPass r160 needs RenderPass before it (blends denoised AO over readBuffer); renders own normal+depth G-buffer; setSceneClipBox required to bound depth range (town ~1700m vs far 12000); blendIntensity knob; composer MSAA samples auto-resolve so readBuffer stays sampleable"
+    },
+    {
+      "t": "2026-09-25T09:10Z",
+      "ev": "contract v1 (+2K texture amendment) sent to Evaluator with expectReply — awaiting counter (exchange 1/4)"
+    }
+  ],
+  "caps": {
+    "contractExchanges": 4,
+    "evalRounds": 4,
+    "restarts": 2
+  },
+  "used": {
+    "contractExchanges": 0,
+    "evalRounds": 0,
+    "restarts": 0
+  }
+}
