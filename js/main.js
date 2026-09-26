@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { createPipeline } from './render/pipeline.js';
 import { loadEnvironment } from './render/env.js';
 import { installAtmo } from './render/atmo.js';
+import { upgradeGlassMaterials, glassProbe } from './render/glass.js';
+import { createOccluderCull, OCCLUDER_CULL } from './render/cull.js';
 import { TOWN, BUILDINGS, APARTMENTS, HOUSE_BLOCKS, COTTAGE_ROWS, PLAZA,
          CATEGORY_COLORS, FILLER, ROADS } from './layout.js';
 import { makeBuilding } from './buildings.js';
@@ -12,7 +14,7 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
-         groundOverlayTexture, uTime } from './lib.js';
+         groundOverlayTexture, uTime, WATERFX } from './lib.js';
 import { M_GRASS, pbr, texReport } from './mats.js';
 
 const params = new URLSearchParams(location.search);
@@ -23,6 +25,10 @@ const NOFX = params.get('nofx') === '1';
 const NOAO = params.get('noao') === '1';
 const NOATMO = params.get('noatmo') === '1';  // master: fog patch + clouds + lamp glows
 const NOFOG = params.get('nofog') === '1';   // granular: fog patch only
+const NOWATERFX = params.has('nowaterfx');   // sprint-03: stock water material
+const NOGLASSFX = params.has('noglassfx');   // sprint-03: stock glass materials
+const NOCULL = params.has('nocull');         // sprint-03: disable occluder cull
+const FREEZEQ = params.has('freeze');        // B-side determinism pin
 const DEBUG = params.get('debug') === '1';
 const FPSDBG = params.get('fps') === '1';
 const CAMP = params.get('cam');   // ?cam=px,py,pz,tx,ty,tz — deterministic eval camera
@@ -191,6 +197,17 @@ else if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
   if (!o.isSprite) return;
   o.material.color.set(TIME === 'golden' ? '#d8a37e' : '#6e5a74');
   o.material.opacity *= TIME === 'golden' ? .78 : .65;
+});
+// sprint-03: glass/reflections v2 — upgrades cached facade materials built from
+// A-owned glassFacadeMaps textures; B's wallMat()/buildings stay untouched
+const glassInfo = VIEW !== 'map' && !NOGLASSFX ? upgradeGlassMaterials(scene, TIME) : null;
+// sprint-03: near-camera transient occluder cull — post-tickWorld pass in tick()
+const occluderCull = VIEW !== 'map' && !NOCULL ? createOccluderCull(scene) : null;
+// water body count for __fx.water (materials tagged by the v2 factory)
+let waterBodies = 0;
+scene.traverse(o => {
+  const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+  for (const mm of mats) if (mm.userData && mm.userData.waterV2) waterBodies++;
 });
 (window.__prof ||= []).push(['buildWorld', Math.round(performance.now() - _tb)]);
 
@@ -455,6 +472,26 @@ const __fx = {
     lampHalos: atmoInfo ? atmoInfo.lampHalos : 0,
   },
   tex: {}, mats: matStats,
+  water: {
+    enabled: WATERFX, nowaterfx: NOWATERFX, bodies: waterBodies, time: TIME,
+    freezePinned: FREEZEQ, rimFade: WATERFX, sunVectorGlint: WATERFX,
+  },
+  glass: glassProbe(glassInfo, VIEW !== 'map' && !NOGLASSFX, TIME),
+  cull: {
+    enabled: !!occluderCull, minDist: OCCLUDER_CULL.minDist,
+    maxFrac: OCCLUDER_CULL.maxFrac, targets: occluderCull ? occluderCull.state.targets : 0,
+    get squashed() { return occluderCull ? occluderCull.state.squashed : 0; },
+  },
+  // optional determinism nicety: fnv-1a over a strided readPixels sample
+  get frameHash() {
+    const gl = renderer.getContext();
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < px.length; i += 997) { hash ^= px[i]; hash = Math.imul(hash, 0x01000193) >>> 0; }
+    return hash.toString(16).padStart(8, '0');
+  },
   calls: 0, tris: 0, fps: 0,
 };
 window.__fx = __fx;
@@ -570,6 +607,7 @@ function tick() {
   }
   updateShadow();
   tickWorld(t, dt);
+  if (occluderCull) occluderCull.tick(activeCam);
   if (composer) {
     if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
       composer.passes[0].camera = activeCam;

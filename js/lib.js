@@ -414,7 +414,7 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRat
       }
       x.fillStyle = gg; x.fillRect(wx, wy, ww, wh);
       xb.fillStyle = '#565656'; xb.fillRect(wx, wy, ww, wh);
-      xr.fillStyle = lit ? '#3a3a3a' : '#242424';   // vision glass near-mirror
+      xr.fillStyle = lit ? '#303030' : '#1e1e1e';   // vision glass near-mirror (v2: sharper panes)
       xr.fillRect(wx, wy, ww, wh);
       // glare streak
       x.fillStyle = 'rgba(255,255,255,.22)';
@@ -705,24 +705,77 @@ export function cloudSpriteTexture() {
 export const uTime = { value: 0 };   // shared clock uniform
 
 /* rippling water — MeshStandardMaterial with sine-perturbed normals */
-export function waterMaterial({ color = '#2b4a58', deep = '#16242c', roughness = .12 } = {}) {
+/* water v2 — animated normals + fresnel depth tint + rim shore fade/foam + sun glint.
+   Animated through shared uTime only, so B's ?freeze=1 pin makes it deterministic.
+   All users are CircleGeometry → planar UV gives rim distance in-shader. */
+const _wq = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+const _wt = (_wq && _wq.get('time')) || 'day';
+export const WATERFX = !(_wq && _wq.has('nowaterfx'));
+const WATER_T = {
+  day:    { sunDir: [900, 750, 620],   sunCol: 0xfff2dd, deep: '#0e2430', foam: '#cfe6ea', glint: .5,  foamAmt: .5  },
+  golden: { sunDir: [-1500, 210, 700], sunCol: 0xffb268, deep: '#1d2a33', foam: '#e8c9a0', glint: .85, foamAmt: .4  },
+  dusk:   { sunDir: [-1200, 120, 500], sunCol: 0xff9a6a, deep: '#141820', foam: '#4a4a58', glint: .3,  foamAmt: .22 },
+};
+const _wp = WATER_T[_wt] || WATER_T.day;
+
+export function waterMaterial({ color = '#2b4a58', deep = null, roughness = .12 } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color, roughness, metalness: .55, envMapIntensity: 1.5,
+    transparent: WATERFX,
   });
+  if (!WATERFX) return m;                       // ?nowaterfx=1 → stock material
+  m.userData.waterV2 = true;
+  m.defines = { USE_UV: '' };                   // rim fade needs the uv attribute — no map is present
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uT = uTime;
+    sh.uniforms.uSunDir = { value: new THREE.Vector3(..._wp.sunDir).normalize() };
+    sh.uniforms.uSunCol = { value: new THREE.Color(_wp.sunCol) };
+    sh.uniforms.uDeep = { value: new THREE.Color(deep || _wp.deep) };
+    sh.uniforms.uFoam = { value: new THREE.Color(_wp.foam) };
+    sh.uniforms.uGlint = { value: _wp.glint };
+    sh.uniforms.uFoamAmt = { value: _wp.foamAmt };
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWp;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWp; varying vec2 vUvW;')
       .replace('#include <worldpos_vertex>',
-        '#include <worldpos_vertex>\nvWp = (modelMatrix * vec4(position,1.0)).xyz;');
+        '#include <worldpos_vertex>\nvWp = (modelMatrix * vec4(position,1.0)).xyz; vUvW = uv;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uT; varying vec3 vWp;')
+      .replace('#include <common>', `#include <common>
+        uniform float uT, uGlint, uFoamAmt;
+        uniform vec3 uSunDir, uSunCol, uDeep, uFoam;
+        varying vec3 vWp; varying vec2 vUvW;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        float wx = vWp.x, wz = vWp.z;
-        float n1 = sin(wx*.55 + uT*1.1) * cos(wz*.48 + uT*.9);
-        float n2 = sin(wx*.21 - uT*.7 + wz*.3);
-        float n3 = sin((wx+wz)*.9 + uT*1.7);
-        normal = normalize(normal + vec3(n1*.06 + n3*.03, 1.0, n2*.06 - n3*.03) - normal);`);
+        {
+          vec2 wq = vWp.xz;
+          vec2 g = vec2(0.);
+          g += vec2(sin(dot(wq, vec2(.55,.48)) + uT*1.15), cos(dot(wq, vec2(.48,-.55)) + uT*.9)) * .045;
+          g += vec2(sin(dot(wq, vec2(1.9,1.35)) - uT*1.7), cos(dot(wq, vec2(-1.35,1.9)) + uT*1.35)) * .026;
+          g += vec2(sin(dot(wq, vec2(4.2,3.3)) + uT*2.6), cos(dot(wq, vec2(3.3,-4.2)) - uT*2.2)) * .012;
+          g += vec2(sin(dot(wq, vec2(.85,.62)) + g.x*22. + uT*.55), 0.) * .010;
+          vec3 wn = normalize(vec3(-g.x, 1., -g.y));
+          normal = normalize((viewMatrix * vec4(wn, 0.)).xyz);
+        }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          float rim = length(vUvW - .5) * 2.;
+          diffuseColor.a *= 1. - smoothstep(.955, 1., rim);          // shore alpha fade (outer ~4.5%)
+          float fband = smoothstep(.78, .9, rim) * (1. - smoothstep(.92, .985, rim));
+          float fn = sin(rim*30. - uT*1.3 + sin(vWp.x*.75 + vWp.z*.55)*2.2) * .5 + .5;
+          fband *= .45 + .55*fn;                                    // broken foam band
+          diffuseColor.rgb = mix(diffuseColor.rgb, uFoam, fband * uFoamAmt);
+        }`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        {
+          vec3 Vv = normalize(vViewPosition);
+          float fres = pow(1. - max(dot(normal, Vv), 0.), 3.);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uDeep, fres * .7);          // depth tint at grazing angles
+          vec3 sV = normalize((viewMatrix * vec4(uSunDir, 0.)).xyz);
+          vec3 H = normalize(sV + Vv);
+          float spec = pow(max(dot(normal, H), 0.), 320.);
+          vec2 toFrag = vWp.xz - cameraPosition.xz;
+          float az = max(dot(toFrag / max(length(toFrag), 1e-3), normalize(uSunDir.xz)), 0.);
+          float flick = .55 + .45 * sin(uT*6.5 + vWp.x*2.9 + vWp.z*2.3);
+          totalEmissiveRadiance += uSunCol * spec * az * az * flick * uGlint;  // sun streak toward sun azimuth
+        }`);
   };
   return m;
 }
