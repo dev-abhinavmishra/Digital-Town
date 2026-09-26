@@ -49,6 +49,42 @@ function streaks(x, W, top, h, n, alpha = .05) {
   }
 }
 
+/* Sobel a grayscale bump canvas into a tangent-space normal map canvas.
+   Runs on a downscaled copy (default 512) — normal maps only need to carry
+   smooth gradients, and this keeps the bake fast enough for module eval.
+   One-time cost per unique painter config (cached alongside the maps). */
+function bumpToNormalCanvas(cb, strength = 1.6, res = 384) {
+  const w = Math.min(res, cb.width), h = Math.min(res, cb.height);
+  const [ds, xds] = makeCanvas(w, h);
+  xds.drawImage(cb, 0, 0, w, h);
+  const src = xds.getImageData(0, 0, w, h).data;
+  // luminance plane first — Sobel then reads a flat Float32Array
+  const lum = new Float32Array(w * h);
+  for (let i = 0, j = 0; i < src.length; i += 4, j++)
+    lum[j] = src[i] * .299 + src[i + 1] * .587 + src[i + 2] * .114;
+  const [cn, xn] = makeCanvas(w, h);
+  const out = xn.createImageData(w, h);
+  const d = out.data, s = strength / 255;
+  for (let y = 0; y < h; y++) {
+    const ym = (y - 1 + h) % h, yp = (y + 1) % h, ro = y * w;
+    for (let x = 0; x < w; x++) {
+      const xm = (x - 1 + w) % w, xp = (x + 1) % w;
+      const dx = (lum[ym * w + xp] + 2 * lum[ro + xp] + lum[yp * w + xp])
+               - (lum[ym * w + xm] + 2 * lum[ro + xm] + lum[yp * w + xm]);
+      const dy = (lum[yp * w + xm] + 2 * lum[yp * w + x] + lum[yp * w + xp])
+               - (lum[ym * w + xm] + 2 * lum[ym * w + x] + lum[ym * w + xp]);
+      const nx = -dx * s, ny = dy * s, il = 1 / Math.hypot(nx, ny, 1);
+      const o = (ro + x) * 4;
+      d[o] = (nx * il * .5 + .5) * 255;
+      d[o + 1] = (ny * il * .5 + .5) * 255;
+      d[o + 2] = (il * .5 + .5) * 255;
+      d[o + 3] = 255;
+    }
+  }
+  xn.putImageData(out, 0, 0);
+  return cn;
+}
+
 /* ============== ground / landscape ============== */
 export function grassTexture() {
   const [c, x] = makeCanvas(512, 512);
@@ -135,7 +171,12 @@ export function groundOverlayTexture() {
 /* ============== facades ============== */
 const texCache = new Map();
 function cachedTex(key, maker) {
-  if (!texCache.has(key)) texCache.set(key, maker());
+  if (!texCache.has(key)) {
+    const t0 = performance.now();
+    const v = maker();
+    (window.__prof ||= []).push(['tex:' + key.slice(0, 12), Math.round(performance.now() - t0)]);
+    texCache.set(key, v);
+  }
   return texCache.get(key);
 }
 
@@ -149,13 +190,16 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
   const key = 'fac' + JSON.stringify([base, win, rows, cols, litRatio, band, brickLines,
     storefront, signText, signBg, trim, cornice]);
   return cachedTex(key, () => {
-    const W = 512, H = 512;
-    const [c, x] = makeCanvas(W, H);
-    const [cb, xb] = makeCanvas(W, H);          // bump canvas (grayscale)
-    const [ce, xe] = makeCanvas(W / 2, H / 2);  // emissive canvas — quarter res is plenty for glow
+    const SS = 2, W = 512, H = 512;             // logical painter space; diffuse canvas supersampled 2x
+    const [c, x] = makeCanvas(W * SS, H * SS);   x.scale(SS, SS);
+    const [cb, xb] = makeCanvas(W, H);          // bump stays 512 — feeds the normal bake
+    const [ce, xe] = makeCanvas(W / 2, H / 2);  // emissive quarter-res — soft glow anyway
+    const [cr, xr] = makeCanvas(W / 2, H / 2);  // roughness quarter-res — low-frequency data
+    xr.scale(.5, .5);
     xb.fillStyle = '#808080'; xb.fillRect(0, 0, W, H);
     xe.fillStyle = '#000'; xe.fillRect(0, 0, W / 2, H / 2);
-    xe.scale(.5, .5);                           // painter coords stay in 512-space
+    xe.scale(.5, .5);
+    xr.fillStyle = '#e0e0e0'; xr.fillRect(0, 0, W, H);   // matte wall baseline (~0.88)
 
     x.fillStyle = base; x.fillRect(0, 0, W, H);
     // subtle vertical weathering gradient
@@ -212,6 +256,8 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
       x.fillStyle = 'rgba(255,255,255,.20)';
       x.beginPath(); x.moveTo(wx, wy); x.lineTo(wx + ww * .55, wy);
       x.lineTo(wx, wy + wh * .55); x.closePath(); x.fill();
+      xr.fillStyle = lit ? '#606060' : '#484848';    // glass stays glossy
+      xr.fillRect(wx, wy, ww, wh);
     };
 
     for (let r = 0; r < rows; r++) {
@@ -229,8 +275,10 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
         // deep reveal
         x.fillStyle = 'rgba(0,0,0,.42)'; x.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
         xb.fillStyle = '#3a3a3a'; xb.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
+        xr.fillStyle = '#b4b4b4'; xr.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
         // frame
         x.fillStyle = '#d8d5cc'; x.fillRect(wx - 2, wy - 2, ww + 4, wh + 4);
+        xr.fillStyle = '#a8a8a8'; xr.fillRect(wx - 2, wy - 2, ww + 4, wh + 4);
         glassPane(wx, wy, ww, wh, lit);
         if (blinds) {
           x.fillStyle = 'rgba(230,225,210,.55)';
@@ -242,6 +290,7 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
         x.fillRect(wx, wy + wh * .5 - 1, ww, 2);
         // sill + drip shadow + grime streak below
         x.fillStyle = '#cfcabb'; x.fillRect(wx - 4, wy + wh + 2, ww + 8, 4);
+        xr.fillStyle = '#c8c8c8'; xr.fillRect(wx - 4, wy + wh + 2, ww + 8, 4);
         x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(wx - 4, wy + wh + 6, ww + 8, 5);
         if (R() < .3) streaks(x, W, wy + wh + 10, Math.min(40, H - wy - wh - 12), 1, .07);
         // occasional AC unit
@@ -251,11 +300,12 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
         }
       }
     }
-    if (band) { x.fillStyle = band; x.fillRect(0, top - 8, W, 6); }
+    if (band) { x.fillStyle = band; x.fillRect(0, top - 8, W, 6); xr.fillStyle = '#c0c0c0'; xr.fillRect(0, top - 8, W, 6); }
 
     if (cornice && !storefront) {
       x.fillStyle = trim; x.fillRect(0, 4, W, 8);
       x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(0, 12, W, 3);
+      xr.fillStyle = '#c8c8c8'; xr.fillRect(0, 4, W, 12);
       for (let px = 4; px < W; px += 18) { x.fillStyle = trim; x.fillRect(px, 8, 8, 5); }
     }
 
@@ -263,6 +313,7 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
       // bulkhead + recessed glazing with interior hints
       x.fillStyle = '#222b31'; x.fillRect(0, H - 190, W, 190);
       xb.fillStyle = '#909090'; xb.fillRect(0, H - 190, W, 190);
+      xr.fillStyle = '#909090'; xr.fillRect(0, H - 190, W, 190);
       for (let i = 0; i < cols; i++) {
         const wx = i * cw + 6, ww = cw - 12;
         const gg = x.createLinearGradient(wx, H - 176, wx, H - 16);
@@ -291,18 +342,22 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
         x.lineTo(wx, H - 96); x.closePath(); x.fill();
         // kick plate
         x.fillStyle = '#3a4147'; x.fillRect(wx, H - 28, ww, 12);
+        xr.fillStyle = '#2e2e2e'; xr.fillRect(wx, H - 176, ww, 150);   // shopfront glass glossy
+        xr.fillStyle = '#969696'; xr.fillRect(wx, H - 28, ww, 12);
       }
       // entrance double door (center bay)
       const dx = W / 2 - cw / 2 + 6;
       x.fillStyle = '#10181d'; x.fillRect(dx, H - 170, cw - 12, 144);
       x.strokeStyle = '#5a6a72'; x.lineWidth = 3; x.strokeRect(dx + 3, H - 167, cw - 18, 141);
       x.fillStyle = 'rgba(160,190,205,.35)'; x.fillRect(dx + 6, H - 164, cw - 24, 100);
+      xr.fillStyle = '#585858'; xr.fillRect(dx, H - 170, cw - 12, 144);
       if (signText) {
         x.fillStyle = signBg; x.fillRect(0, 62, W, 92);
         x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(0, 150, W, 8);
         x.fillStyle = '#f4f6f4'; x.font = 'bold 54px Arial';
         x.textAlign = 'center'; x.textBaseline = 'middle';
         x.fillText(signText.toUpperCase(), W / 2, 108, W - 30);
+        xr.fillStyle = '#b0b0b0'; xr.fillRect(0, 62, W, 92);
       }
     }
     // base grime + top AO
@@ -312,8 +367,17 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
     const gr2 = x.createLinearGradient(0, 0, 0, 26);
     gr2.addColorStop(0, 'rgba(0,0,0,.25)'); gr2.addColorStop(1, 'rgba(0,0,0,0)');
     x.fillStyle = gr2; x.fillRect(0, 0, W, 26);
-    return { map: canvasTex(c), bump: canvasTex(cb, { srgb: false }),
-             emis: canvasTex(ce) };
+    // device-resolution micro grain — keeps the 2x canvas from reading as upscaled
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    grain(x, W * SS, H * SS, 7000, .05);
+    grain(xb, W, H, 4500, .12, 96, 168);
+    const normal = canvasTex(bumpToNormalCanvas(cb, 1.5), { srgb: false });
+    const map = canvasTex(c);
+    const rough = canvasTex(cr, { srgb: false });
+    const emis = canvasTex(ce);
+    const bump = canvasTex(cb, { srgb: false });
+    map.userData.v2 = { rough, normal, bump, glass: false };
+    return { map, bump, emis, rough, normal };
   });
 }
 /* back-compat wrapper */
@@ -323,14 +387,18 @@ export function facadeTexture(opts = {}) { return facadeMaps(opts).map; }
 export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRatio = .12 } = {}) {
   const key = 'glass' + JSON.stringify([tint, rows, cols, litRatio]);
   return cachedTex(key, () => {
-    const [c, x] = makeCanvas(512, 512);
-    const [cb, xb] = makeCanvas(512, 512);
-    const [ce, xe] = makeCanvas(256, 256);      // quarter-res emissive is plenty for glow
-    xb.fillStyle = '#808080'; xb.fillRect(0, 0, 512, 512);
-    xe.fillStyle = '#000'; xe.fillRect(0, 0, 256, 256);
+    const SS = 2, W = 512, H = 512;
+    const [c, x] = makeCanvas(W * SS, H * SS);   x.scale(SS, SS);
+    const [cb, xb] = makeCanvas(W, H);
+    const [ce, xe] = makeCanvas(W / 2, H / 2);  // quarter-res emissive — soft glow anyway
+    const [cr, xr] = makeCanvas(W / 2, H / 2);  // quarter-res roughness
+    xr.scale(.5, .5);
+    xb.fillStyle = '#808080'; xb.fillRect(0, 0, W, H);
+    xe.fillStyle = '#000'; xe.fillRect(0, 0, W / 2, H / 2);
     xe.scale(.5, .5);
-    x.fillStyle = '#c6cfd4'; x.fillRect(0, 0, 512, 512);
-    const cw = 512 / cols, rh = 512 / rows;
+    xr.fillStyle = '#8c8c8c'; xr.fillRect(0, 0, W, H);   // frame/spandrel mid-rough
+    x.fillStyle = '#c6cfd4'; x.fillRect(0, 0, W, H);
+    const cw = W / cols, rh = H / rows;
     for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
       const wx = col * cw + 3, wy = r * rh + 3, ww = cw - 6, wh = rh - 6;
       const lit = R() < litRatio;
@@ -346,6 +414,8 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRat
       }
       x.fillStyle = gg; x.fillRect(wx, wy, ww, wh);
       xb.fillStyle = '#565656'; xb.fillRect(wx, wy, ww, wh);
+      xr.fillStyle = lit ? '#3a3a3a' : '#242424';   // vision glass near-mirror
+      xr.fillRect(wx, wy, ww, wh);
       // glare streak
       x.fillStyle = 'rgba(255,255,255,.22)';
       x.beginPath(); x.moveTo(wx, wy); x.lineTo(wx + ww * .6, wy);
@@ -360,9 +430,20 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRat
       x.fillStyle = 'rgba(255,255,255,.4)'; x.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
       xb.fillStyle = '#a0a0a0'; xb.fillRect(col * cw, r * rh, cw, 3);
       xb.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
+      xr.fillStyle = '#9a9a9a'; xr.fillRect(col * cw, r * rh, cw, 3);   // matte spandrel band
+      xr.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
     }
-    return { map: canvasTex(c), bump: canvasTex(cb, { srgb: false }),
-             emis: canvasTex(ce) };
+    // micro grain at device res
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    grain(x, W * SS, H * SS, 4000, .04);
+    grain(xb, W, H, 2000, .10, 96, 168);
+    const normal = canvasTex(bumpToNormalCanvas(cb, 1.2), { srgb: false });
+    const map = canvasTex(c);
+    const rough = canvasTex(cr, { srgb: false });
+    const emis = canvasTex(ce);
+    const bump = canvasTex(cb, { srgb: false });
+    map.userData.v2 = { rough, normal, bump, glass: true };
+    return { map, bump, emis, rough, normal };
   });
 }
 export function glassFacade(opts = {}) { return glassFacadeMaps(opts).map; }

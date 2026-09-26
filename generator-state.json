@@ -2,7 +2,7 @@
   "agent": "generator-render-a",
   "sprint": "sprint-01",
   "stream": "RENDER",
-  "updated": "2026-09-25T09:10Z",
+  "updated": "2026-09-25T09:25Z",
   "checkpoint": "6484b05 (baseline commit; tree verified clean — checkpoint IS baseline)",
   "log": [
     {
@@ -24,6 +24,14 @@
     {
       "t": "2026-09-25T09:10Z",
       "ev": "contract v1 (+2K texture amendment) sent to Evaluator with expectReply — awaiting counter (exchange 1/4)"
+    },
+    {
+      "t": "2026-09-25T09:15Z",
+      "ev": "committed my pre-edit checkpoint 09e9467 (state log only)"
+    },
+    {
+      "t": "2026-09-25T09:25Z",
+      "ev": "evaluator pushback (8 pts) all accepted: C0 git ancestry, C8 bloom sanity+probe, C4 multi-view+golden, envSrc/envIntensity probes, C3 A/B conditions explicit, C7 dusk+120 frames, C10 colorSpace+per-surface __fx.tex, __fx.mats floors; endorsed B ?cam/__setCam -> C11; contract v2 sent (exchange 2/4), awaiting verdict"
     }
   ],
   "caps": {
@@ -32,7 +40,7 @@
     "restarts": 2
   },
   "used": {
-    "contractExchanges": 0,
+    "contractExchanges": 2,
     "evalRounds": 0,
     "restarts": 0
   }

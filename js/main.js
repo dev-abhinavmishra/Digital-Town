@@ -1,11 +1,7 @@
 // main.js — Havenbrook 3D town: procedural sky, cinematic post fx, fly-spectator controls
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { createPipeline } from './render/pipeline.js';
+import { loadEnvironment } from './render/env.js';
 import { TOWN, BUILDINGS, APARTMENTS, HOUSE_BLOCKS, COTTAGE_ROWS, PLAZA,
          CATEGORY_COLORS, FILLER, ROADS } from './layout.js';
 import { makeBuilding } from './buildings.js';
@@ -16,14 +12,17 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
          groundOverlayTexture, uTime } from './lib.js';
-import { M_GRASS, pbr } from './mats.js';
+import { M_GRASS, pbr, texReport } from './mats.js';
 
 const params = new URLSearchParams(location.search);
 const VIEW = params.get('view') || 'aerial';
 const TIME = params.get('time') || 'day';
 const LABELS = params.get('labels') === '1';
 const NOFX = params.get('nofx') === '1';
+const NOAO = params.get('noao') === '1';
 const DEBUG = params.get('debug') === '1';
+const FPSDBG = params.get('fps') === '1';
+const CAMP = params.get('cam');   // ?cam=px,py,pz,tx,ty,tz — deterministic eval camera
 const CAM_BOUND = 1200;   // fly-cam stays inside the mountain ring
 
 /* ---------- renderer ---------- */
@@ -34,10 +33,13 @@ const MAX_RATIO = Math.min(devicePixelRatio, 2);
 let pixelRatio = MAX_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : 1.0;
 document.getElementById('app').appendChild(renderer.domElement);
+// survive GPU OOM context loss on weak iGPUs — allow restore, then reload clean
+renderer.domElement.addEventListener('webglcontextlost', e => e.preventDefault());
+renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
 
 const scene = new THREE.Scene();
 
@@ -58,6 +60,20 @@ scene.background = skyTex;
 scene.backgroundIntensity = TIME === 'golden' ? 1.0 : 0.95;
 scene.environment = pmrem.fromEquirectangular(skyTex).texture;
 scene.environmentIntensity = TIME === 'golden' ? .9 : .8;
+// HDR image-based lighting — vendored Poly Haven sky feeds PBR reflections.
+// Background stays procedural so the visible sun matches the directional light.
+const envInfo = { envType: 'fallback', envSrc: 'procedural-sky',
+                  envIntensity: TIME === 'golden' ? .9 : TIME === 'dusk' ? .6 : .8 };
+loadEnvironment(renderer, { mode: TIME, skyTex }).then(e => {
+  if (e.envType === 'hdr') scene.environment = e.texture;
+  envInfo.envType = e.envType; envInfo.envSrc = e.envSrc;
+  envInfo.envIntensity = e.envIntensity;
+  if (window.__fx) { window.__fx.envType = e.envType; window.__fx.envSrc = e.envSrc;
+                     window.__fx.envIntensity = e.envIntensity; }
+});
+// per-time env gain applied to materials post-build (r160 has no
+// scene.environmentIntensity — multiply envMapIntensity instead)
+const envScale = TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0;
 scene.fog = new THREE.FogExp2(
   TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258 : 0xd4e2ec,
   TIME === 'dusk' ? 0.00032 : 0.00017);
@@ -67,7 +83,7 @@ const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === '
   TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : 2.6);
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.camera.left = -700; sun.shadow.camera.right = 700;
 sun.shadow.camera.top = 700; sun.shadow.camera.bottom = -700;
 sun.shadow.camera.near = 200; sun.shadow.camera.far = 3600;
@@ -90,6 +106,7 @@ ov.userData.noMerge = true;
 scene.add(ov);
 
 /* ---------- occupancy then build ---------- */
+const _tb = performance.now();
 registerOccupancy();
 buildRoads(scene);
 buildLots(scene);
@@ -160,6 +177,7 @@ buildFences(scene);
 buildCountryside(scene);
 buildMountains(scene);
 if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
+(window.__prof ||= []).push(['buildWorld', Math.round(performance.now() - _tb)]);
 
 /* campus quad — sized to sit clear of the med hall & the campus lot */
 const quadM = pbr('grass_ground'); quadM.color = new THREE.Color('#93b377');
@@ -174,19 +192,40 @@ scene.add(plane(190, 6, qp, -480, .33, -532, -Math.PI / 2, 3));
 scene.add(cyl(4, 4.4, .9, mat('#9aa0a3'), -480, .3, -532, 20));
 
 /* collapse all static geometry into one mesh per material */
+const _tm = performance.now();
 mergeStatic(scene);
+(window.__prof ||= []).push(['mergeStatic', Math.round(performance.now() - _tm)]);
 
-/* lit windows: shared materials carry userData.lit — intensity follows time of day */
+/* lit windows + material-upgrade pass on the shared cached materials:
+   - userData.lit → emissiveIntensity follows time of day
+   - map.userData.v2 → attach roughness/normal maps + glass env boost (facade v2)
+   - envScale → real per-time env gain (scene.environmentIntensity is r163+) */
+const matStats = { withNormal: 0, withRough: 0 };
 {
   const litI = TIME === 'dusk' ? 1.7 : TIME === 'golden' ? .95 : .12;
   const seen = new Set();
   scene.traverse(o => {
     if (!o.isMesh) return;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
-    for (const m of mats)
-      if (m && m.userData && m.userData.lit && !seen.has(m)) {
-        seen.add(m); m.emissiveIntensity = litI;
+    for (const m of mats) {
+      if (!m || seen.has(m)) continue;
+      seen.add(m);
+      if (m.userData && m.userData.lit) m.emissiveIntensity = litI;
+      const v2 = m.map && m.map.userData && m.map.userData.v2;
+      if (v2) {
+        if (v2.normal && !m.normalMap) { m.normalMap = v2.normal; m.normalScale.set(.85, .85); }
+        if (v2.rough && !m.roughnessMap) { m.roughnessMap = v2.rough; }
+        // normalMap supersedes the bump map — dropping it keeps the 512px
+        // bump canvas off the GPU entirely on the eval iGPU
+        if (v2.bump && m.bumpMap === v2.bump) m.bumpMap = null;
+        m.needsUpdate = true;
       }
+      // count by actual material state — v2 upgrade AND natively-mapped PBR
+      if (m.normalMap) matStats.withNormal++;
+      if (m.roughnessMap) matStats.withRough++;
+      if (m.isMeshStandardMaterial)
+        m.envMapIntensity = (v2 && v2.glass ? 1.7 : (m.envMapIntensity || 1)) * envScale;
+    }
   });
 }
 
@@ -249,6 +288,21 @@ addEventListener('wheel', e => { fly.speed = Math.max(6, Math.min(400, fly.speed
 addEventListener('keydown', e => fly.keys[e.code] = true);
 addEventListener('keyup', e => fly.keys[e.code] = false);
 addEventListener('dblclick', () => fly.auto = !fly.auto);
+
+/* deterministic eval camera — ?cam=px,py,pz,tx,ty,tz or window.__setCam(...).
+   Disables auto-orbit; fly drag/keys still work afterwards. */
+function setCam(px, py, pz, tx, ty, tz) {
+  if (orthoCam) return;
+  camera.position.set(px, py, pz);
+  camera.lookAt(tx, ty, tz);
+  fly.auto = false;
+  syncAnglesFromCam();
+}
+window.__setCam = setCam;
+if (CAMP && !orthoCam) {
+  const v = CAMP.split(',').map(Number);
+  if (v.length === 6 && v.every(Number.isFinite)) setCam(...v);
+}
 
 /* ---------- labels ---------- */
 const labelDivs = [];
@@ -314,90 +368,94 @@ function updateLabels() {
     if (behind || x < -100 || x > innerWidth + 100 || y < -60 || y > innerHeight + 60) {
       d.style.display = 'none'; continue;
     }
+    // measure once per frame — w/h are position-independent; the old code
+    // re-read live rects inside the relax loop, so pass 0 saw *last frame's*
+    // displaced boxes and symmetric overlaps alternated between two states
+    const r = d.getBoundingClientRect();
+    it.w = r.width; it.h = r.height;
     it.x = x; it.y = y; it.dy = 0;
     d.style.display = 'flex';
     items.push(it);
   }
   const solid = items.filter(i => !i.norelax);
+  if (solid[0] && solid[0]._ord === undefined)
+    labelDivs.forEach((it, i) => it._ord = i);
+  // pure-math relaxation (centred boxes) — deterministic, no DOM feedback
   for (let pass = 0; pass < 14; pass++) {
     let moved = false;
     for (const a of solid) {
-      const ra = a.d.getBoundingClientRect();
+      const ay = a.y + a.dy;
+      const al = a.x - a.w / 2, ar = a.x + a.w / 2, at = ay - a.h / 2, ab = ay + a.h / 2;
       for (const b of solid) {
         if (a === b) continue;
-        const rb = b.d.getBoundingClientRect();
-        const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
-        const oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+        const by = b.y + b.dy;
+        const ox = Math.min(ar, b.x + b.w / 2) - Math.max(al, b.x - b.w / 2);
+        const oy = Math.min(ab, by + b.h / 2) - Math.max(at, by - b.h / 2);
         if (ox > 0 && oy > 0) {
           const push = oy / 2 + 1;
-          if (a.y + a.dy <= b.y + b.dy) a.dy -= push; else a.dy += push;
+          if (ay < by || (ay === by && a._ord < b._ord)) a.dy -= push;
+          else a.dy += push;
           moved = true;
         }
       }
     }
-    for (const a of solid) {
-      a.d.style.left = a.x + 'px';
-      a.d.style.top = (a.y + a.dy) + 'px';
-    }
     if (!moved) break;
   }
-  for (const it of items) if (it.norelax) { it.d.style.left = it.x + 'px'; it.d.style.top = it.y + 'px'; }
+  for (const it of items) {
+    it.d.style.left = it.x + 'px';
+    it.d.style.top = (it.norelax ? it.y : it.y + it.dy) + 'px';
+  }
 }
 
-/* ---------- post processing ---------- */
-let composer = null;
+/* ---------- post processing (js/render/pipeline.js) ---------- */
+const MSAAQ = params.get('msaa');    // eval/perf override — default 4x
+const msaaSamples = MSAAQ === null ? 4 : Math.max(0, Math.min(8, +MSAAQ || 0));
+const POSTSKIP = params.get('postskip');  // diagnostics: ?postskip=bloom,smaa
+let composer = null, pipe = null;
 if (!NOFX) {
-  composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, activeCam));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2),
-    TIME === 'golden' ? .22 : .12, .5, 1.02);
-  composer.addPass(bloom);
-  // cinematic grade: vignette + grain + slight teal-shadow/warm-highlight + saturation
-  const grade = new ShaderPass({
-    uniforms: { tDiffuse: { value: null }, uTime: { value: 0 },
-      uVig: { value: .28 }, uGrain: { value: .013 },
-      uWarm: { value: TIME === 'golden' ? .07 : TIME === 'dusk' ? .09 : .025 },
-      uSat: { value: TIME === 'golden' ? 1.12 : 1.07 } },
-    vertexShader: `varying vec2 vUv; void main(){ vUv=uv;
-      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime,uVig,uGrain,uWarm,uSat;
-      varying vec2 vUv;
-      float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
-      void main(){
-        vec4 c = texture2D(tDiffuse, vUv);
-        // gentle S-curve
-        c.rgb = c.rgb*c.rgb*(3.0-2.0*c.rgb)*0.22 + c.rgb*0.78;
-        // saturation lift
-        float l0 = dot(c.rgb, vec3(.299,.587,.114));
-        c.rgb = mix(vec3(l0), c.rgb, uSat);
-        // warm highlights / cool shadows
-        float l = dot(c.rgb, vec3(.299,.587,.114));
-        c.rgb += uWarm * vec3(l - .5) * vec3(1.0,.7,.35);
-        // vignette
-        float d = distance(vUv, vec2(.5));
-        c.rgb *= smoothstep(.92, .38, d) * uVig + (1.0 - uVig);
-        // film grain
-        c.rgb += (hash(vUv*vec2(1920.,1080.)+uTime) - .5) * uGrain;
-        gl_FragColor = c;
-      }`,
-  });
-  composer.addPass(grade);
-  composer.addPass(new SMAAPass(innerWidth * pixelRatio, innerHeight * pixelRatio));
-  composer.addPass(new OutputPass());
-  composer._grade = grade;
+  pipe = createPipeline(renderer, scene, activeCam,
+    { time: TIME, ao: !NOAO, pixelRatio, msaa: msaaSamples,
+      skip: POSTSKIP ? new Set(POSTSKIP.split(',')) : null });
+  composer = pipe.composer;
 }
+
+/* ---------- evaluator probe ---------- */
+const __fx = {
+  get ao() { return !!(pipe && pipe.gtao && pipe.gtao.enabled); },
+  aoPresent: !!(pipe && pipe.gtao),     // pass exists in chain even if map-view disables it
+  get aoState() { return pipe && pipe.gtao ? (pipe.gtao.enabled ? pipe.gtao._state : 'map-off') : 'off'; },
+  msaa: NOFX ? 0 : msaaSamples,
+  shadowType: 'PCFSoftShadowMap', shadowMapSize: sun.shadow.mapSize.x,
+  bloom: pipe ? { threshold: pipe.bloom.threshold, strength: pipe.bloom.strength,
+                  radius: pipe.bloom.radius } : null,
+  envType: envInfo.envType, envSrc: envInfo.envSrc, envIntensity: envInfo.envIntensity,
+  tex: {}, mats: matStats,
+  calls: 0, tris: 0, fps: 0,
+};
+window.__fx = __fx;
 
 /* ---------- adaptive shadow box: follows the camera, snaps to texels ---------- */
 const _focus = new THREE.Vector3(), _fwd = new THREE.Vector3();
-let shHalf = 700;
+let shHalf = 700, _shFrame = 0;
+const _lastFocus = new THREE.Vector2(1e9, 1e9);
+let _lastHalf = 0;
+renderer.shadowMap.autoUpdate = false;   // refresh on movement or periodically
+renderer.shadowMap.needsUpdate = true;   // first frame must bake
 function updateShadow() {
+  if (++_shFrame % 12 === 0) renderer.shadowMap.needsUpdate = true;  // moving props ~2Hz
   if (orthoCam) return;
   camera.getWorldDirection(_fwd); _fwd.y = 0;
   const fl = _fwd.lengthSq() > .01 ? _fwd.normalize() : _fwd.set(0, 0, -1);
-  // focus point on the ground ahead of the camera
-  const ahead = Math.min(camera.position.y * 1.1, 500);
-  _focus.copy(camera.position).addScaledVector(fl, ahead);
-  _focus.y = 0;
+  // focus point on the ground ahead of the camera — but once the box covers
+  // the whole town (aerial), tracking is pure waste: pin it at town centre
+  // and let the periodic refresh handle moving props.
+  const townWide = shHalf > 640;
+  if (townWide) _focus.set(0, 0, 0);
+  else {
+    const ahead = Math.min(camera.position.y * 1.1, 500);
+    _focus.copy(camera.position).addScaledVector(fl, ahead);
+    _focus.y = 0;
+  }
   // box grows with altitude: crisp up close, still covers the town from above
   const want = THREE.MathUtils.clamp(camera.position.y * 1.05, 130, 900);
   shHalf += (want - shHalf) * .08;
@@ -412,6 +470,14 @@ function updateShadow() {
     sc.left = -shHalf; sc.right = shHalf; sc.top = shHalf; sc.bottom = -shHalf;
     sc.updateProjectionMatrix();
   }
+  // rebuild only when the tracked box moved (snapped to texels), and at most
+  // every 3rd frame while in motion — a 4096 map on an iGPU is the budget
+  const boxMoved = Math.abs(_focus.x - _lastFocus.x) > texel ||
+    Math.abs(_focus.z - _lastFocus.y) > texel || Math.abs(shHalf - _lastHalf) > 1;
+  if (boxMoved && (townWide || _shFrame % 3 === 0)) {
+    renderer.shadowMap.needsUpdate = true;
+    _lastFocus.set(_focus.x, _focus.z); _lastHalf = shHalf;
+  }
 }
 
 /* ---------- debug HUD ---------- */
@@ -422,7 +488,7 @@ let fpsEMA = 60, frames = 0, lastHud = 0;
 const clock = new THREE.Clock();
 window.__ready = false;
 const fwd = new THREE.Vector3(), right = new THREE.Vector3();
-let lastRatioCheck = 0;
+let lastRatioCheck = 0, callsEMA = 0;
 renderer.info.autoReset = false;
 function tick() {
   requestAnimationFrame(tick);
@@ -471,6 +537,9 @@ function tick() {
       composer.passes[0].camera = activeCam;
       if (composer.passes[1] && composer.passes[1].camera) composer.passes[1].camera = activeCam;
     }
+    // AO off in the ortho map view — the map is a schematic overlay, and
+    // GTAO assumes a perspective projection anyway
+    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam;
     if (composer._grade) composer._grade.uniforms.uTime.value = t;
     composer.render();
   } else {
@@ -479,7 +548,12 @@ function tick() {
   updateLabels();
   // fps + dynamic resolution
   fpsEMA = fpsEMA * .95 + (1 / Math.max(dt, .001)) * .05;
-  if (DEBUG && hud && t - lastHud > .25) {
+  callsEMA = callsEMA * .9 + renderer.info.render.calls * .1;
+  __fx.calls = renderer.info.render.calls;
+  __fx.callsAvg = Math.round(callsEMA);
+  __fx.tris = renderer.info.render.triangles;
+  __fx.fps = Math.round(fpsEMA * 10) / 10;
+  if ((DEBUG || FPSDBG) && hud && t - lastHud > .25) {
     lastHud = t;
     const i = renderer.info.render;
     hud.style.display = 'block';
@@ -490,15 +564,18 @@ function tick() {
   if (t - lastRatioCheck > 2.5) {
     lastRatioCheck = t;
     if (fpsEMA < 42 && pixelRatio > .55) {
-      pixelRatio = Math.max(.55, pixelRatio - .2);
-      renderer.setPixelRatio(pixelRatio); composer && composer.setSize(innerWidth, innerHeight);
+      pixelRatio = Math.max(.42, pixelRatio - .2);
+      renderer.setPixelRatio(pixelRatio);
+      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight); }
     } else if (fpsEMA > 57 && pixelRatio < MAX_RATIO) {
       pixelRatio = Math.min(MAX_RATIO, pixelRatio + .25);
-      renderer.setPixelRatio(pixelRatio); composer && composer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(pixelRatio);
+      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight); }
     }
   }
   if (++frames === 40) {
     window.__ready = true;
+    __fx.tex = texReport();
     const lo = document.getElementById('loading');
     if (lo) { lo.style.opacity = '0'; setTimeout(() => lo.remove(), 700); }
   }
