@@ -1,9 +1,9 @@
 {
   "agent": "generator-render-a",
-  "sprint": "sprint-02",
+  "sprint": "sprint-03",
   "stream": "RENDER",
-  "updated": "2026-09-26T10:20Z",
-  "checkpoint": "f1cd21c (sprint-01 final; tree verified clean)",
+  "updated": "2026-09-26T15:40Z",
+  "checkpoint": "48d5cd0 (sprint-03 start HEAD; tree clean)",
   "log": [
     {
       "t": "2026-09-26T10:20Z",
@@ -32,6 +32,10 @@
     {
       "t": "2026-09-26T15:05Z",
       "ev": "eval r02 CONTRACT PASS 11/11 on 451543a - stream rubric 7.80; RENDER done for sprint-02. B's 20091b6 un-zero lamps fix landed post-commit -> lampIM populated, pools auto-followed to 191 real heads (synthesized count was 222 while empty). Carry: AO foliage ghost watch, green reshoot pending network, lamp pole near blocker cam = B-side placement quirk."
+    },
+    {
+      "t": "2026-09-26T15:40Z",
+      "ev": "s03 GO (Landmarks & Hero Detail): water shader v2, glass/reflections v2, near-cam occluder cull; carry AO ghost + green reshoot + perf >=90% s03 anchor. recon: waterMaterial(lib.js:708) already uTime-hooked + freeze-safe via B tickWorld pin; glassFacadeMaps/glassV2 A-owned; birds = 1 InstancedMesh frustumCulled=false ~30 inst - cull post-tickWorld in main.js. contract-render draft posted, negotiating with Evaluator (resp 7181be90)."
     }
   ],
   "caps": {
