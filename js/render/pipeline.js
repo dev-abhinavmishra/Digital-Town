@@ -47,7 +47,10 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
     // camera settles we rebuild the G-buffer once, then composite the cached
     // AO buffer every settled frame — refreshed periodically for moving props.
     const origRender = gtao.render.bind(gtao);
-    const lastCamMat = new Float32Array(16);
+    // seed with the settled camera so the very first frame takes the rebuild
+    // path — otherwise frame 1 presents with no AO and frame 2 visibly darkens
+    camera.updateMatrixWorld();
+    const lastCamMat = new Float32Array(camera.matrixWorld.elements);
     let aoFresh = false, settleN = 0;
     gtao.dirty = true;                       // external: set true on content change
     gtao.render = function (renderer2, writeBuffer, readBuffer) {
@@ -118,12 +121,18 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
       varying vec2 vUv;
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
-        // gentle S-curve
-        c.rgb = c.rgb*c.rgb*(3.0-2.0*c.rgb)*0.22 + c.rgb*0.78;
+        // gentle S-curve — knee-faded to zero weight across the highlight
+        // shoulder. This pass runs PRE-tonemap, so c.rgb is HDR: the raw
+        // x*x*(3-2x) polynomial folds negative above ~1.35 and used to print
+        // as RGB confetti on bright edges (snow ridges, sun glints).
+        vec3 ct = clamp(c.rgb, 0.0, 1.0);
+        vec3 cw = vec3(.22) * clamp(2.0 - 2.0 * c.rgb, 0.0, 1.0);
+        c.rgb = mix(c.rgb, ct*ct*(3.0-2.0*ct), cw);
         // saturation lift + warm highlights / cool shadows (one shared luma)
         float l = dot(c.rgb, vec3(.299,.587,.114));
         c.rgb = mix(vec3(l), c.rgb, uSat);
         c.rgb += uWarm * vec3(l - .5) * vec3(1.0,.7,.35);
+        c.rgb = max(c.rgb, vec3(0.0));
         // vignette
         float d = distance(vUv, vec2(.5));
         c.rgb *= smoothstep(.92, .38, d) * uVig + (1.0 - uVig);

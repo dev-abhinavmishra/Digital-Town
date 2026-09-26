@@ -177,6 +177,13 @@ buildFences(scene);
 buildCountryside(scene);
 buildMountains(scene);
 if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
+// cloud sprites use unlit SpriteMaterial — pure-white puffs on a dark
+// golden/dusk sky read as glowing orbs; pull them into the sky palette
+if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
+  if (!o.isSprite) return;
+  o.material.color.set(TIME === 'golden' ? '#d8a37e' : '#6e5a74');
+  o.material.opacity *= TIME === 'golden' ? .78 : .65;
+});
 (window.__prof ||= []).push(['buildWorld', Math.round(performance.now() - _tb)]);
 
 /* campus quad — sized to sit clear of the med hall & the campus lot */
@@ -566,24 +573,30 @@ function tick() {
     if (fpsEMA < 42 && pixelRatio > .55) {
       pixelRatio = Math.max(.42, pixelRatio - .2);
       renderer.setPixelRatio(pixelRatio);
-      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight); }
+      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight);
+        if (pipe && pipe.gtao) pipe.gtao.dirty = true; }   // RTs realloc'd — rebuild AO, never composite stale
     } else if (fpsEMA > 57 && pixelRatio < MAX_RATIO) {
       pixelRatio = Math.min(MAX_RATIO, pixelRatio + .25);
       renderer.setPixelRatio(pixelRatio);
-      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight); }
+      if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight);
+        if (pipe && pipe.gtao) pipe.gtao.dirty = true; }   // RTs realloc'd — rebuild AO, never composite stale
     }
   }
   if (++frames === 40) {
-    window.__ready = true;
     __fx.tex = texReport();
     const lo = document.getElementById('loading');
-    if (lo) { lo.style.opacity = '0'; setTimeout(() => lo.remove(), 700); }
+    // gate __ready on the veil actually being gone — a mid-fade capture
+    // reads as a transient dark frame
+    if (lo) { lo.style.opacity = '0';
+      setTimeout(() => { lo.remove(); window.__ready = true; }, 700); }
+    else window.__ready = true;
   }
 }
 tick();
 addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
-  composer && composer.setSize(innerWidth, innerHeight);
+  if (composer) { composer.setSize(innerWidth, innerHeight);
+    if (pipe && pipe.gtao) pipe.gtao.dirty = true; }
   if (camera.isPerspectiveCamera) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 });
 window.__cam = camera; window.__scene = scene; window.__renderer = renderer;
