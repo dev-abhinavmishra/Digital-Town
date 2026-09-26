@@ -95,6 +95,19 @@ export function cumulusTexture(variant = 0) {
   t.addColorStop(0, 'rgba(255,255,255,.35)');
   t.addColorStop(.5, 'rgba(255,255,255,0)');
   x.fillStyle = t; x.fillRect(0, 0, W, H);
+  // edge vignette — alpha must reach 0 inside ~92% of the canvas or the
+  // billboard clips into an axis-aligned rectangle at low camera angles
+  x.globalCompositeOperation = 'destination-in';
+  x.save();
+  x.translate(W / 2, H / 2);
+  x.scale(1, .5);                           // rx 92%*W/2, ry 92%*H/2
+  const vg = x.createRadialGradient(0, 0, W * .3, 0, 0, W * .46);
+  vg.addColorStop(0, 'rgba(0,0,0,1)');
+  vg.addColorStop(.78, 'rgba(0,0,0,1)');
+  vg.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = vg;
+  x.beginPath(); x.arc(0, 0, W * .46, 0, 7); x.fill();
+  x.restore();
   x.globalCompositeOperation = 'source-over';
   return canvasTex(c);
 }
@@ -117,7 +130,7 @@ function radialTex(size, inner, outer, stops) {
    Materials with fog:false (clouds, pools, halos) skip these chunks entirely —
    the guard clause is automatic. */
 const FOGP = {
-  day:    { hazeH: 95,  hazeK: .00045, hazeW: .30, airLo: 240, airHi: 1500,
+  day:    { hazeH: 95,  hazeK: .00045, hazeW: .20, airLo: 300, airHi: 1500,
             tint: '0.788,0.847,0.902', desat: .22 },
   golden: { hazeH: 110, hazeK: .00055, hazeW: .34, airLo: 200, airHi: 1400,
             tint: '0.914,0.769,0.608', desat: .15 },
@@ -180,7 +193,7 @@ export function patchFog(TIME) {
 export function upgradeClouds(scene, TIME) {
   const variants = [0, 1, 2, 3].map(v => cumulusTexture(v));
   const tint = TIME === 'golden' ? '#e8b489' : TIME === 'dusk' ? '#5e5578' : '#ffffff';
-  const opMul = TIME === 'golden' ? .72 : TIME === 'dusk' ? .14 : 1;
+  const opMul = TIME === 'golden' ? .66 : TIME === 'dusk' ? .14 : .88;
   const scMul = TIME === 'dusk' ? 1.05 : 1.9;  // dusk: dark masses read huge — keep near stock size
   let sprites = 0, vi = 0;
   scene.traverse(o => {
@@ -196,7 +209,7 @@ export function upgradeClouds(scene, TIME) {
     o.scale.x *= scMul; o.scale.y *= scMul * .71;  // formation scale, wide silhouette
     sprites++;
     const kids = TIME === 'dusk' ? 1 + (sprites % 2)
-                                 : 2 + (sprites % 3);   // 1-2 dusk / 2-4 day
+                                 : sprites % 3;         // 0-2 day/golden — broken cumulus, not overcast
     for (let i = 0; i < kids; i++) {
       const cm = new THREE.SpriteMaterial({
         map: variants[Math.floor(R() * variants.length)],
