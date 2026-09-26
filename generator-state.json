@@ -1,37 +1,21 @@
 {
   "agent": "generator-render-a",
-  "sprint": "sprint-01",
+  "sprint": "sprint-02",
   "stream": "RENDER",
-  "updated": "2026-09-25T09:25Z",
-  "checkpoint": "6484b05 (baseline commit; tree verified clean — checkpoint IS baseline)",
+  "updated": "2026-09-26T10:20Z",
+  "checkpoint": "f1cd21c (sprint-01 final; tree verified clean)",
   "log": [
     {
-      "t": "2026-09-25T09:00Z",
-      "ev": "boot; read role docs, spec, rubric, sprint; verified baseline 6484b05 clean"
+      "t": "2026-09-26T10:20Z",
+      "ev": "sprint-02 GO (Atmosphere & Depth): sky/clouds v2, height+distance fog + aerial perspective, per-time grading, dusk night-look (lit windows + streetlight pools); carry-forwards: AO foliage ghost watch, green reshoot on healthy network"
     },
     {
-      "t": "2026-09-25T09:00Z",
-      "ev": "recon: three@0.160.0 ships GTAOPass/SSAOPass/SMAAPass/TAARenderPass; tex/ has 2K PBR sets + sky_day_2k.hdr + sky_gold_2k.hdr local; composer currently LDR RT + bloom + grade + SMAA; shadows PCF 2048 adaptive box; facades are canvas-painted {map,bump,emis} via lib.js consumed through buildings.js wallMats(); material upgrade path chosen: additive maps + post-build material-upgrade pass in main.js (mirrors userData.lit mechanism) so no B-file changes required"
+      "t": "2026-09-26T10:20Z",
+      "ev": "recon: clouds are details.js sprites animated by B's tickWorld - plan is render-side billboard upgrade (new texture/material on existing sprite objects, zero B-file edits); lamps are lampIM InstancedMesh from buildLights, emissive-toggled at dusk already - light pools derivable from instanceMatrix positions; FogExp2 already per-time, needs height-fog + aerial perspective via ShaderChunk patch or post pass"
     },
     {
-      "t": "2026-09-25T09:05Z",
-      "ev": "found tex/ files are all 1024px (not 2K as assumed); contract amended: selective 2K diffuse upgrade for grass/asphalt/paving/concrete/plaster/brick via dl.polyhaven.org (pattern confirmed in ../tex/a2.json), vendored locally, 1K fallback kept"
-    },
-    {
-      "t": "2026-09-25T09:10Z",
-      "ev": "research: GTAOPass r160 needs RenderPass before it (blends denoised AO over readBuffer); renders own normal+depth G-buffer; setSceneClipBox required to bound depth range (town ~1700m vs far 12000); blendIntensity knob; composer MSAA samples auto-resolve so readBuffer stays sampleable"
-    },
-    {
-      "t": "2026-09-25T09:10Z",
-      "ev": "contract v1 (+2K texture amendment) sent to Evaluator with expectReply — awaiting counter (exchange 1/4)"
-    },
-    {
-      "t": "2026-09-25T09:15Z",
-      "ev": "committed my pre-edit checkpoint 09e9467 (state log only)"
-    },
-    {
-      "t": "2026-09-25T09:25Z",
-      "ev": "evaluator pushback (8 pts) all accepted: C0 git ancestry, C8 bloom sanity+probe, C4 multi-view+golden, envSrc/envIntensity probes, C3 A/B conditions explicit, C7 dusk+120 frames, C10 colorSpace+per-surface __fx.tex, __fx.mats floors; endorsed B ?cam/__setCam -> C11; contract v2 sent (exchange 2/4), awaiting verdict"
+      "t": "2026-09-26T10:20Z",
+      "ev": "committed sprint-02 pre-edit checkpoint (this state log only)"
     }
   ],
   "caps": {
@@ -40,7 +24,7 @@
     "restarts": 2
   },
   "used": {
-    "contractExchanges": 2,
+    "contractExchanges": 0,
     "evalRounds": 0,
     "restarts": 0
   }
