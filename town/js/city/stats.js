@@ -8,6 +8,8 @@ export const CITY = {
               arrows: 0, twltlArrows: 0 },
   drains: 0, manholes: 0,
   parcels: [],
+  // ground-detail pass (city/ground.js): counts of placed cover per layer
+  ground: { overlays: 0, paths: 0, litter: 0, mulch: 0, flowers: 0, stains: 0 },
   // sprint-03 landmark registry — every leaf carries {placed, parts, pos}.
   // pos = [x,z] for singletons, [[x,z],...] for multi-site keys.
   hero: {},
