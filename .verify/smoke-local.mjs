@@ -141,7 +141,9 @@ console.log(`tris base=${t0} +ground=${added} total=${total}`);
 if (!ground || !Object.values(ground).some(v => v > 0)) {
   fails++; console.log('FAIL CITY.ground empty');
 }
-if (added > 120000) { fails++; console.log('FAIL ground tris over 120k'); }
+// grass-blade spec: 30-60k instances x 4-8 tris -> grass layer alone may
+// reach ~480k tris; guard the total against the 1.9M scene cap instead
+if (added > 480000) { fails++; console.log('FAIL ground tris over 480k'); }
 if (total > 1900000) { fails++; console.log('FAIL total tris over 1.9M'); }
 console.log(fails ? `${fails} FAILS` : 'SMOKE GREEN');
 process.exitCode = fails ? 1 : 0;

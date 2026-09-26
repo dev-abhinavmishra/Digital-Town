@@ -1,13 +1,15 @@
 // city/ground.js — ground-cover / surface-breakup pass for the flat lawns:
-// per-parcel mottle & mowing-stripe overlays, dirt desire paths, leaf litter,
-// mulch/pebble beds at foundations & tree bases, wildflower specks, and
-// parking-lot stain decals. Everything lands as translucent decal planes
-// merged through GeoBin (one mesh per material) or alpha-tested instanced
-// quads — a handful of materials/draw calls, well under the tri budget.
+// per-parcel mottle & mowing-stripe overlays, a dense instanced grass-blade
+// layer, dirt desire paths, leaf litter, mulch/pebble beds at foundations &
+// tree bases, wildflower specks, and parking-lot stain decals. Everything
+// lands as translucent decal planes merged through GeoBin (one mesh per
+// material) or alpha-tested instanced cards — a handful of materials/draw
+// calls, well under the tri budget.
 // Runs after every other builder so placement checks see full occupancy.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ROADS, LOTS, BUILDINGS, APARTMENTS, GREENS, PARK_ZONE,
-         GREEN_BELT, SE_GREEN, HOUSE_BLOCKS } from '../layout.js';
+         GREEN_BELT, SE_GREEN, HOUSE_BLOCKS, PLAZA } from '../layout.js';
 import { makeCanvas, canvasTex, instances, R, rr, pick } from '../lib.js';
 import { GeoBin } from './geo.js';
 import { isFree, streetBand } from './occ.js';
@@ -106,6 +108,27 @@ function stainCanvas() {
   }
   return c;
 }
+/* grass tuft: ~14 tapered blades leaning different ways, darkest at the
+   root; alpha-tested so card edges never halo */
+function bladeCanvas() {
+  const [c, x] = makeCanvas(64, 64);
+  x.clearRect(0, 0, 64, 64);
+  for (let i = 0; i < 15; i++) {
+    const bx = 4 + R() * 56, h = 24 + R() * 36, lean = rr(-11, 11),
+          w = 1.7 + R() * 2.2;
+    const gr = x.createLinearGradient(0, 64, 0, 64 - h);
+    gr.addColorStop(0, 'rgba(48,74,32,.96)');
+    gr.addColorStop(1, `rgba(${pick(['150,178,92', '118,150,74',
+                                     '168,188,104', '104,132,62'])},.96)`);
+    x.fillStyle = gr;
+    x.beginPath();
+    x.moveTo(bx - w * .5, 64);
+    x.quadraticCurveTo(bx + lean * .3 - w * .3, 64 - h * .55, bx + lean, 64 - h);
+    x.quadraticCurveTo(bx + lean * .3 + w * .3, 64 - h * .5, bx + w * .5, 64);
+    x.fill();
+  }
+  return c;
+}
 /* trampled-dirt smudge — chained into desire-path ribbons */
 function dirtCanvas() {
   const [c, x] = makeCanvas(64, 64);
@@ -124,7 +147,7 @@ function dirtCanvas() {
 /* ---------------- builder ---------------- */
 export function buildGroundDetail(scene) {
   const G = CITY.ground ||= { overlays: 0, paths: 0, litter: 0,
-                              mulch: 0, flowers: 0, stains: 0 };
+                              mulch: 0, flowers: 0, stains: 0, grass: 0 };
   const bin = new GeoBin();
 
   /* ---- 1. per-parcel mottle / mowing-stripe overlays ----
@@ -357,6 +380,91 @@ export function buildGroundDetail(scene) {
       }
     }
   }
+
+  /* ---- 7. instanced grass-blade layer ----
+     three crossed alpha-tested cards per tuft (6 tris); per-instance hue /
+     lightness jitter via instanceColor, random yaw + lean + non-uniform
+     scale. Density is spent where the camera presets look: Main St verges
+     (mainstreet view), the plaza fringe (downtown view), Willow Creek park.
+     The minor-road verge strip sits inside the road's own occupancy pad, so
+     those probes exempt just that road; everything else still vetoes. */
+  const bladeM = new THREE.MeshBasicMaterial({ map: canvasTex(bladeCanvas()),
+    alphaTest: .5, side: THREE.DoubleSide });
+  const card = new THREE.PlaneGeometry(1.3, .62); card.translate(0, .31, 0);
+  const bladeGeo = mergeGeometries([card, card.clone().rotateY(Math.PI / 3),
+    card.clone().rotateY(Math.PI * 2 / 3)], false);
+  const tufts = [];
+  const tuftCols = ['#ffffff', '#e6f0c6', '#cfe0a2', '#b6cf8c', '#d8e6b0',
+                    '#9fbd7a'];
+  const tuft = (x, y, z) => tufts.push({ x, y, z,
+    ry: rr(0, 6.28), rx: rr(-.1, .1), rz: rr(-.13, .13),
+    sx: rr(.8, 1.55), sy: rr(.7, 1.8), sz: rr(.8, 1.55),
+    color: pick(tuftCols) });
+  const sowGrass = (x0, x1, z0, z1, n, y, r = .6, skip = null) => {
+    for (let i = 0; i < n; i++) {
+      const x = rr(x0, x1), z = rr(z0, z1);
+      if (isFree(x, z, r, skip)) tuft(x, y, z);
+    }
+  };
+  // road edges — arterials have no verge (walk runs to the curb), so the
+  // tufts go on the tree lawn past the sidewalk; minors get the real verge
+  // strip plus the frontage lawn beyond the walk
+  for (const r of ROADS) {
+    const hw = r.w / 2, main = r.name === 'Main St';
+    const passes = main ? 2 : 1;
+    for (let pass = 0; pass < passes; pass++)
+      for (let a = r.a0 + 4 + pass * 1.1; a < r.a1 - 4; a += rr(1.6, 2.6))
+        for (const s of [-1, 1]) {
+          // inner verge strip (minor roads only) — inside the pad → skip=r
+          if (!r.arterial && r.w < 16 && R() < .5) {
+            const off = hw + rr(.5, 1.6);
+            const x = r.axis === 'v' ? r.c + off * s : a,
+                  z = r.axis === 'v' ? a : r.c + off * s;
+            if (isFree(x, z, .55, [r])) tuft(x, Y + .014, z);
+          }
+          // tree-lawn band outside the sidewalk
+          const p = main ? .78 : r.arterial || r.w >= 16 ? .6 : .42;
+          if (R() < p) {
+            const off = hw + rr(3.7, 6.6);
+            const x = r.axis === 'v' ? r.c + off * s : a,
+                  z = r.axis === 'v' ? a : r.c + off * s;
+            if (isFree(x, z, .7)) tuft(x, .02, z);
+          }
+        }
+  }
+  // plaza fringe — planted ring just outside the paved slab
+  for (const [x0, z0, x1, z1] of [
+      [PLAZA.x - PLAZA.w / 2 - 4.5, PLAZA.z - PLAZA.d / 2 - 4.5,
+       PLAZA.x + PLAZA.w / 2 + 4.5, PLAZA.z - PLAZA.d / 2 - 1.5],
+      [PLAZA.x - PLAZA.w / 2 - 4.5, PLAZA.z + PLAZA.d / 2 + 1.5,
+       PLAZA.x + PLAZA.w / 2 + 4.5, PLAZA.z + PLAZA.d / 2 + 4.5]])
+    sowGrass(x0, x1, z0, z1, Math.floor((x1 - x0) * (z1 - z0) / 6), .02, .7);
+  // big lawn bodies — Willow Creek park (park view), green parcels,
+  // residential block interiors, green belts
+  sowGrass(PARK_ZONE.x0 + 4, PARK_ZONE.x1 - 4, PARK_ZONE.z0 + 4,
+           PARK_ZONE.z1 - 4, Math.floor(
+    (PARK_ZONE.x1 - PARK_ZONE.x0) * (PARK_ZONE.z1 - PARK_ZONE.z0) / 14),
+    .247);
+  for (const g of GREENS)
+    sowGrass(g.x0 + 2, g.x1 - 2, g.z0 + 2, g.z1 - 2,
+      Math.floor((g.x1 - g.x0) * (g.z1 - g.z0) / 8), Y - .005, .6, 'green');
+  for (const b of HOUSE_BLOCKS)
+    sowGrass(b.x0 + 3, b.x1 - 3, b.z0 + 3, b.z1 - 3,
+      Math.floor((b.x1 - b.x0) * (b.z1 - b.z0) / 26), .02, .7);
+  sowGrass(SE_GREEN.x0 + 4, SE_GREEN.x1 - 4, SE_GREEN.z0 + 4, SE_GREEN.z1 - 4,
+           Math.floor((SE_GREEN.x1 - SE_GREEN.x0) *
+                      (SE_GREEN.z1 - SE_GREEN.z0) / 34), .02);
+  sowGrass(GREEN_BELT.x0 + 4, GREEN_BELT.x1 - 4, GREEN_BELT.z0 + 4,
+           GREEN_BELT.z1 - 4, Math.floor(
+    (GREEN_BELT.x1 - GREEN_BELT.x0) * (GREEN_BELT.z1 - GREEN_BELT.z0) / 46),
+    .02);
+  // district lawns the two aerial views land on — med campus + senior side
+  sowGrass(-700, -330, -720, -390, 4200, .02);   // med campus lawn body
+  sowGrass(340, 800, -700, -350, 4600, .02);     // senior district lawn
+  const grassIM = instances(bladeGeo, bladeM, tufts, { shadow: false });
+  grassIM.frustumCulled = false;
+  scene.add(grassIM);
+  G.grass = tufts.length;
 
   bin.build(scene);
 }
