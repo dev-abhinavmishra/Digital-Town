@@ -642,24 +642,33 @@ export function skyTexture({ mode = 'day', sunAz = 0, sunEl = .6 } = {}) {
 
   // painterly clouds — puffy blobs clustered in horizontal bands
   const puff = (cx, cy, s, alpha) => {
-    for (let i = 0; i < 14; i++) {
-      const px = cx + (R() - .5) * s * 3.2, py = cy + (R() - .5) * s * .8;
-      const pr = s * (.25 + R() * .4);
-      const grd = x.createRadialGradient(px, py - pr * .3, 0, px, py, pr);
-      grd.addColorStop(0, pal.cloudTop); grd.addColorStop(.75, pal.cloud);
-      grd.addColorStop(1, 'rgba(255,255,255,0)');
-      x.globalAlpha = alpha * (.5 + R() * .5);
-      x.fillStyle = grd;
-      // wrap horizontally for seamless equirect
-      for (const ox of [-W, 0, W]) { x.beginPath(); x.arc(px + ox, py, pr, 0, 7); x.fill(); }
+    // elongated banks: horizontal ellipses only. Round blobs projected through
+    // the equirect read as a honeycomb of rings (worst at dusk); stretched
+    // smudges read as distant cloud banks
+    const n = 5 + Math.floor(R() * 4);
+    for (let i = 0; i < n; i++) {
+      const px = cx + (R() - .5) * s * 5.2, py = cy + (R() - .5) * s * .5;
+      const pr = s * (.5 + R() * .6);
+      x.globalAlpha = alpha * (.4 + R() * .4);
+      for (const ox of [-W, 0, W]) {
+        x.save();
+        x.translate(px + ox, py);
+        x.scale(3.1, .52);
+        const grd = x.createRadialGradient(0, -pr * .15, 0, 0, 0, pr);
+        grd.addColorStop(0, pal.cloudTop); grd.addColorStop(.7, pal.cloud);
+        grd.addColorStop(1, 'rgba(255,255,255,0)');
+        x.fillStyle = grd;
+        x.beginPath(); x.arc(0, 0, pr, 0, 7); x.fill();
+        x.restore();
+      }
     }
     x.globalAlpha = 1;
   };
-  const nCl = mode === 'dusk' ? 22 : 30;
+  const nCl = mode === 'dusk' ? 11 : 16;
   for (let i = 0; i < nCl; i++) {
     const cy = H * (.08 + R() * .4);
     const s = 30 + R() * 80;
-    puff(R() * W, cy, s, mode === 'day' ? .8 : .65);
+    puff(R() * W, cy, s, mode === 'day' ? .55 : .45);
   }
   // high cirrus streaks
   x.globalAlpha = .3;

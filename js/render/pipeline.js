@@ -92,8 +92,10 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
     composer.addPass(gtao);
   }
 
+  // dusk drops the threshold so lit windows + lamps actually bloom (C6)
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 4, size.y / 4),
-    time === 'golden' ? .22 : .12, .5, 1.02);
+    time === 'golden' ? .22 : time === 'dusk' ? .30 : .12, .5,
+    time === 'dusk' ? .85 : 1.02);
   if (!skip || !skip.has('bloom')) composer.addPass(bloom);
 
   // tiny tiling noise texture for film grain — a texture fetch is far cheaper
@@ -109,15 +111,25 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
   noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping;
 
   // cinematic grade: vignette + grain + slight teal-shadow/warm-highlight + saturation
+  // per-time grade presets — day neutral / golden warm-lifted shadows /
+  // dusk cool split-tone. All stay pre-tonemap HDR-safe: shadow tinting is
+  // multiplicative below mid so it never folds like the old S-curve did.
+  const GRADE = {
+    day:    { warm: .025, sat: 1.07, vig: .28, shTint: [1, 1, 1], shStr: 0 },
+    golden: { warm: .07,  sat: 1.12, vig: .30, shTint: [1.10, .97, .85], shStr: .45 },
+    dusk:   { warm: .09,  sat: .95,  vig: .34, shTint: [.80, .87, 1.10], shStr: .55 },
+  }[time] || { warm: .025, sat: 1.07, vig: .28, shTint: [1, 1, 1], shStr: 0 };
   const grade = new ShaderPass({
     uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uNoise: { value: noiseTex },
-      uVig: { value: .28 }, uGrain: { value: .013 },
-      uWarm: { value: time === 'golden' ? .07 : time === 'dusk' ? .09 : .025 },
-      uSat: { value: time === 'golden' ? 1.12 : 1.07 } },
+      uVig: { value: GRADE.vig }, uGrain: { value: .013 },
+      uWarm: { value: GRADE.warm }, uSat: { value: GRADE.sat },
+      uShTint: { value: new THREE.Vector3(...GRADE.shTint) },
+      uShStr: { value: GRADE.shStr } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv;
       gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D uNoise;
-      uniform float uTime,uVig,uGrain,uWarm,uSat;
+      uniform float uTime,uVig,uGrain,uWarm,uSat,uShStr;
+      uniform vec3 uShTint;
       varying vec2 vUv;
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
@@ -132,6 +144,9 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
         float l = dot(c.rgb, vec3(.299,.587,.114));
         c.rgb = mix(vec3(l), c.rgb, uSat);
         c.rgb += uWarm * vec3(l - .5) * vec3(1.0,.7,.35);
+        // shadow split-tone — multiplicative only below mid, HDR-safe
+        float shM = smoothstep(.5, .0, l);
+        c.rgb = mix(c.rgb, c.rgb * uShTint, shM * uShStr);
         c.rgb = max(c.rgb, vec3(0.0));
         // vignette
         float d = distance(vUv, vec2(.5));

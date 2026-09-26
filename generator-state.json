@@ -16,6 +16,14 @@
     {
       "t": "2026-09-26T10:20Z",
       "ev": "committed sprint-02 pre-edit checkpoint (this state log only)"
+    },
+    {
+      "t": "2026-09-26T11:45Z",
+      "ev": "s02 build done: atmo.js (cumulus billboards x4 variants + child puffs, ShaderChunk fog patch height-haze+aerial, lamp pools/halos w/ lampIM-empty fallback synthesized from ROADS), pipeline dusk grade/bloom presets, main.js wiring + ?noatmo/?nofog + __fx.atmo. Verified live: aerial clouds+fog good, dusk pools=222+lit windows+bloom .85; dusk clouds too dominant - softened (sc 1.05, op .26, tint #716880). lampIM.count===0 found: B occupancy rework zeroes all lamp poles (isFree swallows streetPad band) - pools synth from ROADS instead."
+    },
+    {
+      "t": "2026-09-26T11:45Z",
+      "ev": "ERR_NETWORK_CHANGED flap persisting - eval verification slow, watchdog cycling loads"
     }
   ],
   "caps": {

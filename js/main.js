@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { createPipeline } from './render/pipeline.js';
 import { loadEnvironment } from './render/env.js';
+import { installAtmo } from './render/atmo.js';
 import { TOWN, BUILDINGS, APARTMENTS, HOUSE_BLOCKS, COTTAGE_ROWS, PLAZA,
          CATEGORY_COLORS, FILLER, ROADS } from './layout.js';
 import { makeBuilding } from './buildings.js';
@@ -20,6 +21,8 @@ const TIME = params.get('time') || 'day';
 const LABELS = params.get('labels') === '1';
 const NOFX = params.get('nofx') === '1';
 const NOAO = params.get('noao') === '1';
+const NOATMO = params.get('noatmo') === '1';  // master: fog patch + clouds + lamp glows
+const NOFOG = params.get('nofog') === '1';   // granular: fog patch only
 const DEBUG = params.get('debug') === '1';
 const FPSDBG = params.get('fps') === '1';
 const CAMP = params.get('cam');   // ?cam=px,py,pz,tx,ty,tz — deterministic eval camera
@@ -177,9 +180,14 @@ buildFences(scene);
 buildCountryside(scene);
 buildMountains(scene);
 if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
-// cloud sprites use unlit SpriteMaterial — pure-white puffs on a dark
-// golden/dusk sky read as glowing orbs; pull them into the sky palette
-if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
+// sprint-02 atmo module: cumulus billboards, height-haze + aerial fog patch,
+// dusk lamp pools/halos — all render-side over B's objects (js/render/atmo.js)
+let atmoInfo = null;
+if (VIEW !== 'map' && !NOATMO)
+  atmoInfo = installAtmo(scene, { lampIM, TIME, fogPatch: !NOFOG });
+// ?noatmo fallback — sprint-01 behaviour: tint the unlit orb sprites into the
+// sky palette (kept for evaluator A/B pairs)
+else if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
   if (!o.isSprite) return;
   o.material.color.set(TIME === 'golden' ? '#d8a37e' : '#6e5a74');
   o.material.opacity *= TIME === 'golden' ? .78 : .65;
@@ -436,6 +444,16 @@ const __fx = {
   bloom: pipe ? { threshold: pipe.bloom.threshold, strength: pipe.bloom.strength,
                   radius: pipe.bloom.radius } : null,
   envType: envInfo.envType, envSrc: envInfo.envSrc, envIntensity: envInfo.envIntensity,
+  atmo: {
+    enabled: !NOATMO && VIEW !== 'map',
+    noatmo: NOATMO, nofog: NOFOG,
+    fog: atmoInfo ? atmoInfo.fog : { type: 'exp2-stock' },
+    fogDensity: scene.fog ? scene.fog.density : 0,
+    clouds: atmoInfo ? atmoInfo.clouds : null,
+    grade: TIME,
+    lampPools: atmoInfo ? atmoInfo.lampPools : 0,
+    lampHalos: atmoInfo ? atmoInfo.lampHalos : 0,
+  },
   tex: {}, mats: matStats,
   calls: 0, tris: 0, fps: 0,
 };
