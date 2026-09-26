@@ -15,6 +15,7 @@ import { buildStreetscape, intersections } from './city/streetscape.js';
 import { buildGreens } from './city/greens.js';
 import { buildYards } from './city/yards.js';
 import { publishCity } from './city/stats.js';
+import { buildHero } from './city/hero.js';
 export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
 const ASPH = pbr('asphalt_02');          // tile via plane(..., tile)
@@ -264,7 +265,7 @@ export function buildTrees(scene) {
       archetypes: [oak, maple, birch, con, pine, sakura, elm, poplar, willow, dogwood]
         .filter(l => l.length).map(l => l[0].t),
       total: spots.length,
-      districts: DISTRICT_TREES.map(d => d.name),
+      districts: DISTRICT_TREES.map(d => ({ name: d.name, mix: Object.fromEntries(d.mix) })),
     };
   }
 
@@ -574,6 +575,8 @@ export function buildLights(scene) {
   const poleIM = instances(poleGeo, poleM, poles);
   const lampIM = instances(lampGeo, lampM, lamps);
   scene.add(poleIM, lampIM);
+  buildHero(scene);   // sprint-03 landmarks — runs after ALL occupancy is in,
+                      // before trees/cars/people so our occupyRects hold ground
   return lampIM;
 }
 

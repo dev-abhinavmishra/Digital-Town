@@ -5,8 +5,16 @@ import { box, cyl, plane, gableRoof, hipRoof, mat, facadeMaps, glassFacadeMaps,
          signTexture, crossTexture, clockTexture, colored, VCOL, flagMaterial,
          R, rr, pick } from './lib.js';
 import { M_CONCRETE, M_ROOFGRAY, M_ROOFCLAY } from './mats.js';
+import { CITY, heroLeaf, heroCrown } from './city/stats.js';
 
 const M = THREE.MeshStandardMaterial;
+
+/* sprint-03 entrance registry — each named facility that gains a real
+   entrance kit appends one {placed,parts,pos} site under hero.entrances. */
+function heroEntrance(s, parts) {
+  const e = (CITY.hero.entrances ||= { placed: 0, parts: 0, pos: [] });
+  e.placed++; e.parts += parts; e.pos.push([s.x, s.z]);
+}
 
 /* facade material set for a box: [px, nx, top, bottom, pz, nz]
    Wall materials are cached per texture so identical facades share one
@@ -304,6 +312,33 @@ function hospital(s) {
     g.add(cyl(.12, .12, .25, mat('#ffd23e', { emissive: '#ffd23e', emissiveIntensity: .8 }),
       w * .32 + Math.cos(a) * 6.2, 12.5, -d * .28 + Math.sin(a) * 6.2, 6));
   }
+  /* sprint-03 hero kit (contract A1) — helipad detail + ER drop-off */
+  let _hp = g.children.length;
+  const hring = new THREE.Mesh(new THREE.TorusGeometry(8.2, .14, 6, 48), mat('#d4b23a'));
+  hring.rotation.x = Math.PI / 2; hring.position.set(w * .32, 12.58, -d * .28);
+  hring.castShadow = true; g.add(hring);
+  for (const [bx, bz] of [[6.2, 6.2], [-6.2, 6.2], [6.2, -6.2], [-6.2, -6.2]])
+    g.add(box(1.7, .14, .45, mat('#ffd23e'), w * .32 + bx, 12.5, -d * .28 + bz));
+  // windsock — uTime-animated cloth (declared animation path; freezes at rest
+  // because tickWorld pins uTime=0 under ?freeze=1). No new clock.
+  g.add(cyl(.07, .09, 4.6, mat('#7d868c'), w * .32 + 8.8, 12, -d * .28 + 6.6, 8));
+  const sock = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 1.05, 12, 4), flagMaterial('#e8762c'));
+  sock.position.set(w * .32 + 8.8 + 1.45, 16.2, -d * .28 + 6.6);
+  sock.castShadow = true; sock.userData.dynamic = true; g.add(sock);
+  heroLeaf('hospital', 'helipadKit', g.children.length - _hp, [s.x + w * .32, s.z - d * .28]);
+  // ER drop-off: forecourt paving + bollard row + canopy fascia + door planters
+  _hp = g.children.length;
+  const fc = new THREE.Mesh(new THREE.PlaneGeometry(34, 12), mat('#8f897d', { roughness: .98 }));
+  fc.rotation.x = -Math.PI / 2; fc.position.set(-w * .3, .36, d / 2 + 7); fc.receiveShadow = true;
+  g.add(fc);
+  for (let i = 0; i < 7; i++)
+    g.add(cyl(.16, .16, 1.05, mat('#3a4a55'), -w * .3 - 13.5 + i * 4.5, .28, d / 2 + 12.6, 8));
+  sign(g, 'AMBULANCE  DROP-OFF', 15, 4.6, d / 2 + 15.6, { bg: '#b03a2e', font: 'bold 42px Arial' });
+  for (const px of [-w * .42 - 3, -w * .42 + 16.5]) {
+    g.add(cyl(.55, .65, .75, mat('#6a5138'), px, .28, d / 2 + 1.4, 10));
+    g.add(cyl(.45, .34, .95, mat('#3f6b3a'), px, 1.03, d / 2 + 1.4, 8));
+  }
+  heroLeaf('hospital', 'dropoff', g.children.length - _hp, [s.x - w * .3, s.z + d / 2 + 8]);
   return g;
 }
 
@@ -379,6 +414,17 @@ function medoffice(s, opts = {}) {
   facadeDress(g, w, d, s.h, { pilasters: R() < .5, courses: s.h > 12 });
   door(g, 5, 4.2, 0, d / 2 + .2);
   awning(g, w * .8, 0, 4.6, d / 2 + 1.2, opts.awn || '#41618a');
+  // sprint-03 entrance dress: awning posts + step + flanking planters (named offices only)
+  if (s.num) {
+    const _mo = g.children.length;
+    for (const px of [-w * .32, w * .32]) g.add(cyl(.18, .18, 4.4, mat('#d9d2c0'), px, 0, d / 2 + 1.5));
+    g.add(box(6.5, .35, 2.7, mat('#9a927c'), 0, 0, d / 2 + 1.5));
+    for (const px of [-w * .42, w * .42]) {
+      g.add(cyl(.5, .6, .7, mat('#6a5138'), px, 0, d / 2 + 1.2, 10));
+      g.add(cyl(.42, .34, .9, mat('#3f6b3a'), px, .7, d / 2 + 1.2, 8));
+    }
+    heroEntrance(s, g.children.length - _mo);
+  }
   return g;
 }
 
@@ -538,6 +584,13 @@ function bigbox(s, brand) {
     awning(g, w * .4, 0, 5.4, d / 2 + 1.4, '#2e6b46', false);
   }
   door(g, 10, 5.4, 0, d / 2 + .3);
+  // sprint-03 entrance: canopy + branded fascia + posts over the doors
+  const _be = g.children.length;
+  const bc2 = s.brand === 'target' ? '#cc0000' : '#2e6b46';
+  g.add(box(w * .36, .55, 5, mat('#3f4750'), 0, 6.3, d / 2 + 2.4));
+  g.add(box(w * .36 + .5, .25, 5.6, mat(bc2), 0, 6.85, d / 2 + 2.4));
+  for (const px of [-w * .15, w * .15]) g.add(cyl(.3, .3, 6.3, mat('#8a9094'), px, 0, d / 2 + 4.4));
+  heroEntrance(s, g.children.length - _be);
   // loading dock at back
   g.add(box(16, 1.4, 6, mat('#6d7276'), -w / 4, 0, -d / 2 - 3));
   g.add(box(5, 3.4, .4, mat('#8a9094'), -w / 4, 1.4, -d / 2 - .1));
@@ -570,6 +623,21 @@ function mall(s) {
   // entry columns + planters
   for (const px of [-14, -5, 5, 14])
     g.add(cyl(.5, .5, 7, mat('#d9d2c0'), px, 0, -d / 2 - 13));
+  /* sprint-03 portal gesture (contract A4): twin entry pylons framing the
+     atrium + cantilevered drop-off canopy + marquee over the drive lane */
+  const _mp = g.children.length;
+  const pm = facadeMaps({ base: '#8a7358', rows: 5, cols: 2, brickLines: false, band: '#d9d2c0' });
+  for (const px of [-22, 22]) {
+    const py = box(7, s.h + 9, 7, null, px, 0, -d / 2 - 10);
+    py.material = wallMats(pm, flatRoofMat());
+    g.add(py);
+    g.add(box(7.8, .8, 7.8, mat('#4f4231'), px, s.h + 9, -d / 2 - 10));
+  }
+  g.add(box(48, .9, 10, mat('#4f4231'), 0, 6.9, -d / 2 - 21));
+  g.add(box(48.5, .3, 10.5, mat('#d9d2c0'), 0, 7.8, -d / 2 - 21));
+  for (const px of [-21, -7, 7, 21]) g.add(cyl(.42, .42, 6.9, mat('#8a7358'), px, 0, -d / 2 - 24.5));
+  sign(g, 'NORTH ENTRANCE', 34, 7.4, -d / 2 - 26.6, { bg: '#4f4231', font: 'bold 46px Arial' });
+  heroLeaf('mallPortal', null, g.children.length - _mp, [s.x, s.z - s.d / 2 - 21]);
   return g;
 }
 
@@ -589,6 +657,13 @@ function museum(s) {
   sign(g, 'DISCOVERY MUSEUM', w * .5, s.h - 3, d / 2 + .3, { bg: '#37474f', font: 'bold 38px Georgia' });
   // entry plaza steps
   g.add(box(16, .4, 4, mat('#b9b2a2'), w * .1, 0, d / 2 + 2));
+  // sprint-03 entrance: portico canopy + door + blade over the plaza steps
+  const _me = g.children.length;
+  for (const px of [-7.4, -2.5, 2.5, 7.4]) g.add(cyl(.26, .26, 5.2, mat('#c4cdd2'), w * .1 + px, .4, d / 2 + 4.2));
+  g.add(box(17.5, .5, 5.6, mat('#37474f'), w * .1, 5.6, d / 2 + 2.4));
+  sign(g, 'MUSEUM ENTRY', 11, 5.1, d / 2 + 5.4, { bg: '#37474f', font: 'bold 40px Arial' });
+  door(g, 7, 4.6, w * .1, d / 2 + .2);
+  heroEntrance(s, g.children.length - _me);
   return g;
 }
 
@@ -618,6 +693,13 @@ function school(s) {
   flag.position.set(w * .18 + 2.4, 10.6, -d * .26 + d * .2 + 4); flag.castShadow = true;
   flag.userData.dynamic = true;
   g.add(flag);
+  // sprint-03 entrance: canopy + colonnettes over the main door
+  const _se = g.children.length;
+  const ex = -w * .18, ez = -d * .26 + d * .2;
+  g.add(box(12, .45, 4.2, mat('#5a6570'), ex, 5.7, ez + 2.4));
+  for (const px of [-5, 5]) g.add(cyl(.28, .28, 5.7, mat('#e8dcc0'), ex + px, 0, ez + 3.9));
+  g.add(box(12.5, .2, 4.6, mat('#e8dcc0'), ex, 6.15, ez + 2.4));
+  heroEntrance(s, g.children.length - _se);
   door(g, 8, 5, -w * .18, -d * .26 + d * .2 + .2);
   return g;
 }
@@ -716,8 +798,23 @@ function tower(s) {
   }
   // mechanical penthouse + antenna + roof clutter
   g.add(box(ww * .6, 3, dd * .6, mat('#7a8288'), cx, y, cz));
-  clutter(g, ww, dd, y, { tank: true, skylights: false, solar: false });
-  if (R() < .6) g.add(cyl(.1, .14, rr(6, 12), mat('#555'), cx, y + 3, cz));
+  if (s.crown === 'deck') {
+    // sprint-03 rooftop aviation deck on the penthouse (contract A3)
+    const _tc = g.children.length;
+    const rr2 = Math.min(ww, dd) * .36;
+    const dkr = new THREE.Mesh(new THREE.TorusGeometry(rr2, .15, 6, 36), mat('#d4b23a'));
+    dkr.rotation.x = Math.PI / 2; dkr.position.set(cx, y + 3.15, cz); dkr.castShadow = true;
+    g.add(dkr);
+    const hdT = signTexture('H', { bg: '#4a5560', fg: '#ffd23e', w: 64, h: 64, font: 'bold 48px Arial', border: false });
+    const hd = new THREE.Mesh(new THREE.PlaneGeometry(rr2 * 1.15, rr2 * 1.15), new M({ map: hdT }));
+    hd.rotation.x = -Math.PI / 2; hd.position.set(cx, y + 3.08, cz); g.add(hd);
+    for (const sx of [-1, 1]) g.add(box(.12, .85, dd * .62, mat('#8a9094'), cx + sx * ww * .3, y + 3, cz));
+    g.add(cyl(.06, .1, 3.6, mat('#4a4e52'), cx + ww * .3, y + 3, cz + dd * .3));
+    heroCrown('deck', g.children.length - _tc, [s.x, s.z]);
+  } else {
+    clutter(g, ww, dd, y, { tank: true, skylights: false, solar: false });
+    if (R() < .6) g.add(cyl(.1, .14, rr(6, 12), mat('#555'), cx, y + 3, cz));
+  }
   // entrance canopy + lobby doors
   g.add(box(10, .5, 4, mat('#3a4a55'), cx, 4.4, cz + dd / 2 + 1.6));
   g.add(cyl(.2, .2, 4.4, mat('#666'), cx - 4, 0, cz + dd / 2 + 3));
@@ -945,15 +1042,56 @@ function skyscraper(s) {
   crownM.emissive = new THREE.Color('#58b6e8'); crownM.emissiveIntensity = 0;
   crownM.userData.lit = true;
   g.add(box(ww * 1.04, 2.4, dd * 1.04, crownM, 0, y, 0));
-  // penthouse + antenna mast + red beacon (lit at dusk)
-  g.add(box(ww * .55, 3.4, dd * .55, mat('#7d868c'), 0, y + 2.4, 0));
-  const mastH = rr(8, 14);
-  g.add(cyl(.07, .2, mastH, mat('#4a4e52'), 0, y + 5.8, 0));
+  /* sprint-03 crown variation (contract A3): s.crown pins the silhouette;
+     pick() fallback keeps unsigned towers distinct. Lit band + beacon stay. */
+  const profile = s.crown || pick(['spire', 'lantern', 'chamfer', 'deck']);
   const beaconM = new M({ color: '#442222', roughness: .5 });
   beaconM.emissive = new THREE.Color('#ff4444'); beaconM.emissiveIntensity = 0;
   beaconM.userData.lit = true;
   const beacon = new THREE.Mesh(new THREE.SphereGeometry(.55, 8, 6), beaconM);
-  beacon.position.set(0, y + 5.8 + mastH + .4, 0); g.add(beacon);
+  let beaconY = y + 6;
+  const _cr = g.children.length;
+  if (profile === 'spire') {
+    // stepped penthouse + articulated mast with crossarms — the skyline's peak
+    g.add(box(ww * .5, 2.6, dd * .5, mat('#7d868c'), 0, y + 2.4, 0));
+    const mh = rr(14, 18);
+    g.add(cyl(.14, .42, mh, mat('#4a4e52'), 0, y + 5, 0));
+    g.add(box(3.6, .13, .13, mat('#4a4e52'), 0, y + 5 + mh * .55, 0));
+    g.add(box(2.4, .11, .11, mat('#4a4e52'), 0, y + 5 + mh * .75, 0));
+    beaconY = y + 5 + mh + .3;
+  } else if (profile === 'lantern') {
+    // glowing glass lantern + corner fins — clean modern cap
+    const lm = new M({ color: '#3d5a68', roughness: .25, metalness: .35 });
+    lm.emissive = new THREE.Color('#58b6e8'); lm.emissiveIntensity = 0;
+    lm.userData.lit = true;
+    g.add(box(ww * .6, 4.8, dd * .6, lm, 0, y + 2.4, 0));
+    for (const [fx, fz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]])
+      g.add(box(.5, 5.6, .5, mat('#d9d2c0'), fx * ww * .34, y + 2.2, fz * dd * .34));
+    g.add(cyl(.06, .1, 5, mat('#4a4e52'), ww * .16, y + 7.2, dd * .16));
+    beaconY = y + 12.6;
+  } else if (profile === 'chamfer') {
+    // diagonal clipped cap — rotated slab + step-back + offset antenna
+    const cap = box(ww * 1.02, 1.7, dd * 1.02, mat('#5d6a72'), 0, y + 2.4, 0);
+    cap.rotation.y = Math.PI / 4; cap.scale.set(.78, 1, .78); g.add(cap);
+    g.add(box(ww * .7, 1.1, dd * .7, mat('#7d868c'), 0, y + 4.1, 0));
+    const chm = rr(5, 8);
+    g.add(cyl(.07, .14, chm, mat('#4a4e52'), -ww * .3, y + 5.2, 0));
+    beaconY = y + 5.2 + chm + .4;
+  } else { // 'deck' — rooftop aviation deck: ring + roundel + rails + low mast
+    const rr2 = Math.min(ww, dd) * .4;
+    g.add(box(ww * .8, .5, dd * .8, mat('#4a5560'), 0, y + 2.4, 0));
+    const dk = new THREE.Mesh(new THREE.TorusGeometry(rr2, .16, 6, 40), mat('#d4b23a'));
+    dk.rotation.x = Math.PI / 2; dk.position.set(0, y + 3.05, 0); dk.castShadow = true;
+    g.add(dk);
+    const hdT = signTexture('H', { bg: '#4a5560', fg: '#ffd23e', w: 64, h: 64, font: 'bold 48px Arial', border: false });
+    const hd = new THREE.Mesh(new THREE.PlaneGeometry(rr2 * 1.2, rr2 * 1.2), new M({ map: hdT }));
+    hd.rotation.x = -Math.PI / 2; hd.position.set(0, y + 2.98, 0); g.add(hd);
+    for (const sx of [-1, 1]) g.add(box(.12, .9, dd * .8, mat('#8a9094'), sx * ww * .4, y + 2.9, 0));
+    g.add(cyl(.06, .1, 4, mat('#4a4e52'), ww * .3, y + 2.9, dd * .3));
+    beaconY = y + 7.3;
+  }
+  beacon.position.set(0, beaconY, 0); g.add(beacon);
+  heroCrown(profile, g.children.length - _cr, [s.x, s.z]);
   // entrance
   g.add(box(11, .5, 4.4, mat('#3a4a55'), 0, 4.6, d / 2 + 1.8));
   g.add(cyl(.22, .22, 4.6, mat('#666'), -4.4, 0, d / 2 + 3.4));

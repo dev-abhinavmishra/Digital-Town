@@ -248,7 +248,7 @@ export const FILLER = [
   { type:'storefront', x:40,   z:-256, w:26, d:20, h:7, rot:Math.PI },
   { type:'storefront', x:82,   z:-256, w:24, d:20, h:7, rot:Math.PI },
   // downtown mid-rise towers — give the skyline real depth
-  { type:'tower', x:170, z:-148, w:34, d:26, h:44, sign:'HAVENBROOK TOWER' },
+  { type:'tower', x:170, z:-148, w:34, d:26, h:44, sign:'HAVENBROOK TOWER', crown:'deck' },
   { type:'tower', x:232, z:-150, w:30, d:24, h:33, sign:'TRUST BANK' },
   { type:'tower', x:104, z:-140, w:26, d:22, h:27 },
   { type:'tower', x:-46, z:-148, w:30, d:24, h:37, sign:'MIDTOWN PLACE' },
@@ -256,11 +256,11 @@ export const FILLER = [
   // community church on Cedar Ave & gas station on Commerce Blvd
   { type:'church', x:-730, z:-18, w:24, d:18, h:9, rot: Math.PI / 2 },
   { type:'gas', x:365, z:382, w:34, d:26, h:8, rot: Math.PI },
-  // skyscrapers — anchor the skyline behind the mid-rises
-  { type:'skyscraper', x:-172, z:-142, w:36, d:30, h:78, sign:'PINNACLE HEALTH PLAZA' },
-  { type:'skyscraper', x:230,  z:-215, w:30, d:28, h:62 },
+  // skyscrapers — anchor the skyline behind the mid-rises (distinct crowns, s03)
+  { type:'skyscraper', x:-172, z:-142, w:36, d:30, h:78, sign:'PINNACLE HEALTH PLAZA', crown:'spire' },
+  { type:'skyscraper', x:230,  z:-215, w:30, d:28, h:62, crown:'lantern' },
   // on the civic row between the health dept & post office, facing Mercy Dr's terminus
-  { type:'skyscraper', x:92,   z:-320, w:28, d:26, h:54, rot:Math.PI, sign:'FOUNDRY ONE' },
+  { type:'skyscraper', x:92,   z:-320, w:28, d:26, h:54, rot:Math.PI, sign:'FOUNDRY ONE', crown:'chamfer' },
 ];
 
 /* brownstone row lining the north side of Midtown Ave — attached townhouses facing the street.
