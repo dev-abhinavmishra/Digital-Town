@@ -250,7 +250,10 @@ export function buildTrees(scene) {
 }
 
 /* ---------------- vehicles ---------------- */
-const CAR_COLORS = ['#c0392b', '#2e5b8a', '#e8e6df', '#3d4a42', '#7f8c8d', '#d4ac0d', '#5d6d7e', '#a93226', '#1e8449', '#784212', '#8e44ad', '#b8b4ac'];
+// real-world fleet mix: mostly whites/silvers/blacks/greys, a few muted colors;
+// saturated primaries on every curb read as confetti from the air
+const CAR_COLORS = ['#e8e6df', '#e8e6df', '#b8b4ac', '#b8b4ac', '#2c3236', '#2c3236',
+  '#7f8c8d', '#5d6d7e', '#4a3f32', '#8a3a30', '#33506b', '#4a5568'];
 /* shared car geometries: body (per-instance paint) + trim (baked vertex colors) */
 let carBodyGeo = null, carTrimGeo = null;
 function carGeos() {
@@ -811,7 +814,8 @@ export function buildAthleticPark(scene) {
 }
 
 /* ---------------- people (instanced, walking) ---------------- */
-const SHIRTS = ['#c0392b', '#2e5b8a', '#e8e6df', '#1e8449', '#7d3c98', '#d4ac0d', '#5d6d7e', '#a93226'];
+// muted wardrobe — saturated primaries read as confetti on sidewalks from the air
+const SHIRTS = ['#8a4a44', '#4a5a6d', '#c9c6bd', '#4f6650', '#6a5a78', '#9c8a56', '#5d6d7e', '#7d4a42'];
 const PANTS = ['#2c3a42', '#3a4a55', '#4a3f32', '#26333d', '#37474f'];
 const SKINS = ['#e8c39e', '#c68642', '#8d5524', '#f1d4b8'];
 let people = null;
