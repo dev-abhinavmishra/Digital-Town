@@ -7,6 +7,7 @@ export const CITY = {
   markings: { dyellow: 0, dash: 0, edge: 0, stopbar: 0, crosswalkBars: 0,
               arrows: 0, twltlArrows: 0 },
   drains: 0, manholes: 0,
+  furniture: 0,   // city/furniture.js fills this with a per-type breakdown
   parcels: [],
   // sprint-03 landmark registry — every leaf carries {placed, parts, pos}.
   // pos = [x,z] for singletons, [[x,z],...] for multi-site keys.
