@@ -1,5 +1,6 @@
 node_modules/
 .playwright-mcp/
+town-*/.git
 *.log
 Thumbs.db
 .DS_Store
