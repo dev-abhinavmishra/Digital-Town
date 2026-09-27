@@ -168,6 +168,120 @@ export function groundOverlayTexture() {
   return t;
 }
 
+/* fine luminance noise for close-range ground detail — multiplied into the
+   diffuse via onBeforeCompile (mean ≈ .94 so it doesn't darken overall);
+   faint directional mower streaks sell scale on the big lawn planes */
+let _detailN = null;
+export function detailNoiseTexture() {
+  if (_detailN) return _detailN;
+  const [c, x] = makeCanvas(256, 256);
+  x.fillStyle = '#f0f0f0'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 12000; i++) {
+    const v = 210 + R() * 45;
+    x.fillStyle = `rgba(${v | 0},${v | 0},${v | 0},.55)`;
+    x.fillRect(R() * 256, R() * 256, 1, 1);
+  }
+  for (let i = 0; i < 700; i++) {   // longer dashes read as grass strokes
+    const v = 200 + R() * 55, px = R() * 256, py = R() * 256;
+    x.fillStyle = `rgba(${v | 0},${v | 0},${v | 0},.3)`;
+    x.fillRect(px, py, 1, 2 + R() * 3);
+  }
+  for (let i = 0; i < 8; i++) {     // mowing-stripe suggestion, wrapped
+    const v = i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(190,190,190,.06)';
+    x.fillStyle = v; x.fillRect(0, i * 32, 256, 32);
+  }
+  _detailN = canvasTex(c);
+  _detailN.wrapS = _detailN.wrapT = THREE.RepeatWrapping;
+  return _detailN;
+}
+
+/* soft radial blob for cheap contact shadows under buildings/cars — the
+   "grounding" cue that sells depth far more than ambient AO alone */
+let _blobT = null;
+export function blobShadowTexture() {
+  if (_blobT) return _blobT;
+  const [c, x] = makeCanvas(256, 256);
+  const g = x.createRadialGradient(128, 128, 20, 128, 128, 126);
+  g.addColorStop(0, 'rgba(0,0,0,.78)');
+  g.addColorStop(.62, 'rgba(0,0,0,.45)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  _blobT = canvasTex(c);
+  return _blobT;
+}
+
+/* warm radial glow — lamp pools, dusk halos */
+let _glowT = null;
+export function warmGlowTexture() {
+  if (_glowT) return _glowT;
+  const [c, x] = makeCanvas(256, 256);
+  const g = x.createRadialGradient(128, 128, 6, 128, 128, 126);
+  g.addColorStop(0, 'rgba(255,196,110,.9)');
+  g.addColorStop(.45, 'rgba(255,160,70,.38)');
+  g.addColorStop(1, 'rgba(255,140,50,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  _glowT = canvasTex(c);
+  return _glowT;
+}
+
+/* drifting cloud shadows — big soft blobs scrolled across the ground, the
+   aerial-view depth cue games get from real shadow maps */
+let _cloudShT = null;
+export function cloudShadowTexture() {
+  if (_cloudShT) return _cloudShT;
+  const [c, x] = makeCanvas(512, 512);
+  x.fillStyle = '#fff'; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 26; i++) {
+    const cx = R() * 512, cy = R() * 512, r = 40 + R() * 110;
+    const d = .28 + R() * .35;
+    // wrapped copies keep the gradient centered on each offset copy
+    for (const ox of [-512, 0, 512]) for (const oy of [-512, 0, 512]) {
+      const gx = cx + ox, gy = cy + oy;
+      if (gx + r < 0 || gx - r > 512 || gy + r < 0 || gy - r > 512) continue;
+      const g = x.createRadialGradient(gx, gy, r * .1, gx, gy, r);
+      g.addColorStop(0, `rgba(0,0,0,${d})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g;
+      x.fillRect(gx - r, gy - r, r * 2, r * 2);
+    }
+  }
+  _cloudShT = canvasTex(c);
+  _cloudShT.wrapS = _cloudShT.wrapT = THREE.RepeatWrapping;
+  return _cloudShT;
+}
+/* chain onto any material: multiplies a drifting cloud-shadow field sampled
+   in WORLD xz (one continuous field across every surface it lands on).
+   scale = cloud-texture repeats per meter; speed = uv units per second */
+export function attachDriftShadow(mat0, scale = .0015, speed = .004, strength = .3) {
+  if (mat0.userData.__drift) return mat0;          // pbr() shares materials —
+  mat0.userData.__drift = 1;                       // never attach twice
+  const prev = mat0.onBeforeCompile;
+  mat0.onBeforeCompile = sh => {
+    if (prev) prev(sh);
+    sh.uniforms.uCSh = { value: cloudShadowTexture() };
+    sh.uniforms.uDriftT = uTime;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vCShXZ;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+  { vec4 wp4 = vec4(transformed, 1.0);
+    #ifdef USE_INSTANCING
+      wp4 = instanceMatrix * wp4;
+    #endif
+    vCShXZ = (modelMatrix * wp4).xz; }`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uCSh;\nuniform float uDriftT;\nvarying vec2 vCShXZ;')
+      .replace('#include <map_fragment>',
+        `#include <map_fragment>
+  diffuseColor.rgb *= mix(1.0, texture2D(uCSh, vCShXZ * ${scale.toFixed(7)} + uDriftT * ${speed.toFixed(5)}).r, ${strength.toFixed(3)});`);
+  };
+  // baked-in params + chained callback make this shader variant unique —
+  // without it three.js could reuse another material's compiled program
+  const prevKey = prev ? prev.toString() : '';
+  mat0.customProgramCacheKey = () =>
+    `drift:${scale}:${speed}:${strength}:${prevKey.length}:${prevKey.slice(0, 40)}`;
+  mat0.needsUpdate = true;
+}
+
 /* ============== facades ============== */
 const texCache = new Map();
 function cachedTex(key, maker) {
@@ -207,6 +321,18 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
     vg.addColorStop(0, 'rgba(255,255,255,.05)'); vg.addColorStop(.7, 'rgba(0,0,0,0)');
     vg.addColorStop(1, 'rgba(20,16,12,.10)');
     x.fillStyle = vg; x.fillRect(0, 0, W, H);
+    // sun-bleach on the crown + faint panel tone patches (rougher where weathered)
+    const sb = x.createLinearGradient(0, 0, 0, H * .45);
+    sb.addColorStop(0, 'rgba(255,250,235,.08)'); sb.addColorStop(1, 'rgba(255,250,235,0)');
+    x.fillStyle = sb; x.fillRect(0, 0, W, H * .45);
+    for (let i = 0; i < 7; i++) {
+      const px = R() * W, py = R() * H, pw = 60 + R() * 150, ph = 40 + R() * 130;
+      x.fillStyle = `rgba(${R() < .5 ? '255,244,225' : '30,25,18'},${.03 + R() * .05})`;
+      x.fillRect(px, py, pw, ph);
+      xr.fillStyle = 'rgba(255,255,255,.08)';
+      xr.fillRect(px, py, pw, ph);
+    }
+    streaks(x, W, 6, 110, 5, .05);    // drip lines bleeding down from the parapet
     grain(x, W, H, 9000, .05);
 
     if (brickLines) {
@@ -493,6 +619,34 @@ export function fieldTexture() {  // farmland rows
   }
   grain(x, 256, 256, 1500, .06);
   return canvasTex(c, { repeat: [8, 8] });
+}
+/* crop sprig card — corn stalks or wheat heads, alpha-tested cross quads */
+export function cropTexture(kind) {
+  return cachedTex('crop' + kind, () => {
+    const [c, x] = makeCanvas(128, 128);
+    x.clearRect(0, 0, 128, 128);
+    const n = kind === 'wheat' ? 60 : 30;
+    for (let i = 0; i < n; i++) {
+      const bx = rr(4, 124), h = rr(kind === 'wheat' ? 55 : 70, 120),
+            sw = rr(-12, 12);
+      const g = x.createLinearGradient(0, 128, 0, 128 - h);
+      if (kind === 'wheat') {
+        g.addColorStop(0, `rgba(${120 + rr(0, 30) | 0},${95 + rr(0, 25) | 0},${45 + rr(0, 15) | 0},.95)`);
+        g.addColorStop(1, `rgba(${215 + rr(0, 30) | 0},${185 + rr(0, 30) | 0},${95 + rr(0, 25) | 0},.95)`);
+      } else {
+        g.addColorStop(0, `rgba(${30 + rr(0, 20) | 0},${65 + rr(0, 25) | 0},${25 + rr(0, 15) | 0},.95)`);
+        g.addColorStop(1, `rgba(${85 + rr(0, 40) | 0},${135 + rr(0, 35) | 0},${55 + rr(0, 25) | 0},.9)`);
+      }
+      x.strokeStyle = g; x.lineWidth = rr(1.8, 3.6); x.lineCap = 'round';
+      x.beginPath(); x.moveTo(bx, 128);
+      x.quadraticCurveTo(bx + sw * .4, 128 - h * .55, bx + sw, 128 - h); x.stroke();
+      if (kind === 'wheat') {           // seed head dot at the tip
+        x.fillStyle = 'rgba(230,200,110,.95)';
+        x.beginPath(); x.arc(bx + sw, 128 - h, rr(2, 3.4), 0, 6.28); x.fill();
+      }
+    }
+    return canvasTex(c);
+  });
 }
 export function roofTexture(hex = '#5a5f66') {
   return cachedTex('roof' + hex, () => {
