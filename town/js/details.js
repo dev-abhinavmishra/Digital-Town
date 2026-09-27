@@ -1149,6 +1149,38 @@ export function buildPlaza(scene, spec) {
   const pm = new THREE.Mesh(colored(parts), VCOL());
   pm.castShadow = pm.receiveShadow = true;
   scene.add(pm);
+
+  /* festoon string lights spanning the corner banner poles - warm bulbs that
+     glow at night via RUNENV.litI. Literal geometry, zero R() draws. */
+  {
+    const LP = [[spec.x - spec.w / 2 + 4, spec.z + spec.d / 2 - 4],
+                [spec.x + spec.w / 2 - 4, spec.z + spec.d / 2 - 4],
+                [spec.x - spec.w / 2 + 4, spec.z - spec.d / 2 + 4],
+                [spec.x + spec.w / 2 - 4, spec.z - spec.d / 2 + 4]];
+    const TOP = 6.35, SAG = 1.6;
+    const bulbs = [], wire = [];
+    for (const [a, b] of [[0, 1], [1, 3], [3, 2], [2, 0], [0, 3], [1, 2]]) {
+      const [ax, az] = LP[a], [bx, bz] = LP[b];
+      const n = Math.round(Math.hypot(bx - ax, bz - az) / 1.35);
+      let px = 0, py = 0, pz = 0;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n,
+              x = ax + (bx - ax) * t, z = az + (bz - az) * t,
+              y = Y + TOP - SAG * 4 * t * (1 - t);
+        if (i) wire.push(px, py, pz, x, y, z);
+        px = x; py = y; pz = z;
+        bulbs.push({ x, y: y - .14, z, s: 1 });
+      }
+    }
+    const litM = new M({ color: '#fff2d8', emissive: '#ffd9a0',
+      emissiveIntensity: RUNENV.litI, roughness: .5 });
+    litM.envMapIntensity *= RUNENV.envScale; litM.userData.lit = true;
+    scene.add(instances(new THREE.SphereGeometry(.1, 6, 4), litM, bulbs,
+      { shadow: false }));
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+    scene.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: '#2e3234' })));
+  }
 }
 
 /* ---------------- athletic park ---------------- */
@@ -2034,6 +2066,70 @@ export function buildFerrisWheel(scene) {
   ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
 }
 
+/* ---------------- tower crane ---------------- */
+let crane = null;
+export function buildCrane(scene) {
+  /* construction tower crane on a fenced gravel pad in the downtown fringe -
+     literal geometry, zero R() draws. Jib slews slowly in tickWorld. */
+  let mx = 0, mz = 0;
+  for (const [cx, cz] of [[248, -84], [36, -96], [-120, -100], [300, -120]]) {
+    if (isFree(cx, cz, 20)) { mx = cx; mz = cz; break; }
+  }
+  if (!mx) return;
+  occupyRect(mx, mz, 34, 34, 3);
+  const MH = 42;                                   // mast height
+  const parts = [
+    { geo: new THREE.CylinderGeometry(15, 15.6, .5, 18), color: '#b0a890', y: .25 },
+    { geo: new THREE.BoxGeometry(5.4, 1.4, 5.4), color: '#8a8478', y: 1.2 },   // base block
+    { geo: new THREE.BoxGeometry(3.4, 2.6, 2.6), color: '#c8543e', x: 6.5, y: 1.8, z: 6 },   // site office pod
+    { geo: new THREE.BoxGeometry(2.4, 1.3, 1.3), color: '#d8a03a', x: -7, y: 1.1, z: 7 },    // generator
+  ];
+  for (const [lx, lz] of [[-.9, -.9], [.9, -.9], [-.9, .9], [.9, .9]])   // mast rails
+    parts.push({ geo: new THREE.BoxGeometry(.3, MH, .3), color: '#e8b23a',
+      x: lx, y: MH / 2 + 1.6, z: lz });
+  for (let y = 3.4; y < MH; y += 4.4)              // mast brace rings
+    parts.push({ geo: new THREE.BoxGeometry(2.3, .16, 2.3), color: '#d8a838', y: y + 1.6 });
+  const site0 = new THREE.Mesh(colored(parts), VCOL());
+  site0.position.set(mx, Y, mz);
+  site0.castShadow = site0.receiveShadow = true;
+  scene.add(site0);
+
+  const slew = new THREE.Group();                  // everything above the ring
+  slew.position.set(mx, Y + MH + 1.7, mz);
+  const jp = [
+    { geo: new THREE.BoxGeometry(1.5, 1.6, 1.5), color: '#d8a838', y: .8 },       // cab/slew block
+    { geo: new THREE.CylinderGeometry(.2, .2, 5.6, 6), color: '#9aa0a6', y: 3.6 }, // A-post
+    { geo: new THREE.BoxGeometry(1.4, 1.5, 1.2), color: '#d8dde2', x: -.4, y: 1.0, z: .8 }, // cab
+  ];
+  const JIB = 21, CJ = 7;                          // jib / counter-jib length
+  for (let i = 0; i < 7; i++) {                    // jib lattice chords
+    jp.push({ geo: new THREE.BoxGeometry(JIB / 7 + .1, .22, .22), color: '#e8b23a',
+      x: 2.2 + i * JIB / 7, y: 1.7, z: -.75 });
+    jp.push({ geo: new THREE.BoxGeometry(JIB / 7 + .1, .22, .22), color: '#e8b23a',
+      x: 2.2 + i * JIB / 7, y: 1.7, z: .75 });
+    jp.push({ geo: new THREE.BoxGeometry(.16, 1.3, .16), color: '#d8a838',
+      x: 2.2 + i * JIB / 7 + JIB / 14, y: 2.25, z: -.75, rz: (i % 2 ? .5 : -.5) });
+  }
+  jp.push({ geo: new THREE.BoxGeometry(JIB / 7, .22, .22), color: '#e8b23a', x: JIB + .4, y: 2.9, z: 0 });
+  jp.push({ geo: new THREE.BoxGeometry(CJ, .5, 1.5), color: '#e8b23a', x: -CJ / 2 - .5, y: 1.9, z: 0 });
+  jp.push({ geo: new THREE.BoxGeometry(1.6, 3.2, 1.5), color: '#8a9096', x: -CJ - .2, y: .4, z: 0 }); // counterweight
+  jp.push({ geo: new THREE.CylinderGeometry(.05, .05, 6.2, 4), color: '#6a7076',
+    x: JIB * .45, y: 4.2, z: 0, rz: .9 });         // tie bar jib
+  jp.push({ geo: new THREE.CylinderGeometry(.05, .05, 5.4, 4), color: '#6a7076',
+    x: -CJ * .45, y: 4.2, z: 0, rz: -.9 });        // tie bar counter
+  // trolley + cable + hook
+  jp.push({ geo: new THREE.BoxGeometry(.8, .3, 1.6), color: '#8a9096', x: JIB * .7, y: 1.45, z: 0 });
+  jp.push({ geo: new THREE.CylinderGeometry(.05, .05, 9.5, 4), color: '#3a3e44',
+    x: JIB * .7, y: -3.3, z: 0 });
+  jp.push({ geo: new THREE.BoxGeometry(.9, .7, .9), color: '#c8543e', x: JIB * .7, y: -8.4, z: 0 });
+  const jib = new THREE.Mesh(colored(jp), VCOL());
+  jib.castShadow = true;
+  slew.add(jib);
+  slew.userData.dynamic = true;                  // slews - keep out of mergeStatic
+  scene.add(slew);
+  crane = { slew };
+}
+
 /* ---------------- farm windmill ---------------- */
 let windmill = null;
 export function buildWindmill(scene) {
@@ -2368,6 +2464,8 @@ export function tickWorld(t, dt) {
     _s1.set(1, 1, 1);
     im.instanceMatrix.needsUpdate = true;
   }
+  // tower crane - slow slew like a real site crane at idle
+  if (crane) crane.slew.rotation.y = t * .045 + Math.sin(t * .3) * .06;
   // farm windmill - rotor spin + slow vane yaw hunt
   if (windmill) {
     windmill.rotor.rotation.z = t * 2.1;
