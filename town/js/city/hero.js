@@ -8,7 +8,9 @@
 // is registered, before tree/vehicle/people scatter, so our occupyRects keep
 // later scatter off the structures.
 import * as THREE from 'three';
-import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick } from '../lib.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { CITYHALL_B64 } from '../../assets/cityhall.js';
+import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick, RUNENV } from '../lib.js';
 import { pbr } from '../mats.js';
 import { ROADS } from '../layout.js';
 import { occupyRect, isFree } from './occ.js';
@@ -259,8 +261,43 @@ function buildWayfinding(scene) {
     [rd('University Ave'), rd('Wellness Way')]);
 }
 
+/* A6 — Havenbrook City Hall: Blender-authored glTF landmark anchoring the
+   east end of the civic plaza, colonnade + pediment facing the fountain.
+   Footprint occupies synchronously so scatter stays clear; the mesh streams
+   in async and picks up the same env/lit gains via RUNENV (the one-shot
+   material pass in main.js has already run by then). */
+function buildCityHall(scene) {
+  const CX = 118, CZ = -205;
+  occupyRect(CX, CZ, 40, 38, 1);
+  const add = g => {
+    const hall = g.scene;
+    hall.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = true;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.name === 'glass_lit') {
+          m.emissive = new THREE.Color('#ffd9a0');
+          m.emissiveIntensity = RUNENV.litI;
+          m.userData.lit = true;
+        }
+        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+      }
+    });
+    hall.position.set(CX, Y - .02, CZ);   // base sits on the plaza paving
+    hall.rotation.y = Math.PI / 2;        // model -Z front -> world -X (fountain)
+    scene.add(hall);
+    heroLeaf('civic', 'cityhall', 1, [CX, CZ]);
+  };
+  /* parse embedded bytes - a webglcontextrestored reload aborts in-flight
+     fetches, so the GLB ships as a base64 module instead of a network load */
+  const bin = Uint8Array.from(atob(CITYHALL_B64), c => c.charCodeAt(0));
+  new GLTFLoader().parse(bin.buffer, '', add,
+    err => console.error('cityhall.glb parse failed:', err));
+}
+
 export function buildHero(scene) {
   buildPylon(scene);
+  buildCityHall(scene);
   buildQuad(scene);
   buildPavilion(scene);
   buildWayfinding(scene);

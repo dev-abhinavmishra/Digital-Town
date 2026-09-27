@@ -1159,3 +1159,7 @@ export function mergeStatic(root) {
   root.add(out);
   return out;
 }
+/* runtime state populated by main.js's material pass - lets async-loaded
+   assets (glTF landmarks) apply the same time-of-day env/emissive gains that
+   the one-shot traverse applied to everything loaded synchronously */
+export const RUNENV = { envScale: 1, litI: 0 };
