@@ -175,7 +175,8 @@ function flatRoofMat() {
     const skin = roofSkin();
     _flatRoofs[i].map = skin.map;
     _flatRoofs[i].bumpMap = skin.bump; _flatRoofs[i].bumpScale = .04;
-    _flatRoofs[i].roughnessMap = skin.rough; _flatRoofs[i].roughness = 1;
+    _flatRoofs[i].roughnessMap = skin.rough;
+    _flatRoofs[i].roughness = finish[1];
   }
   return _flatRoofs[i];
 }
