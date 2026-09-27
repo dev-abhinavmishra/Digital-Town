@@ -137,11 +137,12 @@ function rMeadow(g, bin, parts, out) {
 }
 function rOrchard(g, bin, parts, out) {
   lawnPlane(bin, g, GRASS_C);
-  // orchard rows + retention pond in the corner
+  // orchard rows + retention pond in the corner — jittered planting + varied
+  // crown size so rows read as trees, not corduroy, from the air
   for (let r = 0; r < Math.floor((g.z1 - g.z0 - 30) / 12); r++)
     for (let c = 0; c < Math.floor((g.x1 - g.x0 - 14) / 11); c++)
-      out.trees.push({ x: g.x0 + 10 + c * 11, z: g.z0 + 10 + r * 12,
-        s: rr(.55, .75), t: 'o' });
+      out.trees.push({ x: g.x0 + 10 + c * 11 + rr(-2.4, 2.4),
+        z: g.z0 + 10 + r * 12 + rr(-2.4, 2.4), s: rr(.7, 1.05), t: 'o' });
   // pond
   const px = g.x1 - 22, pz = g.z1 - 20;
   bin.plane(34, 24, pbr('gravel', { repeat: [3, 3], color: '#c9bd9a' }), px, Y + .002, pz);
