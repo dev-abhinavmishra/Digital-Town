@@ -30,13 +30,16 @@ const Y_LITTER   = Y + .022;    // leaf-litter cards
 const Y_FLOWER   = Y + .026;    // wildflower specks
 
 /* every flat decal is unlit + alpha-blended; polygonOffset pulls the fragment
-   toward the camera so nothing z-fights at aerial range */
+   toward the camera so nothing z-fights at aerial range. Unlit materials stay
+   day-bright at night, so ?time=night dims them to match dark ground. */
+const _night = typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('time') === 'night';
 const decalMat = opts => {
   // decal UVs scale past 1 to tile the canvas — repeat, don't clamp
   if (opts.map) opts.map.wrapS = opts.map.wrapT = THREE.RepeatWrapping;
   return new THREE.MeshBasicMaterial({ transparent: true,
     depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2, ...opts });
+    polygonOffsetUnits: -2, ...(_night ? { color: '#30363e' } : {}), ...opts });
 };
 
 /* ---------------- decal canvases ---------------- */

@@ -102,6 +102,10 @@ function tactileMat() {
    nb=-z, sb=+z, eb=+x, wb=-x */
 const HEAD_RY = { nb: 0, sb: Math.PI, eb: -Math.PI / 2, wb: Math.PI / 2 };
 
+/* unlit wear decals stay day-bright at night otherwise — dim to match */
+const _night = typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('time') === 'night';
+
 export function buildStreetscape(scene) {
   const asph = pbr('asphalt_02');
   // albedo averages ~rgb(90); near-black tint crushed it to a void ribbon —
@@ -162,7 +166,8 @@ export function buildStreetscape(scene) {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true,
       depthWrite: false, polygonOffset: true,
-      polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      ...(_night ? { color: '#3a4048' } : {}) });
     _wearM.set(key, m);
     return m;
   };

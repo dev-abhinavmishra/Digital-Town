@@ -102,10 +102,11 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
     composer.addPass(gtao);
   }
 
-  // dusk drops the threshold so lit windows + lamps actually bloom (C6)
+  // dusk drops the threshold so lit windows + lamps actually bloom (C6);
+  // night drops it further — window/lamp points are the whole scene
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 4, size.y / 4),
-    time === 'golden' ? .22 : time === 'dusk' ? .30 : .12, .5,
-    time === 'dusk' ? .85 : 1.02);
+    time === 'golden' ? .22 : time === 'dusk' ? .30 : time === 'night' ? .38 : .12, .5,
+    time === 'night' ? .72 : time === 'dusk' ? .85 : 1.02);
   if (!skip || !skip.has('bloom')) composer.addPass(bloom);
 
   // tiny tiling noise texture for film grain — a texture fetch is far cheaper
@@ -128,6 +129,7 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
     day:    { warm: .03,  sat: 1.11, vig: .33, shTint: [.96, .99, 1.05], shStr: .18 },
     golden: { warm: .07,  sat: 1.12, vig: .30, shTint: [1.10, .97, .85], shStr: .45 },
     dusk:   { warm: .09,  sat: .95,  vig: .34, shTint: [.80, .87, 1.10], shStr: .55 },
+    night:  { warm: .0,   sat: .88,  vig: .40, shTint: [.70, .82, 1.16], shStr: .55 },
   }[time] || { warm: .025, sat: 1.07, vig: .28, shTint: [1, 1, 1], shStr: 0 };
   const grade = new ShaderPass({
     uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uNoise: { value: noiseTex },
