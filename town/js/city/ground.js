@@ -58,8 +58,16 @@ function mottleCanvas({ dry = .35, stripe = 0 } = {}) {
     }
   }
   if (stripe) for (let sx = 0; sx < S; sx += stripe) {
-    x.fillStyle = (sx / stripe) % 2 ? 'rgba(255,255,255,.10)' : 'rgba(30,40,20,.10)';
-    x.fillRect(sx, 0, stripe, S);
+    /* soft-gradient bands at varied contrast — hard-edged uniform stripes
+       alias into corduroy moiré at aerial distance; tapering each edge and
+       jittering the peak keeps the mow read up close and dissolves far away */
+    const col = (sx / stripe) % 2 ? '255,255,255' : '28,38,18';
+    const peak = .05 + R() * .05;
+    const gr = x.createLinearGradient(sx, 0, sx + stripe, 0);
+    gr.addColorStop(0, `rgba(${col},0)`);
+    gr.addColorStop(.5, `rgba(${col},${peak.toFixed(3)})`);
+    gr.addColorStop(1, `rgba(${col},0)`);
+    x.fillStyle = gr; x.fillRect(sx, 0, stripe, S);
   }
   return c;
 }

@@ -111,14 +111,25 @@ scene.add(new THREE.HemisphereLight(
 /* ---------- ground ---------- */
 const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');
 /* micro-detail multiply — the vendored grass tex repeats every 60m, so at eye
-   level it reads flat; a fine luminance noise at 5m frequency restores close
-   range texture without adding a draw call */
+   level it reads flat; a luminance noise layer on a fixed 28m world tile
+   restores close-range texture without adding a draw call */
 groundM.onBeforeCompile = sh => {
   sh.uniforms.uDetail = { value: detailNoiseTexture() };
+  /* sample the detail texture in WORLD xz (one tile = 28 m) so every
+     grass_ground surface gets the same texel density — UV-based sampling let
+     small lawn planes (tile=9) alias it into plaid moiré */
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec2 vWXZ;')
+    .replace('#include <project_vertex>', `#include <project_vertex>
+      vec4 detailWP = vec4( transformed, 1.0 );
+      #ifdef USE_INSTANCING
+        detailWP = instanceMatrix * detailWP;
+      #endif
+      vWXZ = ( modelMatrix * detailWP ).xz;`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;')
+    .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nvarying vec2 vWXZ;')
     .replace('#include <map_fragment>', `#include <map_fragment>
-      diffuseColor.rgb *= texture2D(uDetail, vMapUv * 12.0).rgb;`);
+      diffuseColor.rgb *= texture2D(uDetail, vWXZ / 28.0).rgb;`);
 };
 attachDriftShadow(groundM, .0015, .0009, .30);  // ~660m cloud shadow field
 scene.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));

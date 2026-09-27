@@ -181,14 +181,24 @@ export function detailNoiseTexture() {
     x.fillStyle = `rgba(${v | 0},${v | 0},${v | 0},.55)`;
     x.fillRect(R() * 256, R() * 256, 1, 1);
   }
-  for (let i = 0; i < 700; i++) {   // longer dashes read as grass strokes
-    const v = 200 + R() * 55, px = R() * 256, py = R() * 256;
+  for (let i = 0; i < 900; i++) {   // grass strokes at random angles — a single
+    const v = 200 + R() * 55;     // fixed direction tiles into visible columns
+    const px = R() * 256, py = R() * 256, rot = R() * Math.PI;
+    x.save(); x.translate(px, py); x.rotate(rot);
     x.fillStyle = `rgba(${v | 0},${v | 0},${v | 0},.3)`;
-    x.fillRect(px, py, 1, 2 + R() * 3);
+    x.fillRect(0, 0, 1, 2 + R() * 3);
+    x.restore();
   }
-  for (let i = 0; i < 8; i++) {     // mowing-stripe suggestion, wrapped
-    const v = i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(190,190,190,.06)';
-    x.fillStyle = v; x.fillRect(0, i * 32, 256, 32);
+  /* mowing-stripe suggestion, broken into jittered segments so it reads as
+     worn mow lines instead of a full-width ruler stripe (which crosshatched
+     with the stroke layer into a plaid at distance) */
+  for (let b = 0; b < 6; b++) {
+    const y0 = b * 42 + R() * 8, bandH = 40 + R() * 6;
+    for (let sx = 0; sx < 256; sx += 14 + R() * 22) {
+      const a = (b % 2 ? .018 : .014) + R() * .012;
+      x.fillStyle = `rgba(${b % 2 ? '255,255,255' : '185,185,185'},${a.toFixed(3)})`;
+      x.fillRect(sx, y0 + (R() - .5) * 4, 14 + R() * 22, bandH);
+    }
   }
   _detailN = canvasTex(c);
   _detailN.wrapS = _detailN.wrapT = THREE.RepeatWrapping;
