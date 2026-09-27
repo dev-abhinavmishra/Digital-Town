@@ -3,9 +3,10 @@
 // orchards, conifer groves, planted buffers). Deterministic via the shared
 // R() stream; static geometry through GeoBin/instancing.
 import * as THREE from 'three';
-import { GREENS } from '../layout.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GREENS, PLAZA } from '../layout.js';
 import { plane, mat, colored, VCOL, instances, waterMaterial, signTexture,
-         makeCanvas, canvasTex, R, rr, pick } from '../lib.js';
+         makeCanvas, canvasTex, R, rr, pick, mulberry32 } from '../lib.js';
 import { pbr } from '../mats.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
@@ -178,6 +179,49 @@ export function buildGreens(scene) {
       signed.push({ g, sg });
     }
     CITY.parcels.push({ id: g.id, use: g.use, w: g.x1 - g.x0, d: g.z1 - g.z0 });
+  }
+
+  /* ground edge blending - a speckle-alpha ribbon straddling each parcel's
+     boundary so grass fades into the neighboring ground instead of a hard
+     rect edge. One merged ShapeGeometry ring set + shared alpha map. */
+  {
+    const [ac, ax] = makeCanvas(128, 128);
+    ax.clearRect(0, 0, 128, 128);
+    const Rn = mulberry32(6137);                              // seeded noise
+    for (let i = 0; i < 900; i++) {
+      const a = .15 + Rn() * .85;
+      ax.fillStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')';
+      ax.beginPath();
+      ax.arc(Rn() * 128, Rn() * 128, .5 + Rn() * 1.6, 0, 6.283);
+      ax.fill();
+    }
+    const edgeAlpha = canvasTex(ac, { srgb: false });
+    edgeAlpha.wrapS = edgeAlpha.wrapT = THREE.RepeatWrapping;
+    edgeAlpha.repeat.set(.055, .055);
+    const edgeM = new M({ color: '#7d814f', roughness: .95, transparent: true,
+      alphaMap: edgeAlpha, depthWrite: false });
+    edgeM.envMapIntensity = .08;
+    const ring = (x0, x1, z0, z1, E = 2.4, I = .9) => {
+      const sh = new THREE.Shape();
+      sh.moveTo(x0 - E, -z1 - E); sh.lineTo(x1 + E, -z1 - E);
+      sh.lineTo(x1 + E, -z0 + E); sh.lineTo(x0 - E, -z0 + E); sh.closePath();
+      const hole = new THREE.Path();
+      hole.moveTo(x0 + I, -z1 + I); hole.lineTo(x0 + I, -z0 - I);
+      hole.lineTo(x1 - I, -z0 - I); hole.lineTo(x1 - I, -z1 + I);
+      hole.closePath();
+      sh.holes.push(hole);
+      const geo = new THREE.ShapeGeometry(sh);
+      geo.rotateX(-Math.PI / 2); geo.translate(0, Y + .0025, 0);
+      return geo;
+    };
+    const rings = GREENS.map(g => ring(g.x0, g.x1, g.z0, g.z1));
+    rings.push(ring(PLAZA.x - PLAZA.w / 2, PLAZA.x + PLAZA.w / 2,
+                    PLAZA.z - PLAZA.d / 2, PLAZA.z + PLAZA.d / 2, 1.6, .5));
+    const merged = new THREE.Mesh(
+      mergeGeometries(rings.map(r => r.toNonIndexed()), false), edgeM);
+    merged.receiveShadow = true;
+    scene.add(merged);
+    rings.forEach(r => r.dispose());
   }
   CITY.greens = GREENS.length;
   // all parcel signs share one canvas atlas -> one material -> one draw call
