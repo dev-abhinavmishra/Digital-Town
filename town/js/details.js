@@ -30,6 +30,8 @@ const M = THREE.MeshStandardMaterial;
 const _qp = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
 const FREEZE = !!(_qp && _qp.has('freeze'));
 const _duskQuery = () => !!_qp && _qp.get('time') === 'dusk';
+const _lowLightQuery = () => !!_qp &&
+  ['dusk', 'night'].includes(_qp.get('time'));
 const Y = 0.28; // surface lift â€” must clear depth-buffer epsilon at aerial range
 
 /* ---------------- roads â†’ city/streetscape.js ---------------- */
@@ -726,7 +728,7 @@ export function buildTraffic(scene) {
   };
   const glowIM = new THREE.InstancedMesh(glowGeo, glowM, cars.length);
   glowIM.frustumCulled = false; glowIM.renderOrder = 6;
-  const litArr = new Float32Array(cars.length).fill(_duskQuery() ? 1 : 0);
+  const litArr = new Float32Array(cars.length).fill(_lowLightQuery() ? 1 : 0);
   glowGeo.setAttribute('aLit', new THREE.InstancedBufferAttribute(litArr, 1));
   scene.add(glowIM);
 
@@ -811,7 +813,7 @@ export function buildLights(scene) {
     }
     scene.add(instances(banG, banM, banners, { shadow: false }));
   }
-  if (_duskQuery()) {
+  if (_lowLightQuery()) {
     lampM.emissive = new THREE.Color('#ffb46a'); lampM.emissiveIntensity = 2.4;
     // warm pool under each lamp head — additive decal on the pavement
     const poolG = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
