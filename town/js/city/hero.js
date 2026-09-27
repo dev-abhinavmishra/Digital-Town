@@ -8,7 +8,11 @@
 // is registered, before tree/vehicle/people scatter, so our occupyRects keep
 // later scatter off the structures.
 import * as THREE from 'three';
-import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick } from '../lib.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { CITYHALL_B64 } from '../../assets/cityhall.js';
+import { WATERTOWER_B64 } from '../../assets/watertower.js';
+import { CONSERVATORY_B64 } from '../../assets/conservatory.js';
+import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick, RUNENV } from '../lib.js';
 import { pbr } from '../mats.js';
 import { ROADS } from '../layout.js';
 import { occupyRect, isFree } from './occ.js';
@@ -259,8 +263,101 @@ function buildWayfinding(scene) {
     [rd('University Ave'), rd('Wellness Way')]);
 }
 
+/* A6 — Havenbrook City Hall: Blender-authored glTF landmark anchoring the
+   east end of the civic plaza, colonnade + pediment facing the fountain.
+   Footprint occupies synchronously so scatter stays clear; the mesh streams
+   in async and picks up the same env/lit gains via RUNENV (the one-shot
+   material pass in main.js has already run by then). */
+function buildCityHall(scene) {
+  const CX = 118, CZ = -205;
+  occupyRect(CX, CZ, 40, 38, 1);
+  const add = g => {
+    const hall = g.scene;
+    hall.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = true;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.name === 'glass_lit') {
+          m.emissive = new THREE.Color('#ffd9a0');
+          m.emissiveIntensity = RUNENV.litI;
+          m.userData.lit = true;
+        }
+        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+      }
+    });
+    hall.position.set(CX, Y - .02, CZ);   // base sits on the plaza paving
+    hall.rotation.y = Math.PI / 2;        // model -Z front -> world -X (fountain)
+    scene.add(hall);
+    heroLeaf('civic', 'cityhall', 1, [CX, CZ]);
+  };
+  /* parse embedded bytes - a webglcontextrestored reload aborts in-flight
+     fetches, so the GLB ships as a base64 module instead of a network load */
+  const bin = Uint8Array.from(atob(CITYHALL_B64), c => c.charCodeAt(0));
+  new GLTFLoader().parse(bin.buffer, '', add,
+    err => console.error('cityhall.glb parse failed:', err));
+}
+
+/* A8 — park conservatory (palm house): glazed walls + gable roof +
+   clerestory dome, Blender-authored. Sited on the park lawn. */
+function buildConservatory(scene) {
+  const cands = [[648, 236], [700, 262], [586, 272], [742, 196]];
+  let site = null;
+  for (const [x, z] of cands) if (isFree(x, z, 15)) { site = [x, z]; break; }
+  if (!site) return;
+  const [x, z] = site;
+  occupyRect(x, z, 32, 22, 2);
+  const bin = Uint8Array.from(atob(CONSERVATORY_B64), c => c.charCodeAt(0));
+  new GLTFLoader().parse(bin.buffer, '', g => {
+    const con = g.scene;
+    con.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = true;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.name === 'glass_lit') {
+          m.emissive = new THREE.Color('#ffd9a0');
+          m.emissiveIntensity = RUNENV.litI;
+          m.userData.lit = true;
+        }
+        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+      }
+    });
+    con.position.set(x, Y, z);
+    con.rotation.y = -.5;                  // face the winding park path SW
+    scene.add(con);
+    heroLeaf('civic', 'conservatory', 1, [x, z]);
+  }, err => console.error('conservatory.glb parse failed:', err));
+}
+
+/* A7 — water tower on the NE farmland edge: raked steel legs + X-braces,
+   banded tank, cone cap. Sited by isFree candidates like the pylon. */
+function buildWaterTower(scene) {
+  const cands = [[620, -620], [560, -640], [640, -560], [500, -660], [660, -640]];
+  let site = null;
+  for (const [x, z] of cands) if (isFree(x, z, 9)) { site = [x, z]; break; }
+  if (!site) return 0;
+  const [x, z] = site;
+  occupyRect(x, z, 14, 14, 1);
+  const bin = Uint8Array.from(atob(WATERTOWER_B64), c => c.charCodeAt(0));
+  new GLTFLoader().parse(bin.buffer, '', g => {
+    const wt = g.scene;
+    wt.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = true;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material])
+        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+    });
+    wt.position.set(x, Y, z);
+    wt.rotation.y = .6;                    // face the diagonal, town-wards
+    scene.add(wt);
+    heroLeaf('landmark', 'watertower', 1, [x, z]);
+  }, err => console.error('watertower.glb parse failed:', err));
+}
+
 export function buildHero(scene) {
   buildPylon(scene);
+  buildCityHall(scene);
+  buildWaterTower(scene);
+  buildConservatory(scene);
   buildQuad(scene);
   buildPavilion(scene);
   buildWayfinding(scene);

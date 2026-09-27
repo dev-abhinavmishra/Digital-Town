@@ -8,6 +8,7 @@ const GLASS_T = {
   day:    { roughness: .12, envMapIntensity: 1.35, tint: '#f4f8fb', metalness: .06 },
   golden: { roughness: .12, envMapIntensity: 1.6,  tint: '#fff0dc', metalness: .06 },
   dusk:   { roughness: .16, envMapIntensity: .85,  tint: '#8d95a6', metalness: .05 },
+  night:  { roughness: .20, envMapIntensity: .45,  tint: '#4e5c70', metalness: .05 },
 };
 
 function eachMaterial(object, fn) {

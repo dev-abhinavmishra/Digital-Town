@@ -11,6 +11,9 @@ import { facadeMaps, glassFacadeMaps } from './lib.js';
 const loader = new THREE.ImageBitmapLoader();
 loader.setOptions({ resizeWidth: 1024, resizeHeight: 1024, imageOrientation: 'none' });
 const cache = new Map();
+/* asphalt-family surfaces that should go rain-slick together
+   (roads share ASPH; lots + gutters are keyed pbr variants) */
+export const WET_SURFACES = [];
 const texRegistry = new Map();          // name -> Texture (for __fx.tex probing)
 
 function tex(name, { srgb = false, repeat = null } = {}) {

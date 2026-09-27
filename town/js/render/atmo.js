@@ -136,6 +136,8 @@ const FOGP = {
             tint: '0.914,0.769,0.608', desat: .15 },
   dusk:   { hazeH: 80,  hazeK: .00070, hazeW: .40, airLo: 160, airHi: 1100,
             tint: '0.333,0.310,0.408', desat: .35 },
+  night:  { hazeH: 70,  hazeK: .00055, hazeW: .25, airLo: 250, airHi: 1200,
+            tint: '0.055,0.082,0.128', desat: .55 },
 };
 
 export function patchFog(TIME) {
@@ -192,8 +194,10 @@ export function patchFog(TIME) {
    sprite so each formation has silhouette depth. */
 export function upgradeClouds(scene, TIME) {
   const variants = [0, 1, 2, 3].map(v => cumulusTexture(v));
-  const tint = TIME === 'golden' ? '#e8b489' : TIME === 'dusk' ? '#5e5578' : '#ffffff';
-  const opMul = TIME === 'golden' ? .66 : TIME === 'dusk' ? .14 : .88;
+  const tint = TIME === 'golden' ? '#e8b489' : TIME === 'dusk' ? '#5e5578'
+    : TIME === 'night' ? '#1c2838' : '#ffffff';
+  const opMul = TIME === 'golden' ? .66 : TIME === 'dusk' ? .14
+    : TIME === 'night' ? .3 : .88;
   const scMul = TIME === 'dusk' ? 1.05 : 1.9;  // dusk: dark masses read huge — keep near stock size
   let sprites = 0, vi = 0;
   scene.traverse(o => {
@@ -319,7 +323,7 @@ export function installAtmo(scene, { lampIM = null, TIME = 'day', fogPatch = tru
   if (fogPatch) info.fog = { type: 'exp2+height+aerial', ...patchFog(TIME) };
   else info.fog = { type: 'exp2-stock' };
   info.clouds = upgradeClouds(scene, TIME);
-  if (TIME === 'dusk' && lampIM) {
+  if ((TIME === 'dusk' || TIME === 'night') && lampIM) {
     const g = buildLampGlows(scene, lampIM);
     info.lampPools = g.pools; info.lampHalos = g.halos;
   }

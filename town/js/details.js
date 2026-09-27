@@ -7,8 +7,8 @@ import { ROADS, LOTS, WATER, PARK_ZONE, BUILDINGS, APARTMENTS,
 import { box, cyl, plane, mat, signTexture, fieldTexture, cropTexture, colored, VCOL,
          instances, waterMaterial, cloudSpriteTexture, uTime,
          makeCanvas, canvasTex, blobShadowTexture, warmGlowTexture,
-         attachDriftShadow, R, rr, pick } from './lib.js';
-import { pbr, M_BARK } from './mats.js';
+         attachDriftShadow, R, rr, pick, mulberry32, RUNENV } from './lib.js';
+import { pbr, M_BARK, WET_SURFACES } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
 import { GeoBin } from './city/geo.js';
@@ -21,7 +21,7 @@ import { buildHero } from './city/hero.js';
 export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
 const ASPH = pbr('asphalt_02');          // tile via plane(..., tile)
-ASPH.color = new THREE.Color('#484c52'); ASPH.roughness = .97;
+ASPH.color = new THREE.Color('#9aa0a6'); ASPH.roughness = .97;  // lifted in streetscape.js too (shared instance)
 attachDriftShadow(ASPH, .0015, .0009, .34);   // same cloud field over pavement
 const PAVE = pbr('precast_stone_paving'); PAVE.color = new THREE.Color('#a8a499');
 const GRVL = pbr('gravel');
@@ -30,6 +30,8 @@ const M = THREE.MeshStandardMaterial;
 const _qp = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
 const FREEZE = !!(_qp && _qp.has('freeze'));
 const _duskQuery = () => !!_qp && _qp.get('time') === 'dusk';
+const _lowLightQuery = () => !!_qp &&
+  ['dusk', 'night'].includes(_qp.get('time'));
 const Y = 0.28; // surface lift â€” must clear depth-buffer epsilon at aerial range
 
 /* ---------------- roads â†’ city/streetscape.js ---------------- */
@@ -43,8 +45,17 @@ export function buildLots(scene) {
   const parts = [];
   const white = mat('#dfe3e6');
   const bump = mat('#d4b23a');
+  /* per-lot asphalt tint - real pads weather at different rates; the shared
+     ASPH instance stays on the roads, each lot gets its own keyed pbr() */
+  const LOT_TINTS = ['#8e949a', '#a0a6ab', '#878e94', '#989ea4',
+                     '#a8adb1', '#7f868c', '#949aa0'];
+  let lotIdx = 0;
   for (const l of LOTS) {
-    scene.add(plane(l.w, l.d, ASPH, l.x, Y - .015, l.z, -Math.PI / 2, 6));
+    const lotM = pbr('asphalt_02', { color: LOT_TINTS[lotIdx++ % LOT_TINTS.length] });
+    lotM.roughness = .97;
+    WET_SURFACES.push(lotM);
+    attachDriftShadow(lotM, .0015, .0009, .34);
+    scene.add(plane(l.w, l.d, lotM, l.x, Y - .015, l.z, -Math.PI / 2, 6));
     if (l.plain) continue;   // apron/pad: bare asphalt, no stalls
     const n = Math.floor(l.w / 3.4);
     for (let i = 0; i <= n; i++) {
@@ -726,7 +737,7 @@ export function buildTraffic(scene) {
   };
   const glowIM = new THREE.InstancedMesh(glowGeo, glowM, cars.length);
   glowIM.frustumCulled = false; glowIM.renderOrder = 6;
-  const litArr = new Float32Array(cars.length).fill(_duskQuery() ? 1 : 0);
+  const litArr = new Float32Array(cars.length).fill(_lowLightQuery() ? 1 : 0);
   glowGeo.setAttribute('aLit', new THREE.InstancedBufferAttribute(litArr, 1));
   scene.add(glowIM);
 
@@ -811,7 +822,7 @@ export function buildLights(scene) {
     }
     scene.add(instances(banG, banM, banners, { shadow: false }));
   }
-  if (_duskQuery()) {
+  if (_lowLightQuery()) {
     lampM.emissive = new THREE.Color('#ffb46a'); lampM.emissiveIntensity = 2.4;
     // warm pool under each lamp head — additive decal on the pavement
     const poolG = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
@@ -865,6 +876,94 @@ export function buildWater(scene) {
     scene.add(instances(padG, new M({ color: '#fff', roughness: .9 }), pads, { shadow: false }));
     scene.add(instances(reedG, new M({ color: '#fff', roughness: .95 }), reeds, { shadow: false }));
   }
+
+  /* pond life - ducks paddle lazy circles (animated in tickWorld), rowboats
+     rest at the dock. Dedicated seed stream: zero R() draws consumed. */
+  const Rd = mulberry32(4401), rd = (a, b) => a + Rd() * (b - a);
+  const duckG = colored([
+    { geo: new THREE.SphereGeometry(.5, 9, 7), color: '#7a6248',
+      x: 0, y: .3, z: 0, sy: .78, sz: .7 },
+    { geo: new THREE.CylinderGeometry(.1, .16, .32, 5), color: '#6e5a42',
+      x: .4, y: .55, z: 0, rz: .5 },
+    { geo: new THREE.SphereGeometry(.23, 8, 6), color: '#39543a',
+      x: .52, y: .7, z: 0 },
+    { geo: new THREE.ConeGeometry(.08, .3, 5), color: '#d8892e',
+      x: .78, y: .7, z: 0, rz: -1.57 },
+    { geo: new THREE.ConeGeometry(.15, .45, 5), color: '#64503a',
+      x: -.62, y: .42, z: 0, rz: 1.9 },
+  ]);
+  const duckL = [];
+  const keepClear = (ax, az) => (ax - 570) ** 2 + (az - 152) ** 2 > 225;  // island
+  for (const wdef of WATER) {
+    if (wdef.r < 40) continue;                         // big pond only
+    const n = Math.round(wdef.r * .26);
+    for (let i = 0; i < n; i++) {
+      const a0 = rd(0, 6.28), rad = rd(.12, .72);
+      const dax = wdef.x + Math.cos(a0) * wdef.r * rad * wdef.sx,
+            daz = wdef.z + Math.sin(a0) * wdef.r * rad * wdef.sz;
+      if (!keepClear(dax, daz)) continue;
+      duckL.push({ ax: dax, az: daz, r: rd(1.5, 5), ph: rd(0, 6.28),
+                   vv: rd(.05, .12) * (Rd() < .5 ? 1 : -1), s: rd(.8, 1.25) });
+    }
+  }
+  if (duckL.length) {
+    const duckIM = new THREE.InstancedMesh(duckG, VCOL(), duckL.length);
+    duckIM.frustumCulled = false;
+    scene.add(duckIM);
+    ducks = { im: duckIM, list: duckL };
+  }
+  // rowboats - hull + wedge bow + benches + resting oar, merged colored geo
+  const boatG = colored([
+    { geo: new THREE.BoxGeometry(3.2, .5, 1.1), color: '#6e4630',
+      x: 0, y: .26, z: 0 },
+    { geo: new THREE.CylinderGeometry(0, .56, 1.1, 4), color: '#6e4630',
+      x: 1.85, y: .26, z: 0, rz: -1.5708 },
+    { geo: new THREE.BoxGeometry(2.2, .1, .78), color: '#43301f',
+      x: -.2, y: .52, z: 0 },
+    { geo: new THREE.BoxGeometry(.7, .1, 1.0), color: '#c8b896',
+      x: .6, y: .5, z: 0 },
+    { geo: new THREE.BoxGeometry(.7, .1, 1.0), color: '#c8b896',
+      x: -.9, y: .5, z: 0 },
+    { geo: new THREE.CylinderGeometry(.04, .04, 2.8, 5), color: '#8a7048',
+      x: 0, y: .58, z: 0, ry: .5, rz: 1.5708 },
+  ]);
+  const boatM = VCOL();
+  for (const [bx, bz, br2] of [[548, 146, .9], [618, 170, 2.5]]) {
+    const b = new THREE.Mesh(boatG, boatM);
+    b.position.set(bx, Y + .1, bz); b.rotation.y = br2;
+    b.castShadow = true;
+    scene.add(b);
+  }
+
+  /* pond island gazebo - a destination the rowboats imply. Static colored
+     merge; every number is literal so zero R() draws are consumed. */
+  {
+    const parts = [
+      { geo: new THREE.CylinderGeometry(9.4, 9.9, .9, 26), color: '#6b6f72', y: .3 },
+      { geo: new THREE.CylinderGeometry(8.6, 9.0, .55, 26), color: '#79a35c', y: .72 },
+      { geo: new THREE.CylinderGeometry(3.6, 3.8, .45, 6), color: '#c9bfae', y: 1.1 },
+      { geo: new THREE.CylinderGeometry(.42, 4.05, 2.3, 6), color: '#5a6a74', y: 4.75 },
+      { geo: new THREE.SphereGeometry(.3, 8, 6), color: '#d8b23a', y: 6.05 },
+      { geo: new THREE.SphereGeometry(1.1, 8, 6), color: '#7d8184', x: 6.9, y: 1.0, z: 4.4, sy: .7 },
+      { geo: new THREE.SphereGeometry(.8, 8, 6), color: '#6f7477', x: -7.4, y: .85, z: -3.2, sy: .62 },
+      { geo: new THREE.SphereGeometry(1.5, 8, 6), color: '#4e7d46', x: -5.6, y: 1.4, z: 4.6, sy: .8 },
+      { geo: new THREE.SphereGeometry(1.2, 8, 6), color: '#5d8a3c', x: 5.2, y: 1.3, z: -5.4, sy: .75 },
+    ];
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      parts.push({ geo: new THREE.CylinderGeometry(.15, .15, 2.9, 6), color: '#f0ead8',
+        x: ca * 2.9, y: 2.55, z: sa * 2.9 });
+      const a2 = a + Math.PI / 6;                        // rail between posts
+      parts.push({ geo: new THREE.BoxGeometry(3.0, .42, .09), color: '#8a6a48',
+        x: Math.cos(a2) * 2.9, y: 1.8, z: Math.sin(a2) * 2.9, ry: -a2 });
+      parts.push({ geo: new THREE.BoxGeometry(3.0, .14, .12), color: '#a8885e',
+        x: Math.cos(a2) * 2.9, y: 2.28, z: Math.sin(a2) * 2.9, ry: -a2 });
+    }
+    const island = new THREE.Mesh(colored(parts), VCOL());
+    island.position.set(570, Y - .15, 152);
+    island.castShadow = island.receiveShadow = true;
+    scene.add(island);
+  }
 }
 
 export function buildPark(scene) {
@@ -909,6 +1008,58 @@ export function buildPark(scene) {
   dock.add(box(.16, 1, 16.4, mat('#6a5238'), -1.05, .5, 7));
   dock.add(box(.16, 1, 16.4, mat('#6a5238'), 1.05, .5, 7));
   dock.position.set(540, 0, 132); dock.rotation.y = .9; scene.add(dock);
+
+  /* floating aerating fountain in the pond's east lobe - moored float ring +
+     nozzle, plume animated in tickWorld. Dedicated seed stream, literal
+     placement clear of the dock reach and the gazebo island, zero R() draws. */
+  {
+    const fx = 618, fz = 108;
+    const fparts = [
+      { geo: new THREE.TorusGeometry(1.7, .34, 8, 18).rotateX(Math.PI / 2),
+        color: '#3a4a52', x: fx, y: Y + .32, z: fz },
+      { geo: new THREE.SphereGeometry(.9, 10, 7), color: '#26333a',
+        x: fx, y: Y + .45, z: fz, sy: .55 },
+      { geo: new THREE.CylinderGeometry(.12, .16, 1.4, 6), color: '#c9ccd0',
+        x: fx, y: Y + 1.1, z: fz },
+    ];
+    const fm = new THREE.Mesh(colored(fparts), VCOL());
+    fm.castShadow = true; scene.add(fm);
+    const NJ = 140, jp = new Float32Array(NJ * 3), js = new Float32Array(NJ * 2);
+    const Rj = mulberry32(7741);
+    for (let i = 0; i < NJ; i++) { js[i * 2] = Rj(); js[i * 2 + 1] = Rj(); }
+    const jg = new THREE.BufferGeometry();
+    jg.setAttribute('position', new THREE.BufferAttribute(jp, 3));
+    const jpm = new THREE.PointsMaterial({ color: '#d8f0f8', size: .55,
+      transparent: true, opacity: .85, depthWrite: false, sizeAttenuation: true });
+    const jpts = new THREE.Points(jg, jpm);
+    jpts.userData.dynamic = true;
+    scene.add(jpts);
+    pondJet = { pts: jpts, pos: jp, seed: js, cx: fx, cz: fz };
+  }
+
+  // moored sailboats off the dock end - hull, mast, triangle main+jib
+  const sailSh = (w, h) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0); sh.lineTo(w, 0); sh.lineTo(0, h);
+    return new THREE.ShapeGeometry(sh);
+  };
+  const boatDefs = [[552, 160, .9, '#e8e2d4'], [596, 132, -2.2, '#c8543e']];
+  for (const [bx, bz, br, trim] of boatDefs) {
+    const sb = [
+      { geo: new THREE.BoxGeometry(4.6, .6, 1.4), color: '#f0ebe0', y: .34 },
+      { geo: new THREE.CylinderGeometry(0, .72, 1.5, 4), color: '#f0ebe0',
+        x: 2.7, y: .34, rz: -1.5708 },
+      { geo: new THREE.BoxGeometry(3.2, .16, 1.0), color: trim, y: .68 },
+      { geo: new THREE.CylinderGeometry(.06, .08, 7.4, 6), color: '#8a7048',
+        y: 4.2 },
+      { geo: sailSh(2.6, 4.2), color: '#f2f2ee', x: .1, y: 2.2 },
+      { geo: sailSh(1.9, 3.4), color: trim, x: -.15, y: 2.4, ry: Math.PI },
+    ];
+    const sm = new THREE.Mesh(colored(sb), VCOL());
+    sm.position.set(bx, Y + .02, bz); sm.rotation.y = br;
+    sm.castShadow = true;
+    scene.add(sm);
+  }
 
   // playground
   const pg = new THREE.Group();
@@ -998,7 +1149,7 @@ export function buildPark(scene) {
 }
 
 /* ---------------- downtown plaza ---------------- */
-let fountain = null;
+let fountain = null, pondJet = null, balloons = null;
 export function buildPlaza(scene, spec) {
   const pz = pbr('precast_stone_paving'); pz.color = new THREE.Color('#c9bfae');
   scene.add(plane(spec.w, spec.d, pz, spec.x, Y - .02, spec.z, -Math.PI / 2, 3.2));
@@ -1050,6 +1201,38 @@ export function buildPlaza(scene, spec) {
   const pm = new THREE.Mesh(colored(parts), VCOL());
   pm.castShadow = pm.receiveShadow = true;
   scene.add(pm);
+
+  /* festoon string lights spanning the corner banner poles - warm bulbs that
+     glow at night via RUNENV.litI. Literal geometry, zero R() draws. */
+  {
+    const LP = [[spec.x - spec.w / 2 + 4, spec.z + spec.d / 2 - 4],
+                [spec.x + spec.w / 2 - 4, spec.z + spec.d / 2 - 4],
+                [spec.x - spec.w / 2 + 4, spec.z - spec.d / 2 + 4],
+                [spec.x + spec.w / 2 - 4, spec.z - spec.d / 2 + 4]];
+    const TOP = 6.35, SAG = 1.6;
+    const bulbs = [], wire = [];
+    for (const [a, b] of [[0, 1], [1, 3], [3, 2], [2, 0], [0, 3], [1, 2]]) {
+      const [ax, az] = LP[a], [bx, bz] = LP[b];
+      const n = Math.round(Math.hypot(bx - ax, bz - az) / 1.35);
+      let px = 0, py = 0, pz = 0;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n,
+              x = ax + (bx - ax) * t, z = az + (bz - az) * t,
+              y = Y + TOP - SAG * 4 * t * (1 - t);
+        if (i) wire.push(px, py, pz, x, y, z);
+        px = x; py = y; pz = z;
+        bulbs.push({ x, y: y - .14, z, s: 1 });
+      }
+    }
+    const litM = new M({ color: '#fff2d8', emissive: '#ffd9a0',
+      emissiveIntensity: RUNENV.litI, roughness: .5 });
+    litM.envMapIntensity *= RUNENV.envScale; litM.userData.lit = true;
+    scene.add(instances(new THREE.SphereGeometry(.1, 6, 4), litM, bulbs,
+      { shadow: false }));
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+    scene.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: '#2e3234' })));
+  }
 }
 
 /* ---------------- athletic park ---------------- */
@@ -1813,10 +1996,43 @@ export function buildMountains(scene) {
       const a = vbase + i * (M + 1) + j, b = a + M + 1;
       idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
+    return { H, R0, rugF, width, hMax, seed, M };
   };
-  ridge(1500, 150, 180, 4.7, 1.25, 720, 12);   // near wooded foothill band - never snows
-  ridge(1700, 380, 260, 0.0, .80, 720, 12);    // green foothills, thin snow cap
-  ridge(2600, 790, 500, 2.4, .55, 640, 14);    // taller far range, deeper snowline
+  const rg1 = ridge(1500, 150, 180, 4.7, 1.25, 720, 12);   // near wooded foothill band - never snows
+  const rg2 = ridge(1700, 380, 260, 0.0, .80, 720, 12);    // green foothills, thin snow cap
+  ridge(2600, 790, 500, 2.4, .55, 640, 14);                // taller far range, deeper snowline
+
+  /* conifer cover on the forest-band slopes - instanced firs sized to read
+     as canopy at city distance. A dedicated seeded stream keeps the global
+     R() draw order (and every downstream placement) untouched. */
+  const R2 = mulberry32(7771);
+  const rr2 = (a, b) => a + R2() * (b - a);
+  const firG = colored([
+    { geo: new THREE.CylinderGeometry(.16, .26, 1.6, 5), color: '#33241a', x: 0, y: .8, z: 0 },
+    { geo: new THREE.ConeGeometry(1.35, 4.4, 7), color: '#2e4a2c', x: 0, y: 3.6, z: 0 },
+    { geo: new THREE.ConeGeometry(.9, 2.6, 7), color: '#395631', x: 0, y: 5.5, z: 0 },
+  ]);
+  const firL = [], FIR_TINTS = ['#24401f', '#2e4a2c', '#3a5a33', '#2a4630'];
+  for (const rg of [rg1, rg2]) {
+    for (let i = 0; i < 4200; i++) {
+      const a = rr2(0, Math.PI * 2), u = rr2(.12, .88), jf = u * rg.M,
+            prof = u < .5 ? Math.pow(u * 2, 1.55) : Math.pow((1 - u) * 2, 1.55),
+            cragA = Math.sin(a * 23 + rg.seed * 3 + jf * 1.7) * .5
+                  + Math.sin(a * 41 + rg.seed * 7 + jf * 2.3) * .3,
+            h = rg.H(a),
+            r = rg.R0(a) + rg.width * (2 * u - 1)
+              + cragA * rg.width * .10 * rg.rugF * Math.sin(Math.PI * u),
+            y = Math.max(0, h * prof + h * .035 * cragA * rg.rugF * Math.sin(Math.PI * u));
+      if (y < 4 || y > .38 * rg.hMax) continue;          // forest band only
+      const px = Math.cos(a) * r, pz = Math.sin(a) * r;
+      if (px * px + pz * pz < 800 * 800) continue;       // never inside town
+      firL.push({ x: px, y: y - 1.2, z: pz, s: rr2(1.4, 3.2), ry: rr2(0, 6.28),
+                  color: FIR_TINTS[Math.floor(R2() * 4)] });
+    }
+  }
+  const fim = instances(firG, VCOL(), firL, { shadow: false });
+  fim.frustumCulled = false;
+  scene.add(fim);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -1827,8 +2043,336 @@ export function buildMountains(scene) {
   scene.add(m);
 }
 
+/* ---------------- ferris wheel ---------------- */
+let ferris = null;
+export function buildFerrisWheel(scene) {
+  /* amusement wheel on the park's east lawn - literal geometry only,
+     zero R() draws. Wheel spins in tickWorld; gondolas stay upright. */
+  let fx = 0, fz = 0;
+  for (const [cx, cz] of [[700, 214], [662, 258], [742, 170], [508, 272]]) {
+    if (isFree(cx, cz, 24)) { fx = cx; fz = cz; break; }
+  }
+  if (!fx) return;
+  occupyRect(fx, fz, 44, 32, 3);
+  const R0 = 15, HY = 18.5, FACE = .62;
+  const sup = [
+    { geo: new THREE.CylinderGeometry(11.5, 12.2, .55, 22), color: '#b0a894', y: .27 },
+    { geo: new THREE.CylinderGeometry(.5, .55, 1.1, 8), color: '#5a5650', y: 1.0, x: 8.6, z: -6.4 },
+    { geo: new THREE.BoxGeometry(1.9, 1.5, 1.5), color: '#d88a4a', y: 2.0, x: 8.6, z: -6.4 },
+    { geo: new THREE.CylinderGeometry(0, 1.5, .9, 4), color: '#8a4434', y: 3.2, x: 8.6, z: -6.4 },
+  ];
+  for (const sgn of [-1, 1]) {                      // A-frame legs, both faces
+    for (const l of [-1, 1])
+      sup.push({ geo: new THREE.CylinderGeometry(.55, .8, 21.4, 8), color: '#cdd2d8',
+        x: l * 4.2, y: 10.2, z: sgn * 5.2, rx: sgn * -.24, rz: l * .21 });
+    sup.push({ geo: new THREE.BoxGeometry(10.6, .5, .6), color: '#b8bdc4',
+      y: 6.4, z: sgn * 4.3 });
+  }
+  sup.push({ geo: new THREE.CylinderGeometry(1.15, 1.15, 12.6, 10), color: '#8a8f96',
+    y: HY, rx: Math.PI / 2 });
+  const base = new THREE.Mesh(colored(sup), VCOL());
+  base.position.set(fx, Y, fz); base.rotation.y = FACE;
+  base.castShadow = base.receiveShadow = true;
+  scene.add(base);
+
+  const wp = [                                      // rotating wheel, local XY
+    { geo: new THREE.TorusGeometry(R0, .42, 6, 30), color: '#e8e2d4' },
+    { geo: new THREE.TorusGeometry(R0 * .8, .28, 6, 30), color: '#c8543e' },
+    { geo: new THREE.CylinderGeometry(1.5, 1.5, 1.4, 12), color: '#d8b23a', rx: Math.PI / 2 },
+  ];
+  for (let i = 0; i < 6; i++)
+    wp.push({ geo: new THREE.BoxGeometry(.32, R0 * 2, .32), color: '#cdd2d8',
+      rz: i * Math.PI / 6 });
+  const wheel = new THREE.Mesh(colored(wp), VCOL());
+  wheel.position.set(fx, Y + HY, fz);
+  wheel.castShadow = true;
+  scene.add(wheel);
+
+  const litG = new THREE.SphereGeometry(.3, 6, 5);
+  const litM = new M({ color: '#ffe9c0', emissive: '#ffd9a0',
+    emissiveIntensity: RUNENV.litI, roughness: .6 });
+  litM.envMapIntensity *= RUNENV.envScale; litM.userData.lit = true;
+  const bulbs = [];
+  for (let i = 0; i < 24; i++) {
+    const a = i * Math.PI / 12;
+    bulbs.push({ x: Math.cos(a) * R0, y: Math.sin(a) * R0, z: 0, s: 1 });
+  }
+  const bulbIM = new THREE.InstancedMesh(litG, litM, bulbs.length);
+  bulbs.forEach((b, i) => {
+    _p.set(b.x, b.y, b.z); _q.identity(); _s1.set(1, 1, 1);
+    _mx.compose(_p, _q, _s1); bulbIM.setMatrixAt(i, _mx);
+  });
+  wheel.add(bulbIM);                                // spins with the rim
+
+  const cabG = colored([
+    { geo: new THREE.BoxGeometry(2.3, 1.5, 1.6), color: '#ffffff', y: -.6 },
+    { geo: new THREE.BoxGeometry(2.0, .22, 1.8), color: '#44403a', y: .2 },
+    { geo: new THREE.CylinderGeometry(.09, .09, 1.1, 5), color: '#8a8f96', y: .85 },
+  ]);
+  const cabIM = new THREE.InstancedMesh(cabG, VCOL(), 12);
+  cabIM.frustumCulled = false;
+  const TINTS = ['#d8543e', '#e8a23a', '#4a90c2', '#5aa04a', '#b05a9a', '#e8e4da'];
+  for (let i = 0; i < 12; i++)
+    cabIM.setColorAt(i, new THREE.Color(TINTS[i % TINTS.length]));
+  scene.add(cabIM);
+  ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
+}
+
+/* ---------------- hot air balloons ---------------- */
+export function buildBalloons(scene) {
+  /* two striped envelopes drifting lazy circuits over the town - wedge-sliced
+     sphere gores, basket + rope lines, animated drift/bob in tickWorld.
+     dynamic groups so mergeStatic leaves them alone; zero R() draws. */
+  const DEFS = [
+    { cx: 300, cz: -180, r: 220, h: 95, ph: 0,   v: .008,
+      cols: ['#c0392b', '#f2d49b'] },           // crimson/cream over downtown
+    { cx: 520, cz: 150,  r: 160, h: 120, ph: 2.4, v: .006,
+      cols: ['#3d6b8a', '#e8e2d4'] },           // blue/bone over the park
+  ];
+  balloons = [];
+  for (const d of DEFS) {
+    const grp = new THREE.Group();
+    grp.userData.dynamic = true;
+    const parts = [];
+    for (let i = 0; i < 10; i++)
+      parts.push({ geo: new THREE.SphereGeometry(4.2, 3, 9,
+                     i / 10 * Math.PI * 2, Math.PI * 2 / 10 + .01),
+                   color: d.cols[i % 2], sy: 1.18 });
+    parts.push({ geo: new THREE.CylinderGeometry(.9, 1.6, 1.1, 8),
+                 color: '#6e5138', y: -4.2 });
+    parts.push({ geo: new THREE.CylinderGeometry(.42, .55, .5, 8),
+                 color: '#8a7048', y: -3.5 });
+    for (const [rx, rz] of [[.7, .7], [-.7, .7], [.7, -.7], [-.7, -.7]])
+      parts.push({ geo: new THREE.CylinderGeometry(.03, .03, 2.6, 4),
+                   color: '#8a7a5a', x: rx * 1.1, y: -2.4, z: rz * 1.1 });
+    const env = new THREE.Mesh(colored(parts), VCOL());
+    env.castShadow = true;
+    grp.add(env);
+    grp.position.set(d.cx, Y + d.h, d.cz);
+    scene.add(grp);
+    balloons.push({ grp, ...d });
+  }
+}
+
+/* ---------------- tennis courts ---------------- */
+export function buildTennisCourts(scene) {
+  /* pair of fenced hard courts on the park's north lawn between the ponds -
+     blue pads, green surround, white lines, nets, benches. Literal geometry,
+     zero R() draws. */
+  let x = 0, z = 0, ok = false;
+  for (const [cx, cz] of [[620, 70], [660, 74], [705, 74], [560, 72]])
+    if (isFree(cx, cz, 16)) { x = cx; z = cz; ok = true; break; }
+  if (!ok) return;
+  occupyRect(x, z, 33, 29, 2);
+  const BX = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const P = [], PW = 30.4, PD = 26;
+  P.push({ geo: BX(PW + 2, .1, PD + 2), color: '#4a7f52', x, y: Y + .05, z });
+  const line = (lx, lz, lx2, lz2) =>
+    P.push({ geo: BX(Math.max(Math.abs(lx2 - lx), .12), .012,
+                     Math.max(Math.abs(lz2 - lz), .12)),
+             color: '#f2f2ee', x: x + (lx + lx2) / 2, y: Y + .165,
+             z: z + (lz + lz2) / 2 });
+  for (const cz of [z - 6.5, z + 6.5]) {              // two courts, long axis x
+    const c = cz - z;
+    P.push({ geo: BX(23.8, .12, 11), color: '#3f6ea8', x, y: Y + .11, z: cz });
+    line(-11.89, c - 5.49, 11.89, c - 5.49);          // doubles sidelines
+    line(-11.89, c + 5.49, 11.89, c + 5.49);
+    line(-11.89, c - 5.49, -11.89, c + 5.49);         // baselines
+    line(11.89, c - 5.49, 11.89, c + 5.49);
+    line(-6.40, c - 5.49, -6.40, c + 5.49);           // service lines
+    line(6.40, c - 5.49, 6.40, c + 5.49);
+    line(-6.40, c, 6.40, c);                          // center service line
+    // net: posts + mesh + white top tape
+    P.push({ geo: BX(.12, 1.1, .12), color: '#1c2226', x, y: Y + .72, z: cz - 6.1 });
+    P.push({ geo: BX(.12, 1.1, .12), color: '#1c2226', x, y: Y + .72, z: cz + 6.1 });
+    P.push({ geo: BX(.05, .92, 12.2), color: '#22282c', x, y: Y + .62, z: cz });
+    P.push({ geo: BX(.07, .07, 12.2), color: '#f2f2ee', x, y: Y + 1.1, z: cz });
+  }
+  /* perimeter fence: posts every ~4.3m + translucent chain-link panels */
+  const posts = [];
+  const FW = PW + 1.6, FD = PD + 1.6, H = 3.1;
+  const panels = [];
+  for (const [fx, fz, fw, fd] of [[0, -FD / 2, FW, .03], [0, FD / 2, FW, .03],
+                                  [-FW / 2, 0, .03, FD], [FW / 2, 0, .03, FD]]) {
+    panels.push({ geo: BX(fw, H, fd), x: x + fx, y: Y + H / 2 + .1, z: z + fz });
+    const n = Math.max(2, Math.round((fw > fd ? fw : fd) / 4.3));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      posts.push({ x: x + fx + (fw > fd ? (t - .5) * fw : 0),
+                   z: z + fz + (fd > fw ? (t - .5) * fd : 0), s: 1 });
+    }
+  }
+  const panelMesh = new THREE.Mesh(colored(panels), new M({ color: '#5a6a70',
+    roughness: .6, metalness: .4, transparent: true, opacity: .28,
+    side: THREE.DoubleSide }));
+  panelMesh.receiveShadow = true;
+  scene.add(panelMesh);
+  scene.add(instances(new THREE.CylinderGeometry(.05, .05, H + .1, 5),
+    new M({ color: '#42505a', roughness: .55, metalness: .4 }),
+    posts.map(pt => ({ ...pt, y: Y + H / 2 + .1 })), { shadow: true }));
+  /* benches at the pad ends outside the fence */
+  for (const bz of [z - 6.5, z + 6.5]) {
+    P.push({ geo: BX(2.2, .08, .5), color: '#7a5b3f',
+             x: x - PW / 2 - 2.2, y: Y + .46, z: bz });
+    P.push({ geo: BX(.1, .44, .1), color: '#3a4048',
+             x: x - PW / 2 - 3.0, y: Y + .22, z: bz - .8 });
+    P.push({ geo: BX(.1, .44, .1), color: '#3a4048',
+             x: x - PW / 2 - 1.4, y: Y + .22, z: bz + .8 });
+  }
+  const cm = new THREE.Mesh(colored(P), VCOL());
+  cm.castShadow = cm.receiveShadow = true;
+  scene.add(cm);
+}
+
+/* ---------------- fireflies ---------------- */
+let fireflies = null;
+export function buildFireflies(scene) {
+  /* night-only drift of glowing points over the park + pond - additive
+     PointsMaterial, bobbing on per-fly sine paths. Dedicated stream, zero
+     R() draws; only built when main.js gates it on ?time=night. */
+  const Rf = mulberry32(5197), rf = (a, b) => a + Rf() * (b - a);
+  const FLIES = [], zones = [
+    { x: 560, z: 210, rx: 190, rz: 80 },        // park SE lawn
+    { x: 585, z: 150, rx: 100, rz: 70 },        // over the pond
+    { x: -755, z: 340, rx: 40, rz: 330 },       // west green belt
+  ];
+  for (const zn of zones)
+    for (let i = 0; i < 80; i++)
+      FLIES.push({ x: zn.x + rf(-zn.rx, zn.rx), z: zn.z + rf(-zn.rz, zn.rz),
+                   h: rf(.6, 3.2), ph: rf(0, 6.28), v: rf(.4, 1.1),
+                   amp: rf(.8, 2.2), tw: rf(1.5, 4) });
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(FLIES.length * 3),
+        col = new Float32Array(FLIES.length * 3).fill(1);
+  FLIES.forEach((f, i) => { pos[i * 3] = f.x; pos[i * 3 + 1] = Y + f.h; pos[i * 3 + 2] = f.z; });
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pm = new THREE.PointsMaterial({ color: '#d8e86a', size: .34,
+    transparent: true, opacity: .9, depthWrite: false, vertexColors: true,
+    blending: THREE.AdditiveBlending, sizeAttenuation: true });
+  const pts = new THREE.Points(g, pm);
+  pts.frustumCulled = false;
+  pts.userData.dynamic = true;
+  scene.add(pts);
+  fireflies = { pts, list: FLIES };
+}
+
+/* ---------------- tower crane ---------------- */
+let crane = null;
+export function buildCrane(scene) {
+  /* construction tower crane on a fenced gravel pad in the downtown fringe -
+     literal geometry, zero R() draws. Jib slews slowly in tickWorld. */
+  let mx = 0, mz = 0;
+  for (const [cx, cz] of [[248, -84], [36, -96], [-120, -100], [300, -120]]) {
+    if (isFree(cx, cz, 20)) { mx = cx; mz = cz; break; }
+  }
+  if (!mx) return;
+  occupyRect(mx, mz, 34, 34, 3);
+  const MH = 42;                                   // mast height
+  const parts = [
+    { geo: new THREE.CylinderGeometry(15, 15.6, .5, 18), color: '#b0a890', y: .25 },
+    { geo: new THREE.BoxGeometry(5.4, 1.4, 5.4), color: '#8a8478', y: 1.2 },   // base block
+    { geo: new THREE.BoxGeometry(3.4, 2.6, 2.6), color: '#c8543e', x: 6.5, y: 1.8, z: 6 },   // site office pod
+    { geo: new THREE.BoxGeometry(2.4, 1.3, 1.3), color: '#d8a03a', x: -7, y: 1.1, z: 7 },    // generator
+  ];
+  for (const [lx, lz] of [[-.9, -.9], [.9, -.9], [-.9, .9], [.9, .9]])   // mast rails
+    parts.push({ geo: new THREE.BoxGeometry(.3, MH, .3), color: '#e8b23a',
+      x: lx, y: MH / 2 + 1.6, z: lz });
+  for (let y = 3.4; y < MH; y += 4.4)              // mast brace rings
+    parts.push({ geo: new THREE.BoxGeometry(2.3, .16, 2.3), color: '#d8a838', y: y + 1.6 });
+  const site0 = new THREE.Mesh(colored(parts), VCOL());
+  site0.position.set(mx, Y, mz);
+  site0.castShadow = site0.receiveShadow = true;
+  scene.add(site0);
+
+  const slew = new THREE.Group();                  // everything above the ring
+  slew.position.set(mx, Y + MH + 1.7, mz);
+  const jp = [
+    { geo: new THREE.BoxGeometry(1.5, 1.6, 1.5), color: '#d8a838', y: .8 },       // cab/slew block
+    { geo: new THREE.CylinderGeometry(.2, .2, 5.6, 6), color: '#9aa0a6', y: 3.6 }, // A-post
+    { geo: new THREE.BoxGeometry(1.4, 1.5, 1.2), color: '#d8dde2', x: -.4, y: 1.0, z: .8 }, // cab
+  ];
+  const JIB = 21, CJ = 7;                          // jib / counter-jib length
+  for (let i = 0; i < 7; i++) {                    // jib lattice chords
+    jp.push({ geo: new THREE.BoxGeometry(JIB / 7 + .1, .22, .22), color: '#e8b23a',
+      x: 2.2 + i * JIB / 7, y: 1.7, z: -.75 });
+    jp.push({ geo: new THREE.BoxGeometry(JIB / 7 + .1, .22, .22), color: '#e8b23a',
+      x: 2.2 + i * JIB / 7, y: 1.7, z: .75 });
+    jp.push({ geo: new THREE.BoxGeometry(.16, 1.3, .16), color: '#d8a838',
+      x: 2.2 + i * JIB / 7 + JIB / 14, y: 2.25, z: -.75, rz: (i % 2 ? .5 : -.5) });
+  }
+  jp.push({ geo: new THREE.BoxGeometry(JIB / 7, .22, .22), color: '#e8b23a', x: JIB + .4, y: 2.9, z: 0 });
+  jp.push({ geo: new THREE.BoxGeometry(CJ, .5, 1.5), color: '#e8b23a', x: -CJ / 2 - .5, y: 1.9, z: 0 });
+  jp.push({ geo: new THREE.BoxGeometry(1.6, 3.2, 1.5), color: '#8a9096', x: -CJ - .2, y: .4, z: 0 }); // counterweight
+  jp.push({ geo: new THREE.CylinderGeometry(.05, .05, 6.2, 4), color: '#6a7076',
+    x: JIB * .45, y: 4.2, z: 0, rz: .9 });         // tie bar jib
+  jp.push({ geo: new THREE.CylinderGeometry(.05, .05, 5.4, 4), color: '#6a7076',
+    x: -CJ * .45, y: 4.2, z: 0, rz: -.9 });        // tie bar counter
+  // trolley + cable + hook
+  jp.push({ geo: new THREE.BoxGeometry(.8, .3, 1.6), color: '#8a9096', x: JIB * .7, y: 1.45, z: 0 });
+  jp.push({ geo: new THREE.CylinderGeometry(.05, .05, 9.5, 4), color: '#3a3e44',
+    x: JIB * .7, y: -3.3, z: 0 });
+  jp.push({ geo: new THREE.BoxGeometry(.9, .7, .9), color: '#c8543e', x: JIB * .7, y: -8.4, z: 0 });
+  const jib = new THREE.Mesh(colored(jp), VCOL());
+  jib.castShadow = true;
+  slew.add(jib);
+  slew.userData.dynamic = true;                  // slews - keep out of mergeStatic
+  scene.add(slew);
+  crane = { slew };
+}
+
+/* ---------------- farm windmill ---------------- */
+let windmill = null;
+export function buildWindmill(scene) {
+  /* lattice farm windmill in the NE fields - literal geometry, zero R()
+     draws. Rotor spins in tickWorld with a gentle yaw hunt. */
+  let mx = 0, mz = 0;
+  for (const [cx, cz] of [[576, -578], [540, -628], [662, -598], [588, -536]]) {
+    if (isFree(cx, cz, 12)) { mx = cx; mz = cz; break; }
+  }
+  if (!mx) return;
+  occupyRect(mx, mz, 14, 14, 2);
+  const TH = 14, HEAD = .8;                 // tower height, vane heading
+  const parts = [];
+  for (const [lx, lz] of [[-1.7, -1.7], [1.7, -1.7], [-1.7, 1.7], [1.7, 1.7]])
+    parts.push({ geo: new THREE.BoxGeometry(.22, TH, .22), color: '#9aa0a6',
+      x: lx * .5, y: TH / 2, z: lz * .5, rx: -lz * .055, rz: lx * .055 });
+  for (const by of [4.2, 8.6])                     // cross-brace rings
+    parts.push({ geo: new THREE.BoxGeometry(2.4 + by * .18, .12, 2.4 + by * .18),
+      color: '#8a9096', y: TH - by });
+  parts.push({ geo: new THREE.BoxGeometry(1.3, .4, 1.3), color: '#7a8086', y: TH + .2 });
+  const tower = new THREE.Mesh(colored(parts), VCOL());
+  tower.position.set(mx, Y, mz);
+  tower.castShadow = tower.receiveShadow = true;
+  scene.add(tower);
+
+  const head = new THREE.Group();                  // yaws on the tower top
+  head.position.set(mx, Y + TH + .6, mz);
+  const bladeP = [];
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6;
+    bladeP.push({ geo: new THREE.BoxGeometry(1.5, 2.3, .06), color: '#c8ccd2',
+      x: Math.cos(a + .26) * 2.9, y: Math.sin(a + .26) * 2.9, rz: a + 1.05 });
+  }
+  bladeP.push({ geo: new THREE.TorusGeometry(4.1, .1, 5, 20), color: '#9aa0a6' });
+  bladeP.push({ geo: new THREE.CylinderGeometry(.4, .4, .5, 8), color: '#6a7076',
+    rx: Math.PI / 2 });
+  const rotor = new THREE.Mesh(colored(bladeP), VCOL());
+  rotor.position.z = .8; rotor.castShadow = true;
+  head.add(rotor);
+  const tail = new THREE.Mesh(colored([
+    { geo: new THREE.BoxGeometry(2.6, .1, .1), color: '#8a9096', x: -1.9 },
+    { geo: new THREE.BoxGeometry(1.2, 1.7, .06), color: '#c8543e', x: -3.3 },
+  ]), VCOL());
+  head.add(tail);
+  head.rotation.y = HEAD;
+  scene.add(head);
+  windmill = { head, rotor };
+}
+
 /* ---------------- bird flocks ---------------- */
 let birds = null;
+let ducks = null;
 export function buildBirds(scene) {
   // tiny chevron: two triangles sharing a body vertex â€” reads as a gliding bird
   const bg = new THREE.BufferGeometry();
@@ -1858,21 +2402,86 @@ export function buildBirds(scene) {
 /* ---------------- drifting clouds ---------------- */
 let clouds = null;
 export function buildClouds(scene) {
-  const t = cloudSpriteTexture();
+  const texs = [cloudSpriteTexture(0), cloudSpriteTexture(1),
+                cloudSpriteTexture(2)];
   const items = [];
   for (let i = 0; i < 12; i++) {
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true,
-      opacity: rr(.4, .7), depthWrite: false }));
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texs[i % 3],
+      transparent: true, opacity: rr(.4, .7), depthWrite: false }));
     const s = rr(200, 380);
     sp.scale.set(s, s * .38, 1);
     sp.position.set(rr(-1600, 1600), rr(240, 460), rr(-1400, 500));
     scene.add(sp);
     items.push({ sp, v: rr(2, 5) });
   }
+  /* extra high cirrus deck - dedicated stream so the original 12 keep their
+     exact positions/R() draws */
+  const Rc = mulberry32(6603), rc = (a, b) => a + Rc() * (b - a);
+  for (let i = 0; i < 7; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: texs[i % 3], transparent: true, opacity: rc(.16, .3),
+      depthWrite: false }));
+    const s = rc(420, 700);
+    sp.scale.set(s, s * .16, 1);
+    sp.position.set(rc(-1800, 1800), rc(560, 780), rc(-1600, 400));
+    scene.add(sp);
+    items.push({ sp, v: rc(1, 2.5) });
+  }
   clouds = items;
 }
 
-/* ================= per-frame world animation ================= */
+/* ---------------- rain (?weather=rain) ---------------- */
+let rain = null;
+export function buildRain(scene) {
+  /* 1300 streak instances over the town core, falling in a wrapped column.
+     Dedicated seed stream - zero R() draws. ASPH goes wet sheen here so the
+     pass stays self-contained (its roughness wins over streetscape's lift). */
+  const Rr = mulberry32(8819), rf = (a, b) => a + Rr() * (b - a);
+  const drops = [];
+  for (let i = 0; i < 1300; i++)
+    drops.push({ x: rf(-780, 780), y: rf(0, 260), z: rf(-780, 780),
+                 v: rf(46, 68), s: rf(.8, 1.3), len: rf(2.4, 4.0) });
+  /* crossed quads - a single Y-facing plane goes edge-on to streets that run
+     along X; two perpendicular panels keep a visible face from every azimuth */
+  const qA = new THREE.PlaneGeometry(.09, 1); qA.translate(0, -.5, 0);
+  const qB = qA.clone(); qB.rotateY(Math.PI / 2);  // anchor at drop head
+  const streakG = mergeGeometries([qA, qB]);
+  const streakM = new THREE.MeshBasicMaterial({ color: '#d8e6ee',
+    transparent: true, opacity: .4, depthWrite: false,
+    side: THREE.DoubleSide, fog: false });
+  const rim = new THREE.InstancedMesh(streakG, streakM, drops.length);
+  rim.frustumCulled = false;
+  scene.add(rim);
+  rain = { im: rim, list: drops };
+  ASPH.roughness = .3;                             // rain-slick pavement
+  ASPH.envMapIntensity = 1.35;
+  for (const m of WET_SURFACES) {                  // parking lots + gutters wet too
+    m.roughness = .3; m.envMapIntensity = 1.35;
+  }
+
+  /* standing puddles along lane edges - dark glossy ellipses that pick up
+     the (rain-dimmed) env map. Same dedicated stream; runs only under
+     ?weather=rain since buildRain is gated on it. */
+  const pudG = new THREE.CircleGeometry(1, 14);
+  pudG.scale(1, .62, 1); pudG.rotateX(-Math.PI / 2); pudG.translate(0, Y + .055, 0);
+  const pudM = new M({ color: '#20303a', roughness: .07, metalness: .08 });
+  pudM.envMapIntensity = 1.8 * RUNENV.envScale;
+  const pudL = [];
+  for (const r of ROADS) {
+    const len = r.a1 - r.a0;
+    for (let a = 14; a < len - 14; a += 30) {
+      if (Rr() > .55) continue;
+      const off = rf(-(r.w / 2 - 2.2), r.w / 2 - 2.2);
+      pudL.push({ x: r.axis === 'v' ? r.c + off : r.a0 + a,
+                  z: r.axis === 'v' ? r.a0 + a : r.c + off,
+                  s: rf(1.0, 2.6), ry: rf(0, 6.28) });
+    }
+  }
+  const pudIM = instances(pudG, pudM, pudL, { shadow: false });
+  pudIM.receiveShadow = true;
+  scene.add(pudIM);
+}
+
 const _mx = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(),
       _s1 = new THREE.Vector3(1, 1, 1), _eul = new THREE.Euler();
 export function tickWorld(t, dt) {
@@ -2009,6 +2618,27 @@ export function tickWorld(t, dt) {
     }
     attr.needsUpdate = true;
   }
+  // hot air balloons - lazy circuit + bob + slow rotation
+  if (balloons) for (const b of balloons) {
+    const a = b.ph + t * b.v;
+    b.grp.position.set(b.cx + Math.cos(a) * b.r, Y + b.h + Math.sin(t * .5 + b.ph) * 4,
+                       b.cz + Math.sin(a) * b.r);
+    b.grp.rotation.y = t * .04 + b.ph;
+  }
+  // pond jet - taller plume, wider mushroom crown
+  if (pondJet) {
+    const { pts, pos, seed, cx, cz } = pondJet;
+    const N = pos.length / 3;
+    for (let i = 0; i < N; i++) {
+      const life = (seed[i * 2] + t * (.42 + seed[i * 2 + 1] * .55)) % 1;
+      const ang = seed[i * 2 + 1] * 6.28 + seed[i * 2] * 3;
+      const r = .25 + life * (2.4 + seed[i * 2] * 1.6);
+      pos[i * 3] = cx + Math.cos(ang) * r * life * life;
+      pos[i * 3 + 1] = Y + 1.6 + life * 7.6 - life * life * 6.8;
+      pos[i * 3 + 2] = cz + Math.sin(ang) * r * life * life;
+    }
+    pts.geometry.attributes.position.needsUpdate = true;
+  }
   // fountain spray
   if (fountain) {
     const { pts, pos, seed, cx, cz } = fountain;
@@ -2040,6 +2670,78 @@ export function tickWorld(t, dt) {
       _eul.set(flap * .3, -a + (b.vv > 0 ? 0 : Math.PI), flap);
       _q.setFromEuler(_eul);
       _s1.setScalar(b.s);
+      _mx.compose(_p, _q, _s1);
+      im.setMatrixAt(i, _mx);
+    });
+    _s1.set(1, 1, 1);
+    im.instanceMatrix.needsUpdate = true;
+  }
+  // fireflies - lazy drift + bob + twinkle fade
+  if (fireflies) {
+    const { pts, list } = fireflies, arr = pts.geometry.attributes.position.array;
+    list.forEach((f, i) => {
+      const t2 = t * f.v + f.ph;
+      arr[i * 3] = f.x + Math.sin(t2) * f.amp + Math.sin(t2 * .37) * f.amp * .5;
+      arr[i * 3 + 1] = Y + f.h + Math.sin(t2 * 1.7) * .5;
+      arr[i * 3 + 2] = f.z + Math.cos(t2 * .8) * f.amp;
+      const tw = .15 + .85 * Math.max(0, Math.sin(t * f.tw + f.ph * 3));
+      const ca = pts.geometry.attributes.color.array;
+      ca[i * 3] = tw; ca[i * 3 + 1] = tw; ca[i * 3 + 2] = tw * .6;
+    });
+    pts.geometry.attributes.position.needsUpdate = true;
+    pts.geometry.attributes.color.needsUpdate = true;
+  }
+  // tower crane - slow slew like a real site crane at idle
+  if (crane) crane.slew.rotation.y = t * .045 + Math.sin(t * .3) * .06;
+  // farm windmill - rotor spin + slow vane yaw hunt
+  if (windmill) {
+    windmill.rotor.rotation.z = t * 2.1;
+    windmill.head.rotation.y = .8 + Math.sin(t * .16) * .22;
+  }
+  // ferris wheel - slow turn; gondolas hang upright below the rim
+  if (ferris) {
+    const { wheel, cabIM, cx, cy, cz, R0, face } = ferris;
+    const a0 = t * .09;
+    wheel.rotation.set(0, face, a0);
+    const cf = Math.cos(face), sf = Math.sin(face);
+    for (let i = 0; i < 12; i++) {
+      const a = a0 + i * Math.PI / 6;
+      const lx = Math.cos(a) * R0, ly = Math.sin(a) * R0 - 1.7;
+      _p.set(cx + lx * cf, cy + ly, cz - lx * sf);
+      _eul.set(0, face, Math.sin(t * 1.1 + i * 2.1) * .05);
+      _q.setFromEuler(_eul); _mx.compose(_p, _q, _s1);
+      cabIM.setMatrixAt(i, _mx);
+    }
+    cabIM.instanceMatrix.needsUpdate = true;
+  }
+  // paddling ducks - lazy circles on the pond, gentle bob, tangent heading
+  if (ducks) {
+    const { im, list } = ducks;
+    list.forEach((d, i) => {
+      const a = d.ph + t * d.vv;
+      _p.set(d.ax + Math.cos(a) * d.r,
+             Y + .12 + Math.sin(t * 1.6 + d.ph) * .05,
+             d.az + Math.sin(a) * d.r);
+      _eul.set(0, d.vv > 0 ? -a - 1.5708 : 1.5708 - a,
+               Math.sin(t * 2 + d.ph) * .04);
+      _q.setFromEuler(_eul);
+      _s1.setScalar(d.s);
+      _mx.compose(_p, _q, _s1);
+      im.setMatrixAt(i, _mx);
+    });
+    _s1.set(1, 1, 1);
+    im.instanceMatrix.needsUpdate = true;
+  }
+  // rain streaks - wrapped fall column, slight slant via fixed roll
+  if (rain) {
+    const { im, list } = rain;
+    _eul.set(0, 0, .1);
+    _q.setFromEuler(_eul);
+    list.forEach((d, i) => {
+      d.y -= d.v * dt;
+      if (d.y < 0) d.y += 260;
+      _p.set(d.x, d.y, d.z);
+      _s1.set(d.s, d.len, d.s);
       _mx.compose(_p, _q, _s1);
       im.setMatrixAt(i, _mx);
     });

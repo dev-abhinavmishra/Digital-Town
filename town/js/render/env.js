@@ -17,11 +17,13 @@ const HDR_BY_TIME = {
 export function loadEnvironment(renderer, { mode = 'day', skyTex } = {}) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
-  const spec = HDR_BY_TIME[mode] || HDR_BY_TIME.day;
+  const spec = HDR_BY_TIME[mode];
   const fallback = () => {
     const t = pmrem.fromEquirectangular(skyTex).texture;
     return { envType: 'fallback', envSrc: 'procedural-sky', envIntensity: mode === 'golden' ? .9 : .8, texture: t };
   };
+  // no night HDR — PMREM the dark procedural sky so IBL doesn't relight as day
+  if (!spec) return Promise.resolve(fallback());
   return new Promise(resolve => {
     new RGBELoader().load(spec.src, hdr => {
       try {

@@ -181,14 +181,24 @@ export function detailNoiseTexture() {
     x.fillStyle = `rgba(${v | 0},${v | 0},${v | 0},.55)`;
     x.fillRect(R() * 256, R() * 256, 1, 1);
   }
-  for (let i = 0; i < 700; i++) {   // longer dashes read as grass strokes
-    const v = 200 + R() * 55, px = R() * 256, py = R() * 256;
+  for (let i = 0; i < 900; i++) {   // grass strokes at random angles — a single
+    const v = 200 + R() * 55;     // fixed direction tiles into visible columns
+    const px = R() * 256, py = R() * 256, rot = R() * Math.PI;
+    x.save(); x.translate(px, py); x.rotate(rot);
     x.fillStyle = `rgba(${v | 0},${v | 0},${v | 0},.3)`;
-    x.fillRect(px, py, 1, 2 + R() * 3);
+    x.fillRect(0, 0, 1, 2 + R() * 3);
+    x.restore();
   }
-  for (let i = 0; i < 8; i++) {     // mowing-stripe suggestion, wrapped
-    const v = i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(190,190,190,.06)';
-    x.fillStyle = v; x.fillRect(0, i * 32, 256, 32);
+  /* mowing-stripe suggestion, broken into jittered segments so it reads as
+     worn mow lines instead of a full-width ruler stripe (which crosshatched
+     with the stroke layer into a plaid at distance) */
+  for (let b = 0; b < 6; b++) {
+    const y0 = b * 42 + R() * 8, bandH = 40 + R() * 6;
+    for (let sx = 0; sx < 256; sx += 14 + R() * 22) {
+      const a = (b % 2 ? .018 : .014) + R() * .012;
+      x.fillStyle = `rgba(${b % 2 ? '255,255,255' : '185,185,185'},${a.toFixed(3)})`;
+      x.fillRect(sx, y0 + (R() - .5) * 4, 14 + R() * 22, bandH);
+    }
   }
   _detailN = canvasTex(c);
   _detailN.wrapS = _detailN.wrapT = THREE.RepeatWrapping;
@@ -510,8 +520,9 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
 export function facadeTexture(opts = {}) { return facadeMaps(opts).map; }
 
 /* big glass curtain wall (hospital / offices) */
-export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRatio = .12 } = {}) {
-  const key = 'glass' + JSON.stringify([tint, rows, cols, litRatio]);
+export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12,
+  litRatio = .12, frame = '#c6cfd4', banded = false } = {}) {
+  const key = 'glass' + JSON.stringify([tint, rows, cols, litRatio, frame, banded]);
   return cachedTex(key, () => {
     const SS = 2, W = 512, H = 512;
     const [c, x] = makeCanvas(W * SS, H * SS);   x.scale(SS, SS);
@@ -523,10 +534,15 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRat
     xe.fillStyle = '#000'; xe.fillRect(0, 0, W / 2, H / 2);
     xe.scale(.5, .5);
     xr.fillStyle = '#8c8c8c'; xr.fillRect(0, 0, W, H);   // frame/spandrel mid-rough
-    x.fillStyle = '#c6cfd4'; x.fillRect(0, 0, W, H);
-    const cw = W / cols, rh = H / rows;
+    x.fillStyle = frame; x.fillRect(0, 0, W, H);
+    const cw = W / cols, rh = H / rows,
+          /* banded = thick dark spandrel strip per floor (banded curtain wall);
+             default keeps the thin band and the original cell metrics */
+          sb = banded ? Math.max(5, Math.round(rh * .34)) : 3,
+          spand = '#' + new THREE.Color(frame).multiplyScalar(.42).getHexString();
     for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
-      const wx = col * cw + 3, wy = r * rh + 3, ww = cw - 6, wh = rh - 6;
+      const wx = col * cw + 3, wy = r * rh + (banded ? sb + 2 : 3),
+            ww = cw - 6, wh = rh - (banded ? sb + 5 : 6);
       const lit = R() < litRatio;
       const gg = x.createLinearGradient(wx, wy, wx, wy + wh);
       if (lit) {
@@ -552,11 +568,12 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRat
         for (let d = 0; d < 2; d++) { x.beginPath(); x.arc(wx + ww * (.3 + d * .4), wy + 5, 1.8, 0, 7); x.fill(); }
       }
       // spandrel + mullion
-      x.fillStyle = 'rgba(30,40,50,.4)'; x.fillRect(col * cw, r * rh, cw, 3);
+      x.fillStyle = banded ? spand : 'rgba(30,40,50,.4)';
+      x.fillRect(col * cw, r * rh, cw, sb);
       x.fillStyle = 'rgba(255,255,255,.4)'; x.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
-      xb.fillStyle = '#a0a0a0'; xb.fillRect(col * cw, r * rh, cw, 3);
+      xb.fillStyle = '#a0a0a0'; xb.fillRect(col * cw, r * rh, cw, sb);
       xb.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
-      xr.fillStyle = '#9a9a9a'; xr.fillRect(col * cw, r * rh, cw, 3);   // matte spandrel band
+      xr.fillStyle = '#9a9a9a'; xr.fillRect(col * cw, r * rh, cw, sb);   // matte spandrel band
       xr.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
     }
     // micro grain at device res
@@ -764,23 +781,35 @@ export function skyTexture({ mode = 'day', sunAz = 0, sunEl = .6 } = {}) {
     ? { zen: '#3a4a72', mid: '#9a7a90', hor: '#f4b370', glow: '#ffdcae', cloud: '#e8b48e', cloudTop: '#fbe0c4' }
     : mode === 'dusk'
     ? { zen: '#1c2742', mid: '#4a3a5e', hor: '#c86a4e', glow: '#ff9a5e', cloud: '#5e4460', cloudTop: '#c88a72' }
+    : mode === 'night'
+    ? { zen: '#04060d', mid: '#0a1120', hor: '#16202e', glow: '#aebdd4', cloud: '#101828', cloudTop: '#24334e' }
     : { zen: '#2e6cb0', mid: '#7db6dd', hor: '#dcecF4', glow: '#fff3d8', cloud: '#dfe9ee', cloudTop: '#ffffff' };
   const g = x.createLinearGradient(0, 0, 0, H * .62);
   g.addColorStop(0, pal.zen); g.addColorStop(.62, pal.mid); g.addColorStop(1, pal.hor);
   x.fillStyle = g; x.fillRect(0, 0, W, H * .62);
   x.fillStyle = pal.hor; x.fillRect(0, H * .62, W, H * .38);
-  // haze band at horizon
+  // haze band at horizon — dimmer at night (city light dome rather than haze)
   const hz = x.createLinearGradient(0, H * .56, 0, H * .66);
-  hz.addColorStop(0, 'rgba(255,255,255,0)'); hz.addColorStop(.5, 'rgba(255,255,255,.35)');
+  const hzA = mode === 'night' ? .14 : .35;
+  hz.addColorStop(0, 'rgba(255,255,255,0)'); hz.addColorStop(.5, `rgba(255,255,255,${hzA})`);
   hz.addColorStop(1, 'rgba(255,255,255,0)');
   x.fillStyle = hz; x.fillRect(0, H * .56, W, H * .1);
+  // starfield — wrapped-drawn, zenith-weighted, a few bright anchors
+  if (mode === 'night') {
+    for (let i = 0; i < 480; i++) {
+      const sr = R(), sx2 = R() * W, sy = R() * R() * H * .55;
+      x.fillStyle = `rgba(235,240,252,${(.2 + sr * .65).toFixed(3)})`;
+      for (const ox of [-W, 0, W])
+        x.fillRect(sx2 + ox, sy, sr > .86 ? 2 : 1, sr > .86 ? 2 : 1);
+    }
+  }
 
   // sun disc + glow — matches three.js equirect sampling:
   // u = atan2(dir.z, dir.x)/2π + .5 ; v = asin(dir.y)/π + .5
   const su = (0.5 + sunAz / (Math.PI * 2)) * W;
   const sv = (0.5 - sunEl / Math.PI) * H;
-  const glowR = mode === 'dusk' ? 190 : mode === 'golden' ? 240 : 300;
-  x.globalAlpha = .95;
+  const glowR = mode === 'dusk' ? 190 : mode === 'golden' ? 240 : mode === 'night' ? 150 : 300;
+  x.globalAlpha = mode === 'night' ? .55 : .95;      // moon glow is gentler than sun
   for (const ox of [-W, 0, W]) {                    // wrap-drawn: equirect edge-safe
     const glow = x.createRadialGradient(su + ox, sv, 0, su + ox, sv, glowR);
     glow.addColorStop(0, pal.glow); glow.addColorStop(.12, pal.glow);
@@ -789,9 +818,9 @@ export function skyTexture({ mode = 'day', sunAz = 0, sunEl = .6 } = {}) {
     x.beginPath(); x.arc(su + ox, sv, glowR, 0, 7); x.fill();
   }
   x.globalAlpha = 1;
-  x.fillStyle = mode === 'day' ? '#fffdf4' : '#fff2dc';
+  x.fillStyle = mode === 'day' ? '#fffdf4' : mode === 'night' ? '#e8eef8' : '#fff2dc';
   for (const ox of [-W, 0, W]) {
-    x.beginPath(); x.arc(su + ox, sv, mode === 'day' ? 26 : 40, 0, 7); x.fill();
+    x.beginPath(); x.arc(su + ox, sv, mode === 'day' ? 26 : mode === 'night' ? 15 : 40, 0, 7); x.fill();
   }
 
   // painterly clouds — puffy blobs clustered in horizontal bands
@@ -839,18 +868,32 @@ export function skyTexture({ mode = 'day', sunAz = 0, sunEl = .6 } = {}) {
   return t;
 }
 
-/* soft drifting cloud sprite texture (fixed: proper premultiplied-friendly alpha) */
-export function cloudSpriteTexture() {
-  return cachedTex('cloudspr', () => {
+/* cumulus sprite — lobes cluster along a flat base line and the alpha
+   silhouette is then shaded top-to-bottom via source-atop, giving a lit
+   crown and gray underside instead of a uniform white blob. v=0 keeps the
+   exact R() draw sequence the old texture consumed; extra variants draw
+   from dedicated streams so the global seed order never shifts. */
+export function cloudSpriteTexture(v = 0) {
+  return cachedTex('cloudspr' + v, () => {
     const [c, x] = makeCanvas(256, 128);
+    const src = v === 0 ? () => R() : mulberry32(7100 + v * 97);
     for (let i = 0; i < 30; i++) {
-      const gx = 40 + R() * 176, gy = 45 + R() * 40, r = 12 + R() * 26;
+      const gx = 40 + src() * 176, gyRaw = 45 + src() * 40,
+            r = 12 + src() * 26;
+      const gy = Math.min(gyRaw, 94 - r * .4);           // big lobes ride high
       const gr = x.createRadialGradient(gx, gy, 0, gx, gy, r);
-      gr.addColorStop(0, 'rgba(255,255,255,.7)');
-      gr.addColorStop(.7, 'rgba(245,250,252,.35)');
+      gr.addColorStop(0, 'rgba(255,255,255,.72)');
+      gr.addColorStop(.7, 'rgba(245,250,252,.4)');
       gr.addColorStop(1, 'rgba(255,255,255,0)');
       x.fillStyle = gr; x.beginPath(); x.arc(gx, gy, r, 0, 7); x.fill();
     }
+    x.globalCompositeOperation = 'source-atop';          // shade within the silhouette
+    const sh = x.createLinearGradient(0, 18, 0, 118);
+    sh.addColorStop(0, 'rgba(255,255,255,.55)');
+    sh.addColorStop(.55, 'rgba(232,240,248,.3)');
+    sh.addColorStop(1, 'rgba(158,172,196,.85)');
+    x.fillStyle = sh; x.fillRect(0, 0, 256, 128);
+    x.globalCompositeOperation = 'source-over';
     return canvasTex(c);
   });
 }
@@ -1116,3 +1159,7 @@ export function mergeStatic(root) {
   root.add(out);
   return out;
 }
+/* runtime state populated by main.js's material pass - lets async-loaded
+   assets (glTF landmarks) apply the same time-of-day env/emissive gains that
+   the one-shot traverse applied to everything loaded synchronously */
+export const RUNENV = { envScale: 1, litI: 0 };

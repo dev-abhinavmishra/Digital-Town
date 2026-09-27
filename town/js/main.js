@@ -11,10 +11,12 @@ import { makeBuilding } from './buildings.js';
 import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildLights, buildWater, buildPark, buildPlaza, buildPeople,
          buildProps, occupyRect, isFree, buildAthleticPark, buildTraffic,
+         buildFerrisWheel, buildWindmill, buildCrane, buildFireflies, buildTennisCourts, buildBalloons,
+         buildRain,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
-         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX } from './lib.js';
+         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX, RUNENV } from './lib.js';
 import { M_GRASS, pbr, texReport } from './mats.js';
 import { buildFurniture } from './city/furniture.js';
 import { buildGroundDetail } from './city/ground.js';
@@ -29,6 +31,8 @@ const NOFX = params.get('nofx') === '1';
 const NOAO = params.get('noao') === '1';
 const NOATMO = params.get('noatmo') === '1';  // master: fog patch + clouds + lamp glows
 const NOFOG = params.get('nofog') === '1';   // granular: fog patch only
+const WEATHER = params.get('weather');       // 'rain' = overcast + streaks + wet pavement
+const RAIN = WEATHER === 'rain';
 const NOWATERFX = params.has('nowaterfx');   // sprint-03: stock water material
 const NOGLASSFX = params.has('noglassfx');   // sprint-03: stock glass materials
 const NOCULL = params.has('nocull');         // sprint-03: disable occluder cull
@@ -48,7 +52,7 @@ renderer.setPixelRatio(pixelRatio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : 1.0;
+renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : TIME === 'day' ? 1.06 : 1.0;
 document.getElementById('app').appendChild(renderer.domElement);
 // survive GPU OOM context loss on weak iGPUs — allow restore, then reload clean
 renderer.domElement.addEventListener('webglcontextlost', e => e.preventDefault());
@@ -60,7 +64,8 @@ const scene = new THREE.Scene();
 const sunDir = new THREE.Vector3();
 if (TIME === 'golden') sunDir.set(-1500, 210, 700);
 else if (TIME === 'dusk') sunDir.set(-1200, 120, 500);
-else sunDir.set(900, 750, 620);
+else if (TIME === 'night') sunDir.set(-500, 1100, -350);   // high moon, cool
+else sunDir.set(900, 590, 640);
 sunDir.normalize();
 
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -70,9 +75,9 @@ const skyTex = skyTexture({
   sunEl: Math.asin(sunDir.y),
 });
 scene.background = skyTex;
-scene.backgroundIntensity = TIME === 'golden' ? 1.0 : 0.95;
+scene.backgroundIntensity = (TIME === 'golden' ? 1.0 : TIME === 'night' ? .9 : 0.95) * (RAIN ? .55 : 1);
 scene.environment = pmrem.fromEquirectangular(skyTex).texture;
-scene.environmentIntensity = TIME === 'golden' ? .9 : .8;
+scene.environmentIntensity = TIME === 'golden' ? .9 : .8;  // r160: dead property; real gain is envScale below
 // HDR image-based lighting — vendored Poly Haven sky feeds PBR reflections.
 // Background stays procedural so the visible sun matches the directional light.
 const envInfo = { envType: 'fallback', envSrc: 'procedural-sky',
@@ -86,14 +91,16 @@ loadEnvironment(renderer, { mode: TIME, skyTex }).then(e => {
 });
 // per-time env gain applied to materials post-build (r160 has no
 // scene.environmentIntensity — multiply envMapIntensity instead)
-const envScale = TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0;
+const envScale = (TIME === 'night' ? .22 : TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0) * (RAIN ? .5 : 1);
 scene.fog = new THREE.FogExp2(
-  TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258 : 0xd4e2ec,
-  TIME === 'dusk' ? 0.00032 : 0.00017);
+  TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258
+    : TIME === 'night' ? 0x0b111c : 0xd4e2ec,
+  TIME === 'dusk' ? 0.00032 : TIME === 'night' ? 0.00022 : 0.00017);
 
 /* ---------- sun + fill ---------- */
-const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a : 0xfff1dc,
-  TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : 2.95);
+const sun = new THREE.DirectionalLight(RAIN ? 0xc8d4de : TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a
+    : TIME === 'night' ? 0x9fb8e0 : 0xffe9c4,
+  (TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 3.15) * (RAIN ? .38 : 1));
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -104,21 +111,32 @@ sun.shadow.bias = -0.00018; sun.shadow.normalBias = .35;
 scene.add(sun); scene.add(sun.target);
 // hemisphere fill lifts shadows gently toward sky color
 scene.add(new THREE.HemisphereLight(
-  TIME === 'golden' ? 0xd8b088 : 0xbdd6e8,
-  TIME === 'golden' ? 0x7a6848 : 0x5d7050,
-  TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .46));
+  TIME === 'golden' ? 0xd8b088 : TIME === 'night' ? 0x18243a : 0xbdd6e8,
+  TIME === 'golden' ? 0x7a6848 : TIME === 'night' ? 0x05070a : 0x5d7050,
+  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .40));
 
 /* ---------- ground ---------- */
 const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');
 /* micro-detail multiply — the vendored grass tex repeats every 60m, so at eye
-   level it reads flat; a fine luminance noise at 5m frequency restores close
-   range texture without adding a draw call */
+   level it reads flat; a luminance noise layer on a fixed 28m world tile
+   restores close-range texture without adding a draw call */
 groundM.onBeforeCompile = sh => {
   sh.uniforms.uDetail = { value: detailNoiseTexture() };
+  /* sample the detail texture in WORLD xz (one tile = 28 m) so every
+     grass_ground surface gets the same texel density — UV-based sampling let
+     small lawn planes (tile=9) alias it into plaid moiré */
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec2 vWXZ;')
+    .replace('#include <project_vertex>', `#include <project_vertex>
+      vec4 detailWP = vec4( transformed, 1.0 );
+      #ifdef USE_INSTANCING
+        detailWP = instanceMatrix * detailWP;
+      #endif
+      vWXZ = ( modelMatrix * detailWP ).xz;`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;')
+    .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;\nvarying vec2 vWXZ;')
     .replace('#include <map_fragment>', `#include <map_fragment>
-      diffuseColor.rgb *= texture2D(uDetail, vMapUv * 12.0).rgb;`);
+      diffuseColor.rgb *= texture2D(uDetail, vWXZ / 28.0).rgb;`);
 };
 attachDriftShadow(groundM, .0015, .0009, .30);  // ~660m cloud shadow field
 scene.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
@@ -136,6 +154,10 @@ buildRoads(scene);
 buildLots(scene);
 buildWater(scene);
 buildPark(scene);
+buildFerrisWheel(scene);
+buildWindmill(scene);
+buildCrane(scene); buildTennisCourts(scene); buildBalloons(scene);
+if (TIME === 'night') buildFireflies(scene);
 buildAthleticPark(scene);
 buildPlaza(scene, PLAZA);
 buildProps(scene);
@@ -192,8 +214,9 @@ for (const row of COTTAGE_ROWS) {
 }
 
 const lampIM = buildLights(scene);
-if (TIME === 'golden' || TIME === 'dusk')
-  lampIM.material.emissive = new THREE.Color('#ffdf9e'), lampIM.material.emissiveIntensity = 1.4;
+if (TIME === 'golden' || TIME === 'dusk' || TIME === 'night')
+  lampIM.material.emissive = new THREE.Color('#ffdf9e'),
+  lampIM.material.emissiveIntensity = TIME === 'night' ? 1.9 : 1.4;
 buildTrees(scene);
 buildCars(scene);
 buildTraffic(scene);
@@ -207,6 +230,7 @@ buildFurniture(scene);
 buildGroundDetail(scene);
 buildBacklots(scene);
 if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
+if (VIEW !== 'map' && RAIN) buildRain(scene);   // ?weather=rain
 // sprint-02 atmo module: cumulus billboards, height-haze + aerial fog patch,
 // dusk lamp pools/halos — all render-side over B's objects (js/render/atmo.js)
 let atmoInfo = null;
@@ -216,8 +240,8 @@ if (VIEW !== 'map' && !NOATMO)
 // sky palette (kept for evaluator A/B pairs)
 else if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
   if (!o.isSprite) return;
-  o.material.color.set(TIME === 'golden' ? '#d8a37e' : '#6e5a74');
-  o.material.opacity *= TIME === 'golden' ? .78 : .65;
+  o.material.color.set(TIME === 'golden' ? '#d8a37e' : TIME === 'night' ? '#2a3444' : '#6e5a74');
+  o.material.opacity *= TIME === 'golden' ? .78 : TIME === 'night' ? .5 : .65;
 });
 // sprint-03: glass/reflections v2 — upgrades cached facade materials built from
 // A-owned glassFacadeMaps textures; B's wallMat()/buildings stay untouched
@@ -259,7 +283,8 @@ installUI();
    - envScale → real per-time env gain (scene.environmentIntensity is r163+) */
 const matStats = { withNormal: 0, withRough: 0 };
 {
-  const litI = TIME === 'dusk' ? 1.7 : TIME === 'golden' ? .95 : .12;
+  const litI = TIME === 'night' ? 2.4 : TIME === 'dusk' ? 1.7 : TIME === 'golden' ? .95 : .12;
+  RUNENV.envScale = envScale; RUNENV.litI = litI;
   const seen = new Set();
   scene.traverse(o => {
     if (!o.isMesh) return;

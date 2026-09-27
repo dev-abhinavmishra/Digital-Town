@@ -30,13 +30,16 @@ const Y_LITTER   = Y + .022;    // leaf-litter cards
 const Y_FLOWER   = Y + .026;    // wildflower specks
 
 /* every flat decal is unlit + alpha-blended; polygonOffset pulls the fragment
-   toward the camera so nothing z-fights at aerial range */
+   toward the camera so nothing z-fights at aerial range. Unlit materials stay
+   day-bright at night, so ?time=night dims them to match dark ground. */
+const _night = typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('time') === 'night';
 const decalMat = opts => {
   // decal UVs scale past 1 to tile the canvas — repeat, don't clamp
   if (opts.map) opts.map.wrapS = opts.map.wrapT = THREE.RepeatWrapping;
   return new THREE.MeshBasicMaterial({ transparent: true,
     depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2, ...opts });
+    polygonOffsetUnits: -2, ...(_night ? { color: '#30363e' } : {}), ...opts });
 };
 
 /* ---------------- decal canvases ---------------- */
@@ -58,8 +61,16 @@ function mottleCanvas({ dry = .35, stripe = 0 } = {}) {
     }
   }
   if (stripe) for (let sx = 0; sx < S; sx += stripe) {
-    x.fillStyle = (sx / stripe) % 2 ? 'rgba(255,255,255,.10)' : 'rgba(30,40,20,.10)';
-    x.fillRect(sx, 0, stripe, S);
+    /* soft-gradient bands at varied contrast — hard-edged uniform stripes
+       alias into corduroy moiré at aerial distance; tapering each edge and
+       jittering the peak keeps the mow read up close and dissolves far away */
+    const col = (sx / stripe) % 2 ? '255,255,255' : '28,38,18';
+    const peak = .05 + R() * .05;
+    const gr = x.createLinearGradient(sx, 0, sx + stripe, 0);
+    gr.addColorStop(0, `rgba(${col},0)`);
+    gr.addColorStop(.5, `rgba(${col},${peak.toFixed(3)})`);
+    gr.addColorStop(1, `rgba(${col},0)`);
+    x.fillStyle = gr; x.fillRect(sx, 0, stripe, S);
   }
   return c;
 }
