@@ -1813,11 +1813,34 @@ export function buildMountains(scene) {
       const a = vbase + i * (M + 1) + j, b = a + M + 1;
       idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
-    return { H, R0, rugF, width, hMax, seed, M };
+    /* surface sampler matching the built mesh: bilinear between the integer
+       vertex rows (the cross-slope formula is linear in r,y so lerping the
+       two bounding rows reproduces the rendered surface exactly in u) */
+    const surf = (a, u) => {
+      const jf = Math.max(0, Math.min(M - 1e-4, u * M)),
+            j0 = Math.floor(jf), f = jf - j0;
+      const pt = j => {
+        const uu = j / M,
+              pr = uu < .5 ? Math.pow(uu * 2, 1.55)
+                           : Math.pow((1 - uu) * 2, 1.55),
+              cragA = Math.sin(a * 23 + seed * 3 + j * 1.7) * .5
+                    + Math.sin(a * 41 + seed * 7 + j * 2.3) * .3,
+              h = H(a);
+        return {
+          r: R0(a) + width * (2 * uu - 1)
+             + cragA * width * .10 * rugF * Math.sin(Math.PI * uu),
+          y: Math.max(0, h * pr + h * .035 * cragA * rugF
+                        * Math.sin(Math.PI * uu)),
+        };
+      };
+      const p0 = pt(j0), p1 = pt(j0 + 1);
+      return { r: p0.r + (p1.r - p0.r) * f, y: p0.y + (p1.y - p0.y) * f };
+    };
+    return { H, R0, rugF, width, hMax, seed, M, surf };
   };
   const rg1 = ridge(1500, 150, 180, 4.7, 1.25, 720, 12);   // near wooded foothill band - never snows
   const rg2 = ridge(1700, 380, 260, 0.0, .80, 720, 12);    // green foothills, thin snow cap
-  ridge(2600, 790, 500, 2.4, .55, 640, 14);                // taller far range, deeper snowline
+  const rg3 = ridge(2600, 790, 500, 2.4, .55, 640, 14);    // taller far range, deeper snowline
 
   /* conifer cover on the forest-band slopes - instanced firs sized to read
      as canopy at city distance. A dedicated seeded stream keeps the global
@@ -1830,20 +1853,31 @@ export function buildMountains(scene) {
     { geo: new THREE.ConeGeometry(.9, 2.6, 7), color: '#395631', x: 0, y: 5.5, z: 0 },
   ]);
   const firL = [], FIR_TINTS = ['#24401f', '#2e4a2c', '#3a5a33', '#2a4630'];
+  /* another ridge's surface height over radius rho at angle a - inverts
+     u from rho through surf() so firs a taller overlapping ridge would
+     bury are rejected */
+  const coverY = (rgP, a, rho) => {
+    let up = .5 + (rho - rgP.R0(a)) / (2 * rgP.width);
+    for (let k = 0; k < 3; k++) {          // Newton on dr/du = 2*width
+      const uc = Math.max(0, Math.min(1, up));
+      up += (rho - rgP.surf(a, uc).r) / (2 * rgP.width);
+    }
+    return (up <= 0 || up >= 1) ? -1 : rgP.surf(a, up).y;
+  };
+  const rgs = [rg1, rg2, rg3];
   for (const rg of [rg1, rg2]) {
-    for (let i = 0; i < 4200; i++) {
-      const a = rr2(0, Math.PI * 2), u = rr2(.12, .88), jf = u * rg.M,
-            prof = u < .5 ? Math.pow(u * 2, 1.55) : Math.pow((1 - u) * 2, 1.55),
-            cragA = Math.sin(a * 23 + rg.seed * 3 + jf * 1.7) * .5
-                  + Math.sin(a * 41 + rg.seed * 7 + jf * 2.3) * .3,
-            h = rg.H(a),
-            r = rg.R0(a) + rg.width * (2 * u - 1)
-              + cragA * rg.width * .10 * rg.rugF * Math.sin(Math.PI * u),
-            y = Math.max(0, h * prof + h * .035 * cragA * rg.rugF * Math.sin(Math.PI * u));
+    for (let i = 0; i < 4700; i++) {           // extra draws offset buried rejects
+      const a = rr2(0, Math.PI * 2), u = rr2(.12, .88),
+            pt = rg.surf(a, u), r = pt.r, y = pt.y;
       if (y < 4 || y > .38 * rg.hMax) continue;          // forest band only
-      const px = Math.cos(a) * r, pz = Math.sin(a) * r;
-      if (px * px + pz * pz < 800 * 800) continue;       // never inside town
-      firL.push({ x: px, y: y - 1.2, z: pz, s: rr2(1.4, 3.2), ry: rr2(0, 6.28),
+      if (r * r < 800 * 800) continue;                   // never inside town
+      let buried = false;
+      for (const o of rgs) {
+        if (o !== rg && coverY(o, a, r) > y) { buried = true; break; }
+      }
+      if (buried) continue;
+      firL.push({ x: Math.cos(a) * r, y: y - 1.2, z: Math.sin(a) * r,
+                  s: rr2(1.4, 3.2), ry: rr2(0, 6.28),
                   color: FIR_TINTS[Math.floor(R2() * 4)] });
     }
   }
