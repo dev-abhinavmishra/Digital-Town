@@ -2002,6 +2002,7 @@ export function buildFerrisWheel(scene) {
   const wheel = new THREE.Mesh(colored(wp), VCOL());
   wheel.position.set(fx, Y + HY, fz);
   wheel.castShadow = true;
+  wheel.userData.dynamic = true;              // spins - keep out of mergeStatic
   scene.add(wheel);
 
   const litG = new THREE.SphereGeometry(.3, 6, 5);
@@ -2031,6 +2032,14 @@ export function buildFerrisWheel(scene) {
   for (let i = 0; i < 12; i++)
     cabIM.setColorAt(i, new THREE.Color(TINTS[i % TINTS.length]));
   scene.add(cabIM);
+  const cf0 = Math.cos(FACE), sf0 = Math.sin(FACE);   // initial pose (t = 0)
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6, lx = Math.cos(a) * R0, ly = Math.sin(a) * R0 - 1.7;
+    _p.set(fx + lx * cf0, Y + HY + ly, fz - lx * sf0);
+    _eul.set(0, FACE, 0); _q.setFromEuler(_eul); _mx.compose(_p, _q, _s1);
+    cabIM.setMatrixAt(i, _mx);
+  }
+  cabIM.instanceMatrix.needsUpdate = true;
   ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
 }
 
