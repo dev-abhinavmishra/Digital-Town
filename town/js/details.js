@@ -2034,6 +2034,56 @@ export function buildFerrisWheel(scene) {
   ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
 }
 
+/* ---------------- farm windmill ---------------- */
+let windmill = null;
+export function buildWindmill(scene) {
+  /* lattice farm windmill in the NE fields - literal geometry, zero R()
+     draws. Rotor spins in tickWorld with a gentle yaw hunt. */
+  let mx = 0, mz = 0;
+  for (const [cx, cz] of [[576, -578], [540, -628], [662, -598], [588, -536]]) {
+    if (isFree(cx, cz, 12)) { mx = cx; mz = cz; break; }
+  }
+  if (!mx) return;
+  occupyRect(mx, mz, 14, 14, 2);
+  const TH = 14, HEAD = .8;                 // tower height, vane heading
+  const parts = [];
+  for (const [lx, lz] of [[-1.7, -1.7], [1.7, -1.7], [-1.7, 1.7], [1.7, 1.7]])
+    parts.push({ geo: new THREE.BoxGeometry(.22, TH, .22), color: '#9aa0a6',
+      x: lx * .5, y: TH / 2, z: lz * .5, rx: -lz * .055, rz: lx * .055 });
+  for (const by of [4.2, 8.6])                     // cross-brace rings
+    parts.push({ geo: new THREE.BoxGeometry(2.4 + by * .18, .12, 2.4 + by * .18),
+      color: '#8a9096', y: TH - by });
+  parts.push({ geo: new THREE.BoxGeometry(1.3, .4, 1.3), color: '#7a8086', y: TH + .2 });
+  const tower = new THREE.Mesh(colored(parts), VCOL());
+  tower.position.set(mx, Y, mz);
+  tower.castShadow = tower.receiveShadow = true;
+  scene.add(tower);
+
+  const head = new THREE.Group();                  // yaws on the tower top
+  head.position.set(mx, Y + TH + .6, mz);
+  const bladeP = [];
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6;
+    bladeP.push({ geo: new THREE.BoxGeometry(1.5, 2.3, .06), color: '#c8ccd2',
+      x: Math.cos(a + .26) * 2.9, y: Math.sin(a + .26) * 2.9, rz: a + 1.05 });
+  }
+  bladeP.push({ geo: new THREE.TorusGeometry(4.1, .1, 5, 20), color: '#9aa0a6' });
+  bladeP.push({ geo: new THREE.CylinderGeometry(.4, .4, .5, 8), color: '#6a7076',
+    rx: Math.PI / 2 });
+  const rotor = new THREE.Mesh(colored(bladeP), VCOL());
+  rotor.position.z = .8; rotor.castShadow = true;
+  head.add(rotor);
+  const tail = new THREE.Mesh(colored([
+    { geo: new THREE.BoxGeometry(2.6, .1, .1), color: '#8a9096', x: -1.9 },
+    { geo: new THREE.BoxGeometry(1.2, 1.7, .06), color: '#c8543e', x: -3.3 },
+  ]), VCOL());
+  head.add(tail);
+  head.rotation.y = HEAD;
+  head.userData.dynamic = true;                  // yaws - keep out of mergeStatic
+  scene.add(head);
+  windmill = { head, rotor };
+}
+
 /* ---------------- bird flocks ---------------- */
 let birds = null;
 let ducks = null;
@@ -2324,6 +2374,11 @@ export function tickWorld(t, dt) {
     });
     _s1.set(1, 1, 1);
     im.instanceMatrix.needsUpdate = true;
+  }
+  // farm windmill - rotor spin + slow vane yaw hunt
+  if (windmill) {
+    windmill.rotor.rotation.z = t * 2.1;
+    windmill.head.rotation.y = .8 + Math.sin(t * .16) * .22;
   }
   // ferris wheel - slow turn; gondolas hang upright below the rim
   if (ferris) {

@@ -11,7 +11,7 @@ import { makeBuilding } from './buildings.js';
 import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildLights, buildWater, buildPark, buildPlaza, buildPeople,
          buildProps, occupyRect, isFree, buildAthleticPark, buildTraffic,
-         buildFerrisWheel,
+         buildFerrisWheel, buildWindmill,
          buildRain,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
@@ -155,6 +155,7 @@ buildLots(scene);
 buildWater(scene);
 buildPark(scene);
 buildFerrisWheel(scene);
+buildWindmill(scene);
 buildAthleticPark(scene);
 buildPlaza(scene, PLAZA);
 buildProps(scene);
