@@ -15,7 +15,7 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
-         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX } from './lib.js';
+         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX, RUNENV } from './lib.js';
 import { M_GRASS, pbr, texReport } from './mats.js';
 import { buildFurniture } from './city/furniture.js';
 import { buildGroundDetail } from './city/ground.js';
@@ -279,6 +279,7 @@ installUI();
 const matStats = { withNormal: 0, withRough: 0 };
 {
   const litI = TIME === 'night' ? 2.4 : TIME === 'dusk' ? 1.7 : TIME === 'golden' ? .95 : .12;
+  RUNENV.envScale = envScale; RUNENV.litI = litI;
   const seen = new Set();
   scene.traverse(o => {
     if (!o.isMesh) return;
