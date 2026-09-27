@@ -21,7 +21,7 @@ import { buildHero } from './city/hero.js';
 export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
 const ASPH = pbr('asphalt_02');          // tile via plane(..., tile)
-ASPH.color = new THREE.Color('#484c52'); ASPH.roughness = .97;
+ASPH.color = new THREE.Color('#9aa0a6'); ASPH.roughness = .97;  // lifted in streetscape.js too (shared instance)
 attachDriftShadow(ASPH, .0015, .0009, .34);   // same cloud field over pavement
 const PAVE = pbr('precast_stone_paving'); PAVE.color = new THREE.Color('#a8a499');
 const GRVL = pbr('gravel');
