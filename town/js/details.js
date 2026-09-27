@@ -1009,6 +1009,34 @@ export function buildPark(scene) {
   dock.add(box(.16, 1, 16.4, mat('#6a5238'), 1.05, .5, 7));
   dock.position.set(540, 0, 132); dock.rotation.y = .9; scene.add(dock);
 
+  /* floating aerating fountain in the pond's east lobe - moored float ring +
+     nozzle, plume animated in tickWorld. Dedicated seed stream, literal
+     placement clear of the dock reach and the gazebo island, zero R() draws. */
+  {
+    const fx = 618, fz = 108;
+    const fparts = [
+      { geo: new THREE.TorusGeometry(1.7, .34, 8, 18).rotateX(Math.PI / 2),
+        color: '#3a4a52', x: fx, y: Y + .32, z: fz },
+      { geo: new THREE.SphereGeometry(.9, 10, 7), color: '#26333a',
+        x: fx, y: Y + .45, z: fz, sy: .55 },
+      { geo: new THREE.CylinderGeometry(.12, .16, 1.4, 6), color: '#c9ccd0',
+        x: fx, y: Y + 1.1, z: fz },
+    ];
+    const fm = new THREE.Mesh(colored(fparts), VCOL());
+    fm.castShadow = true; scene.add(fm);
+    const NJ = 140, jp = new Float32Array(NJ * 3), js = new Float32Array(NJ * 2);
+    const Rj = mulberry32(7741);
+    for (let i = 0; i < NJ; i++) { js[i * 2] = Rj(); js[i * 2 + 1] = Rj(); }
+    const jg = new THREE.BufferGeometry();
+    jg.setAttribute('position', new THREE.BufferAttribute(jp, 3));
+    const jpm = new THREE.PointsMaterial({ color: '#d8f0f8', size: .55,
+      transparent: true, opacity: .85, depthWrite: false, sizeAttenuation: true });
+    const jpts = new THREE.Points(jg, jpm);
+    jpts.userData.dynamic = true;
+    scene.add(jpts);
+    pondJet = { pts: jpts, pos: jp, seed: js, cx: fx, cz: fz };
+  }
+
   // playground
   const pg = new THREE.Group();
   pg.add(plane(34, 24, mat('#d4b98a'), 0, Y + .005, 0));
@@ -1097,7 +1125,7 @@ export function buildPark(scene) {
 }
 
 /* ---------------- downtown plaza ---------------- */
-let fountain = null;
+let fountain = null, pondJet = null;
 export function buildPlaza(scene, spec) {
   const pz = pbr('precast_stone_paving'); pz.color = new THREE.Color('#c9bfae');
   scene.add(plane(spec.w, spec.d, pz, spec.x, Y - .02, spec.z, -Math.PI / 2, 3.2));
@@ -2529,6 +2557,20 @@ export function tickWorld(t, dt) {
       attr.array[b.idx] = on ? 1 : .04;
     }
     attr.needsUpdate = true;
+  }
+  // pond jet - taller plume, wider mushroom crown
+  if (pondJet) {
+    const { pts, pos, seed, cx, cz } = pondJet;
+    const N = pos.length / 3;
+    for (let i = 0; i < N; i++) {
+      const life = (seed[i * 2] + t * (.42 + seed[i * 2 + 1] * .55)) % 1;
+      const ang = seed[i * 2 + 1] * 6.28 + seed[i * 2] * 3;
+      const r = .25 + life * (2.4 + seed[i * 2] * 1.6);
+      pos[i * 3] = cx + Math.cos(ang) * r * life * life;
+      pos[i * 3 + 1] = Y + 1.6 + life * 7.6 - life * life * 6.8;
+      pos[i * 3 + 2] = cz + Math.sin(ang) * r * life * life;
+    }
+    pts.geometry.attributes.position.needsUpdate = true;
   }
   // fountain spray
   if (fountain) {
