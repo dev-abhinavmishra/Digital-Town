@@ -2066,6 +2066,76 @@ export function buildFerrisWheel(scene) {
   ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
 }
 
+/* ---------------- tennis courts ---------------- */
+export function buildTennisCourts(scene) {
+  /* pair of fenced hard courts on the park's north lawn between the ponds -
+     blue pads, green surround, white lines, nets, benches. Literal geometry,
+     zero R() draws. */
+  let x = 0, z = 0, ok = false;
+  for (const [cx, cz] of [[620, 70], [660, 74], [705, 74], [560, 72]])
+    if (isFree(cx, cz, 16)) { x = cx; z = cz; ok = true; break; }
+  if (!ok) return;
+  occupyRect(x, z, 33, 29, 2);
+  const BX = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const P = [], PW = 30.4, PD = 26;
+  P.push({ geo: BX(PW + 2, .1, PD + 2), color: '#4a7f52', x, y: Y + .05, z });
+  const line = (lx, lz, lx2, lz2) =>
+    P.push({ geo: BX(Math.max(Math.abs(lx2 - lx), .12), .012,
+                     Math.max(Math.abs(lz2 - lz), .12)),
+             color: '#f2f2ee', x: x + (lx + lx2) / 2, y: Y + .165,
+             z: z + (lz + lz2) / 2 });
+  for (const cz of [z - 6.5, z + 6.5]) {              // two courts, long axis x
+    const c = cz - z;
+    P.push({ geo: BX(23.8, .12, 11), color: '#3f6ea8', x, y: Y + .11, z: cz });
+    line(-11.89, c - 5.49, 11.89, c - 5.49);          // doubles sidelines
+    line(-11.89, c + 5.49, 11.89, c + 5.49);
+    line(-11.89, c - 5.49, -11.89, c + 5.49);         // baselines
+    line(11.89, c - 5.49, 11.89, c + 5.49);
+    line(-6.40, c - 5.49, -6.40, c + 5.49);           // service lines
+    line(6.40, c - 5.49, 6.40, c + 5.49);
+    line(-6.40, c, 6.40, c);                          // center service line
+    // net: posts + mesh + white top tape
+    P.push({ geo: BX(.12, 1.1, .12), color: '#1c2226', x, y: Y + .72, z: cz - 6.1 });
+    P.push({ geo: BX(.12, 1.1, .12), color: '#1c2226', x, y: Y + .72, z: cz + 6.1 });
+    P.push({ geo: BX(.05, .92, 12.2), color: '#22282c', x, y: Y + .62, z: cz });
+    P.push({ geo: BX(.07, .07, 12.2), color: '#f2f2ee', x, y: Y + 1.1, z: cz });
+  }
+  /* perimeter fence: posts every ~4.3m + translucent chain-link panels */
+  const posts = [];
+  const FW = PW + 1.6, FD = PD + 1.6, H = 3.1;
+  const panels = [];
+  for (const [fx, fz, fw, fd] of [[0, -FD / 2, FW, .03], [0, FD / 2, FW, .03],
+                                  [-FW / 2, 0, .03, FD], [FW / 2, 0, .03, FD]]) {
+    panels.push({ geo: BX(fw, H, fd), x: x + fx, y: Y + H / 2 + .1, z: z + fz });
+    const n = Math.max(2, Math.round((fw > fd ? fw : fd) / 4.3));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      posts.push({ x: x + fx + (fw > fd ? (t - .5) * fw : 0),
+                   z: z + fz + (fd > fw ? (t - .5) * fd : 0), s: 1 });
+    }
+  }
+  const panelMesh = new THREE.Mesh(colored(panels), new M({ color: '#5a6a70',
+    roughness: .6, metalness: .4, transparent: true, opacity: .28,
+    side: THREE.DoubleSide }));
+  panelMesh.receiveShadow = true;
+  scene.add(panelMesh);
+  scene.add(instances(new THREE.CylinderGeometry(.05, .05, H + .1, 5),
+    new M({ color: '#42505a', roughness: .55, metalness: .4 }),
+    posts.map(pt => ({ ...pt, y: Y + H / 2 + .1 })), { shadow: true }));
+  /* benches at the pad ends outside the fence */
+  for (const bz of [z - 6.5, z + 6.5]) {
+    P.push({ geo: BX(2.2, .08, .5), color: '#7a5b3f',
+             x: x - PW / 2 - 2.2, y: Y + .46, z: bz });
+    P.push({ geo: BX(.1, .44, .1), color: '#3a4048',
+             x: x - PW / 2 - 3.0, y: Y + .22, z: bz - .8 });
+    P.push({ geo: BX(.1, .44, .1), color: '#3a4048',
+             x: x - PW / 2 - 1.4, y: Y + .22, z: bz + .8 });
+  }
+  const cm = new THREE.Mesh(colored(P), VCOL());
+  cm.castShadow = cm.receiveShadow = true;
+  scene.add(cm);
+}
+
 /* ---------------- fireflies ---------------- */
 let fireflies = null;
 export function buildFireflies(scene) {
