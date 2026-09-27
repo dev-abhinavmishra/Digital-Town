@@ -1149,6 +1149,38 @@ export function buildPlaza(scene, spec) {
   const pm = new THREE.Mesh(colored(parts), VCOL());
   pm.castShadow = pm.receiveShadow = true;
   scene.add(pm);
+
+  /* festoon string lights spanning the corner banner poles - warm bulbs that
+     glow at night via RUNENV.litI. Literal geometry, zero R() draws. */
+  {
+    const LP = [[spec.x - spec.w / 2 + 4, spec.z + spec.d / 2 - 4],
+                [spec.x + spec.w / 2 - 4, spec.z + spec.d / 2 - 4],
+                [spec.x - spec.w / 2 + 4, spec.z - spec.d / 2 + 4],
+                [spec.x + spec.w / 2 - 4, spec.z - spec.d / 2 + 4]];
+    const TOP = 6.35, SAG = 1.6;
+    const bulbs = [], wire = [];
+    for (const [a, b] of [[0, 1], [1, 3], [3, 2], [2, 0], [0, 3], [1, 2]]) {
+      const [ax, az] = LP[a], [bx, bz] = LP[b];
+      const n = Math.round(Math.hypot(bx - ax, bz - az) / 1.35);
+      let px = 0, py = 0, pz = 0;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n,
+              x = ax + (bx - ax) * t, z = az + (bz - az) * t,
+              y = Y + TOP - SAG * 4 * t * (1 - t);
+        if (i) wire.push(px, py, pz, x, y, z);
+        px = x; py = y; pz = z;
+        bulbs.push({ x, y: y - .14, z, s: 1 });
+      }
+    }
+    const litM = new M({ color: '#fff2d8', emissive: '#ffd9a0',
+      emissiveIntensity: RUNENV.litI, roughness: .5 });
+    litM.envMapIntensity *= RUNENV.envScale; litM.userData.lit = true;
+    scene.add(instances(new THREE.SphereGeometry(.1, 6, 4), litM, bulbs,
+      { shadow: false }));
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+    scene.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: '#2e3234' })));
+  }
 }
 
 /* ---------------- athletic park ---------------- */
