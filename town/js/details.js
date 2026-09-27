@@ -45,8 +45,16 @@ export function buildLots(scene) {
   const parts = [];
   const white = mat('#dfe3e6');
   const bump = mat('#d4b23a');
+  /* per-lot asphalt tint - real pads weather at different rates; the shared
+     ASPH instance stays on the roads, each lot gets its own keyed pbr() */
+  const LOT_TINTS = ['#8e949a', '#a0a6ab', '#878e94', '#989ea4',
+                     '#a8adb1', '#7f868c', '#949aa0'];
+  let lotIdx = 0;
   for (const l of LOTS) {
-    scene.add(plane(l.w, l.d, ASPH, l.x, Y - .015, l.z, -Math.PI / 2, 6));
+    const lotM = pbr('asphalt_02', { color: LOT_TINTS[lotIdx++ % LOT_TINTS.length] });
+    lotM.roughness = .97;
+    attachDriftShadow(lotM, .0015, .0009, .34);
+    scene.add(plane(l.w, l.d, lotM, l.x, Y - .015, l.z, -Math.PI / 2, 6));
     if (l.plain) continue;   // apron/pad: bare asphalt, no stalls
     const n = Math.floor(l.w / 3.4);
     for (let i = 0; i <= n; i++) {
