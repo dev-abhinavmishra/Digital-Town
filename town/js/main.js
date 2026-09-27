@@ -11,7 +11,7 @@ import { makeBuilding } from './buildings.js';
 import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildLights, buildWater, buildPark, buildPlaza, buildPeople,
          buildProps, occupyRect, isFree, buildAthleticPark, buildTraffic,
-         buildFerrisWheel, buildWindmill, buildCrane, buildFireflies, buildTennisCourts,
+         buildFerrisWheel, buildWindmill, buildCrane, buildFireflies, buildTennisCourts, buildBalloons,
          buildRain,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
@@ -156,7 +156,7 @@ buildWater(scene);
 buildPark(scene);
 buildFerrisWheel(scene);
 buildWindmill(scene);
-buildCrane(scene); buildTennisCourts(scene);
+buildCrane(scene); buildTennisCourts(scene); buildBalloons(scene);
 if (TIME === 'night') buildFireflies(scene);
 buildAthleticPark(scene);
 buildPlaza(scene, PLAZA);
