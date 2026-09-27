@@ -774,23 +774,35 @@ export function skyTexture({ mode = 'day', sunAz = 0, sunEl = .6 } = {}) {
     ? { zen: '#3a4a72', mid: '#9a7a90', hor: '#f4b370', glow: '#ffdcae', cloud: '#e8b48e', cloudTop: '#fbe0c4' }
     : mode === 'dusk'
     ? { zen: '#1c2742', mid: '#4a3a5e', hor: '#c86a4e', glow: '#ff9a5e', cloud: '#5e4460', cloudTop: '#c88a72' }
+    : mode === 'night'
+    ? { zen: '#04060d', mid: '#0a1120', hor: '#16202e', glow: '#aebdd4', cloud: '#101828', cloudTop: '#24334e' }
     : { zen: '#2e6cb0', mid: '#7db6dd', hor: '#dcecF4', glow: '#fff3d8', cloud: '#dfe9ee', cloudTop: '#ffffff' };
   const g = x.createLinearGradient(0, 0, 0, H * .62);
   g.addColorStop(0, pal.zen); g.addColorStop(.62, pal.mid); g.addColorStop(1, pal.hor);
   x.fillStyle = g; x.fillRect(0, 0, W, H * .62);
   x.fillStyle = pal.hor; x.fillRect(0, H * .62, W, H * .38);
-  // haze band at horizon
+  // haze band at horizon — dimmer at night (city light dome rather than haze)
   const hz = x.createLinearGradient(0, H * .56, 0, H * .66);
-  hz.addColorStop(0, 'rgba(255,255,255,0)'); hz.addColorStop(.5, 'rgba(255,255,255,.35)');
+  const hzA = mode === 'night' ? .14 : .35;
+  hz.addColorStop(0, 'rgba(255,255,255,0)'); hz.addColorStop(.5, `rgba(255,255,255,${hzA})`);
   hz.addColorStop(1, 'rgba(255,255,255,0)');
   x.fillStyle = hz; x.fillRect(0, H * .56, W, H * .1);
+  // starfield — wrapped-drawn, zenith-weighted, a few bright anchors
+  if (mode === 'night') {
+    for (let i = 0; i < 480; i++) {
+      const sr = R(), sx2 = R() * W, sy = R() * R() * H * .55;
+      x.fillStyle = `rgba(235,240,252,${(.2 + sr * .65).toFixed(3)})`;
+      for (const ox of [-W, 0, W])
+        x.fillRect(sx2 + ox, sy, sr > .86 ? 2 : 1, sr > .86 ? 2 : 1);
+    }
+  }
 
   // sun disc + glow — matches three.js equirect sampling:
   // u = atan2(dir.z, dir.x)/2π + .5 ; v = asin(dir.y)/π + .5
   const su = (0.5 + sunAz / (Math.PI * 2)) * W;
   const sv = (0.5 - sunEl / Math.PI) * H;
-  const glowR = mode === 'dusk' ? 190 : mode === 'golden' ? 240 : 300;
-  x.globalAlpha = .95;
+  const glowR = mode === 'dusk' ? 190 : mode === 'golden' ? 240 : mode === 'night' ? 150 : 300;
+  x.globalAlpha = mode === 'night' ? .55 : .95;      // moon glow is gentler than sun
   for (const ox of [-W, 0, W]) {                    // wrap-drawn: equirect edge-safe
     const glow = x.createRadialGradient(su + ox, sv, 0, su + ox, sv, glowR);
     glow.addColorStop(0, pal.glow); glow.addColorStop(.12, pal.glow);
@@ -799,9 +811,9 @@ export function skyTexture({ mode = 'day', sunAz = 0, sunEl = .6 } = {}) {
     x.beginPath(); x.arc(su + ox, sv, glowR, 0, 7); x.fill();
   }
   x.globalAlpha = 1;
-  x.fillStyle = mode === 'day' ? '#fffdf4' : '#fff2dc';
+  x.fillStyle = mode === 'day' ? '#fffdf4' : mode === 'night' ? '#e8eef8' : '#fff2dc';
   for (const ox of [-W, 0, W]) {
-    x.beginPath(); x.arc(su + ox, sv, mode === 'day' ? 26 : 40, 0, 7); x.fill();
+    x.beginPath(); x.arc(su + ox, sv, mode === 'day' ? 26 : mode === 'night' ? 15 : 40, 0, 7); x.fill();
   }
 
   // painterly clouds — puffy blobs clustered in horizontal bands

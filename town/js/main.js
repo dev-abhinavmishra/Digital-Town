@@ -60,6 +60,7 @@ const scene = new THREE.Scene();
 const sunDir = new THREE.Vector3();
 if (TIME === 'golden') sunDir.set(-1500, 210, 700);
 else if (TIME === 'dusk') sunDir.set(-1200, 120, 500);
+else if (TIME === 'night') sunDir.set(-500, 1100, -350);   // high moon, cool
 else sunDir.set(900, 750, 620);
 sunDir.normalize();
 
@@ -70,7 +71,7 @@ const skyTex = skyTexture({
   sunEl: Math.asin(sunDir.y),
 });
 scene.background = skyTex;
-scene.backgroundIntensity = TIME === 'golden' ? 1.0 : 0.95;
+scene.backgroundIntensity = TIME === 'golden' ? 1.0 : TIME === 'night' ? .9 : 0.95;
 scene.environment = pmrem.fromEquirectangular(skyTex).texture;
 scene.environmentIntensity = TIME === 'golden' ? .9 : .8;
 // HDR image-based lighting — vendored Poly Haven sky feeds PBR reflections.
@@ -86,14 +87,16 @@ loadEnvironment(renderer, { mode: TIME, skyTex }).then(e => {
 });
 // per-time env gain applied to materials post-build (r160 has no
 // scene.environmentIntensity — multiply envMapIntensity instead)
-const envScale = TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0;
+const envScale = TIME === 'night' ? .22 : TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0;
 scene.fog = new THREE.FogExp2(
-  TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258 : 0xd4e2ec,
-  TIME === 'dusk' ? 0.00032 : 0.00017);
+  TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258
+    : TIME === 'night' ? 0x0b111c : 0xd4e2ec,
+  TIME === 'dusk' ? 0.00032 : TIME === 'night' ? 0.00022 : 0.00017);
 
 /* ---------- sun + fill ---------- */
-const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a : 0xfff1dc,
-  TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : 2.95);
+const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a
+    : TIME === 'night' ? 0x9fb8e0 : 0xfff1dc,
+  TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 2.95);
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -104,9 +107,9 @@ sun.shadow.bias = -0.00018; sun.shadow.normalBias = .35;
 scene.add(sun); scene.add(sun.target);
 // hemisphere fill lifts shadows gently toward sky color
 scene.add(new THREE.HemisphereLight(
-  TIME === 'golden' ? 0xd8b088 : 0xbdd6e8,
-  TIME === 'golden' ? 0x7a6848 : 0x5d7050,
-  TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .46));
+  TIME === 'golden' ? 0xd8b088 : TIME === 'night' ? 0x18243a : 0xbdd6e8,
+  TIME === 'golden' ? 0x7a6848 : TIME === 'night' ? 0x05070a : 0x5d7050,
+  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .46));
 
 /* ---------- ground ---------- */
 const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');
@@ -203,8 +206,9 @@ for (const row of COTTAGE_ROWS) {
 }
 
 const lampIM = buildLights(scene);
-if (TIME === 'golden' || TIME === 'dusk')
-  lampIM.material.emissive = new THREE.Color('#ffdf9e'), lampIM.material.emissiveIntensity = 1.4;
+if (TIME === 'golden' || TIME === 'dusk' || TIME === 'night')
+  lampIM.material.emissive = new THREE.Color('#ffdf9e'),
+  lampIM.material.emissiveIntensity = TIME === 'night' ? 1.9 : 1.4;
 buildTrees(scene);
 buildCars(scene);
 buildTraffic(scene);
@@ -227,8 +231,8 @@ if (VIEW !== 'map' && !NOATMO)
 // sky palette (kept for evaluator A/B pairs)
 else if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
   if (!o.isSprite) return;
-  o.material.color.set(TIME === 'golden' ? '#d8a37e' : '#6e5a74');
-  o.material.opacity *= TIME === 'golden' ? .78 : .65;
+  o.material.color.set(TIME === 'golden' ? '#d8a37e' : TIME === 'night' ? '#2a3444' : '#6e5a74');
+  o.material.opacity *= TIME === 'golden' ? .78 : TIME === 'night' ? .5 : .65;
 });
 // sprint-03: glass/reflections v2 — upgrades cached facade materials built from
 // A-owned glassFacadeMaps textures; B's wallMat()/buildings stay untouched
@@ -270,7 +274,7 @@ installUI();
    - envScale → real per-time env gain (scene.environmentIntensity is r163+) */
 const matStats = { withNormal: 0, withRough: 0 };
 {
-  const litI = TIME === 'dusk' ? 1.7 : TIME === 'golden' ? .95 : .12;
+  const litI = TIME === 'night' ? 2.4 : TIME === 'dusk' ? 1.7 : TIME === 'golden' ? .95 : .12;
   const seen = new Set();
   scene.traverse(o => {
     if (!o.isMesh) return;
