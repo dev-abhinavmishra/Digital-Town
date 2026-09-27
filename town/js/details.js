@@ -7,7 +7,7 @@ import { ROADS, LOTS, WATER, PARK_ZONE, BUILDINGS, APARTMENTS,
 import { box, cyl, plane, mat, signTexture, fieldTexture, cropTexture, colored, VCOL,
          instances, waterMaterial, cloudSpriteTexture, uTime,
          makeCanvas, canvasTex, blobShadowTexture, warmGlowTexture,
-         attachDriftShadow, R, rr, pick, mulberry32 } from './lib.js';
+         attachDriftShadow, R, rr, pick, mulberry32, RUNENV } from './lib.js';
 import { pbr, M_BARK, WET_SURFACES } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
@@ -1959,6 +1959,81 @@ export function buildMountains(scene) {
   scene.add(m);
 }
 
+/* ---------------- ferris wheel ---------------- */
+let ferris = null;
+export function buildFerrisWheel(scene) {
+  /* amusement wheel on the park's east lawn - literal geometry only,
+     zero R() draws. Wheel spins in tickWorld; gondolas stay upright. */
+  let fx = 0, fz = 0;
+  for (const [cx, cz] of [[700, 214], [662, 258], [742, 170], [508, 272]]) {
+    if (isFree(cx, cz, 24)) { fx = cx; fz = cz; break; }
+  }
+  if (!fx) return;
+  occupyRect(fx, fz, 44, 32, 3);
+  const R0 = 15, HY = 18.5, FACE = .62;
+  const sup = [
+    { geo: new THREE.CylinderGeometry(11.5, 12.2, .55, 22), color: '#b0a894', y: .27 },
+    { geo: new THREE.CylinderGeometry(.5, .55, 1.1, 8), color: '#5a5650', y: 1.0, x: 8.6, z: -6.4 },
+    { geo: new THREE.BoxGeometry(1.9, 1.5, 1.5), color: '#d88a4a', y: 2.0, x: 8.6, z: -6.4 },
+    { geo: new THREE.CylinderGeometry(0, 1.5, .9, 4), color: '#8a4434', y: 3.2, x: 8.6, z: -6.4 },
+  ];
+  for (const sgn of [-1, 1]) {                      // A-frame legs, both faces
+    for (const l of [-1, 1])
+      sup.push({ geo: new THREE.CylinderGeometry(.55, .8, 21.4, 8), color: '#cdd2d8',
+        x: l * 4.2, y: 10.2, z: sgn * 5.2, rx: sgn * -.24, rz: l * .21 });
+    sup.push({ geo: new THREE.BoxGeometry(10.6, .5, .6), color: '#b8bdc4',
+      y: 6.4, z: sgn * 4.3 });
+  }
+  sup.push({ geo: new THREE.CylinderGeometry(1.15, 1.15, 12.6, 10), color: '#8a8f96',
+    y: HY, rx: Math.PI / 2 });
+  const base = new THREE.Mesh(colored(sup), VCOL());
+  base.position.set(fx, Y, fz); base.rotation.y = FACE;
+  base.castShadow = base.receiveShadow = true;
+  scene.add(base);
+
+  const wp = [                                      // rotating wheel, local XY
+    { geo: new THREE.TorusGeometry(R0, .42, 6, 30), color: '#e8e2d4' },
+    { geo: new THREE.TorusGeometry(R0 * .8, .28, 6, 30), color: '#c8543e' },
+    { geo: new THREE.CylinderGeometry(1.5, 1.5, 1.4, 12), color: '#d8b23a', rx: Math.PI / 2 },
+  ];
+  for (let i = 0; i < 6; i++)
+    wp.push({ geo: new THREE.BoxGeometry(.32, R0 * 2, .32), color: '#cdd2d8',
+      rz: i * Math.PI / 6 });
+  const wheel = new THREE.Mesh(colored(wp), VCOL());
+  wheel.position.set(fx, Y + HY, fz);
+  wheel.castShadow = true;
+  scene.add(wheel);
+
+  const litG = new THREE.SphereGeometry(.3, 6, 5);
+  const litM = new M({ color: '#ffe9c0', emissive: '#ffd9a0',
+    emissiveIntensity: RUNENV.litI, roughness: .6 });
+  litM.envMapIntensity *= RUNENV.envScale; litM.userData.lit = true;
+  const bulbs = [];
+  for (let i = 0; i < 24; i++) {
+    const a = i * Math.PI / 12;
+    bulbs.push({ x: Math.cos(a) * R0, y: Math.sin(a) * R0, z: 0, s: 1 });
+  }
+  const bulbIM = new THREE.InstancedMesh(litG, litM, bulbs.length);
+  bulbs.forEach((b, i) => {
+    _p.set(b.x, b.y, b.z); _q.identity(); _s1.set(1, 1, 1);
+    _mx.compose(_p, _q, _s1); bulbIM.setMatrixAt(i, _mx);
+  });
+  wheel.add(bulbIM);                                // spins with the rim
+
+  const cabG = colored([
+    { geo: new THREE.BoxGeometry(2.3, 1.5, 1.6), color: '#ffffff', y: -.6 },
+    { geo: new THREE.BoxGeometry(2.0, .22, 1.8), color: '#44403a', y: .2 },
+    { geo: new THREE.CylinderGeometry(.09, .09, 1.1, 5), color: '#8a8f96', y: .85 },
+  ]);
+  const cabIM = new THREE.InstancedMesh(cabG, VCOL(), 12);
+  cabIM.frustumCulled = false;
+  const TINTS = ['#d8543e', '#e8a23a', '#4a90c2', '#5aa04a', '#b05a9a', '#e8e4da'];
+  for (let i = 0; i < 12; i++)
+    cabIM.setColorAt(i, new THREE.Color(TINTS[i % TINTS.length]));
+  scene.add(cabIM);
+  ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
+}
+
 /* ---------------- bird flocks ---------------- */
 let birds = null;
 let ducks = null;
@@ -2221,6 +2296,22 @@ export function tickWorld(t, dt) {
     });
     _s1.set(1, 1, 1);
     im.instanceMatrix.needsUpdate = true;
+  }
+  // ferris wheel - slow turn; gondolas hang upright below the rim
+  if (ferris) {
+    const { wheel, cabIM, cx, cy, cz, R0, face } = ferris;
+    const a0 = t * .09;
+    wheel.rotation.set(0, face, a0);
+    const cf = Math.cos(face), sf = Math.sin(face);
+    for (let i = 0; i < 12; i++) {
+      const a = a0 + i * Math.PI / 6;
+      const lx = Math.cos(a) * R0, ly = Math.sin(a) * R0 - 1.7;
+      _p.set(cx + lx * cf, cy + ly, cz - lx * sf);
+      _eul.set(0, face, Math.sin(t * 1.1 + i * 2.1) * .05);
+      _q.setFromEuler(_eul); _mx.compose(_p, _q, _s1);
+      cabIM.setMatrixAt(i, _mx);
+    }
+    cabIM.instanceMatrix.needsUpdate = true;
   }
   // paddling ducks - lazy circles on the pond, gentle bob, tangent heading
   if (ducks) {
