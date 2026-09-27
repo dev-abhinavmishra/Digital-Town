@@ -11,6 +11,7 @@ import { makeBuilding } from './buildings.js';
 import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildLights, buildWater, buildPark, buildPlaza, buildPeople,
          buildProps, occupyRect, isFree, buildAthleticPark, buildTraffic,
+         buildRain,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
@@ -29,6 +30,8 @@ const NOFX = params.get('nofx') === '1';
 const NOAO = params.get('noao') === '1';
 const NOATMO = params.get('noatmo') === '1';  // master: fog patch + clouds + lamp glows
 const NOFOG = params.get('nofog') === '1';   // granular: fog patch only
+const WEATHER = params.get('weather');       // 'rain' = overcast + streaks + wet pavement
+const RAIN = WEATHER === 'rain';
 const NOWATERFX = params.has('nowaterfx');   // sprint-03: stock water material
 const NOGLASSFX = params.has('noglassfx');   // sprint-03: stock glass materials
 const NOCULL = params.has('nocull');         // sprint-03: disable occluder cull
@@ -71,9 +74,9 @@ const skyTex = skyTexture({
   sunEl: Math.asin(sunDir.y),
 });
 scene.background = skyTex;
-scene.backgroundIntensity = TIME === 'golden' ? 1.0 : TIME === 'night' ? .9 : 0.95;
+scene.backgroundIntensity = (TIME === 'golden' ? 1.0 : TIME === 'night' ? .9 : 0.95) * (RAIN ? .55 : 1);
 scene.environment = pmrem.fromEquirectangular(skyTex).texture;
-scene.environmentIntensity = TIME === 'golden' ? .9 : .8;
+scene.environmentIntensity = (TIME === 'golden' ? .9 : .8) * (RAIN ? .5 : 1);
 // HDR image-based lighting — vendored Poly Haven sky feeds PBR reflections.
 // Background stays procedural so the visible sun matches the directional light.
 const envInfo = { envType: 'fallback', envSrc: 'procedural-sky',
@@ -94,9 +97,9 @@ scene.fog = new THREE.FogExp2(
   TIME === 'dusk' ? 0.00032 : TIME === 'night' ? 0.00022 : 0.00017);
 
 /* ---------- sun + fill ---------- */
-const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a
+const sun = new THREE.DirectionalLight(RAIN ? 0xc8d4de : TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a
     : TIME === 'night' ? 0x9fb8e0 : 0xfff1dc,
-  TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 2.95);
+  (TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 2.95) * (RAIN ? .38 : 1));
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -222,6 +225,7 @@ buildFurniture(scene);
 buildGroundDetail(scene);
 buildBacklots(scene);
 if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
+if (VIEW !== 'map' && RAIN) buildRain(scene);   // ?weather=rain
 // sprint-02 atmo module: cumulus billboards, height-haze + aerial fog patch,
 // dusk lamp pools/halos — all render-side over B's objects (js/render/atmo.js)
 let atmoInfo = null;

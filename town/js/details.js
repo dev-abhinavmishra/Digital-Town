@@ -1986,7 +1986,30 @@ export function buildClouds(scene) {
   clouds = items;
 }
 
-/* ================= per-frame world animation ================= */
+/* ---------------- rain (?weather=rain) ---------------- */
+let rain = null;
+export function buildRain(scene) {
+  /* 1300 streak instances over the town core, falling in a wrapped column.
+     Dedicated seed stream - zero R() draws. ASPH goes wet sheen here so the
+     pass stays self-contained (its roughness wins over streetscape's lift). */
+  const Rr = mulberry32(8819), rf = (a, b) => a + Rr() * (b - a);
+  const drops = [];
+  for (let i = 0; i < 1300; i++)
+    drops.push({ x: rf(-780, 780), y: rf(0, 260), z: rf(-780, 780),
+                 v: rf(46, 68), s: rf(.8, 1.3), len: rf(2.4, 4.0) });
+  const streakG = new THREE.PlaneGeometry(.09, 1);
+  streakG.translate(0, -.5, 0);                    // anchor at drop head
+  const streakM = new THREE.MeshBasicMaterial({ color: '#d8e6ee',
+    transparent: true, opacity: .4, depthWrite: false,
+    side: THREE.DoubleSide, fog: false });
+  const rim = new THREE.InstancedMesh(streakG, streakM, drops.length);
+  rim.frustumCulled = false;
+  scene.add(rim);
+  rain = { im: rim, list: drops };
+  ASPH.roughness = .3;                             // rain-slick pavement
+  ASPH.envMapIntensity = 1.35;
+}
+
 const _mx = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(),
       _s1 = new THREE.Vector3(1, 1, 1), _eul = new THREE.Euler();
 export function tickWorld(t, dt) {
@@ -2172,6 +2195,22 @@ export function tickWorld(t, dt) {
                Math.sin(t * 2 + d.ph) * .04);
       _q.setFromEuler(_eul);
       _s1.setScalar(d.s);
+      _mx.compose(_p, _q, _s1);
+      im.setMatrixAt(i, _mx);
+    });
+    _s1.set(1, 1, 1);
+    im.instanceMatrix.needsUpdate = true;
+  }
+  // rain streaks - wrapped fall column, slight slant via fixed roll
+  if (rain) {
+    const { im, list } = rain;
+    _eul.set(0, 0, .1);
+    _q.setFromEuler(_eul);
+    list.forEach((d, i) => {
+      d.y -= d.v * dt;
+      if (d.y < 0) d.y += 260;
+      _p.set(d.x, d.y, d.z);
+      _s1.set(d.s, d.len, d.s);
       _mx.compose(_p, _q, _s1);
       im.setMatrixAt(i, _mx);
     });
