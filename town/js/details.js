@@ -2093,6 +2093,7 @@ export function buildCrane(scene) {
   const jib = new THREE.Mesh(colored(jp), VCOL());
   jib.castShadow = true;
   slew.add(jib);
+  slew.userData.dynamic = true;                  // slews - keep out of mergeStatic
   scene.add(slew);
   crane = { slew };
 }
