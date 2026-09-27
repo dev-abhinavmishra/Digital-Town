@@ -2131,13 +2131,19 @@ export function buildRain(scene) {
   const pudM = new M({ color: '#20303a', roughness: .07, metalness: .08 });
   pudM.envMapIntensity = 1.8 * RUNENV.envScale;
   const pudL = [];
+  const ix0 = intersections();                    // keep junction paint clear
   for (const r of ROADS) {
     const len = r.a1 - r.a0;
     for (let a = 14; a < len - 14; a += 30) {
       if (Rr() > .55) continue;
-      const off = rf(-(r.w / 2 - 2.2), r.w / 2 - 2.2);
-      pudL.push({ x: r.axis === 'v' ? r.c + off : r.a0 + a,
-                  z: r.axis === 'v' ? r.a0 + a : r.c + off,
+      const along = r.a0 + a;
+      if (ix0.some(i => r.axis === 'v'
+        ? Math.abs(i.x - r.c) < 12 && Math.abs(i.z - along) < 14
+        : Math.abs(i.z - r.c) < 12 && Math.abs(i.x - along) < 14)) continue;
+      const side = Rr() < .5 ? -1 : 1;            // curbside band, not mid-lane
+      const off = side * rf(r.w / 2 - 4.0, r.w / 2 - 2.2);
+      pudL.push({ x: r.axis === 'v' ? r.c + off : along,
+                  z: r.axis === 'v' ? along : r.c + off,
                   s: rf(1.0, 2.6), ry: rf(0, 6.28) });
     }
   }
