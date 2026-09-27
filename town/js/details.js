@@ -1736,55 +1736,92 @@ export function buildCountryside(scene) {
   scene.add(instances(tlG, new M({ color: '#fff', roughness: .95, flatShading: true }), tl));
 }
 
-/* ---------------- mountain ring â€” the hard edge of the world ----------------
-   Two concentric ridges, harmonic height noise, vertex-colored altitude bands
-   (forest â†’ scree â†’ snow). One non-indexed mesh â†’ merges into the VCOL bucket. */
+/* ---------------- mountain ring — the hard edge of the world ----------------
+   Three concentric ridges, ridged-multifractal crest noise, vertex-colored
+   altitude bands (forest → scree → snow). One indexed grid
+   mesh — merges into the VCOL bucket. */
 export function buildMountains(scene) {
-  const pos = [], col = [];
-  const cFor = new THREE.Color('#35522c'), cRock = new THREE.Color('#5d554b'),
-        cScr = new THREE.Color('#847a6d'), cSnow = new THREE.Color('#f2f5f7');
+  /* Ridged-multifractal ridges: (1-|sin|) octave stacks give crest/saddle
+     silhouettes instead of sine cones; an indexed (u,a) grid + smooth vertex
+     normals read as continuous terrain rather than flat facet slabs. */
+  const pos = [], col = [], idx = [];
+  const cFor = new THREE.Color('#2e4a2c'), cForD = new THREE.Color('#243c24'),
+        cRock = new THREE.Color('#5f574c'), cScr = new THREE.Color('#8a7f6f'),
+        cSnow = new THREE.Color('#eef2f5'), cSnowSh = new THREE.Color('#cfd9e2');
   const vc = new THREE.Color();
-  const colAt = (y, hMax, snowAt) => {
-    const t = y / hMax;
-    if (t > snowAt) vc.copy(cSnow);
-    else if (t > .42) vc.copy(cScr).lerp(cSnow, (t - .42) / (snowAt - .42) * .75);
-    else vc.copy(cFor).lerp(cRock, t / .42);
-    col.push(vc.r, vc.g, vc.b);
-  };
-  const ridge = (rMid, hMax, width, seed, snowAt, N = 260) => {
-    const H = a => {
-      const t = a + seed;
-      return hMax * Math.max(.16,
-        .5 + .24 * Math.sin(3 * t + 1.9) + .17 * Math.sin(7 * t + .7) + .19 * Math.sin(15 * t + 2.9));
+  // cheap periodic value-ish noise on the angle - deterministic, smooth
+  const nz = (a, s) => Math.sin(a * 1 + s) * .55 + Math.sin(a * 2 + s * 1.7) * .3
+                     + Math.sin(a * 5 + s * 3.1) * .15;
+  const ridge = (rMid, hMax, width, seed, snowAt, N = 720, M = 12) => {
+    // crest height per angle: ridge-noise stack shaped by a low-frequency
+    // peak envelope so summits group into massifs separated by saddles
+    const env = a => .42 + .58 * Math.max(0, .5 + .5 * Math.sin(2 * a + seed * 2.3)
+                                   + .18 * Math.sin(5 * a + seed));
+    const rid = a => {
+      let v = 0, amp = .52, f = 3, ph = seed;
+      for (let o = 0; o < 5; o++) {
+        v += amp * (1 - Math.abs(Math.sin(f * a + ph)));
+        f *= 2; amp *= .5; ph += 1.9;
+      }
+      return v;   // ~0..1 crest profile
     };
-    const R0 = a => rMid + 150 * Math.sin(4 * a + seed * 2) + 80 * Math.sin(9 * a + seed);
-    // mid-slope jitter: craggy facets instead of flat slabs
-    const J = a => 26 * Math.sin(23 * a + seed * 3) + 14 * Math.sin(41 * a + seed);
-    const V = (a, r, y) => { pos.push(Math.cos(a) * r, y, Math.sin(a) * r); colAt(y, hMax, snowAt); };
-    for (let i = 0; i < N; i++) {
-      const a0 = i / N * 6.2831853, a1 = (i + 1) / N * 6.2831853;
-      const h0 = H(a0), h1 = H(a1);
-      const rm0 = R0(a0), rm1 = R0(a1);
-      const j0 = J(a0), j1 = J(a1);
-      // inner slope (faces town) â€” wound to face inward
-      V(a0, rm0 - width, 0); V(a1, rm1 - width, 0); V(a0, rm0 - width * .45 + j0, h0 * .55);
-      V(a0, rm0 - width * .45 + j0, h0 * .55); V(a1, rm1 - width, 0); V(a1, rm1 - width * .45 + j1, h1 * .55);
-      V(a0, rm0 - width * .45 + j0, h0 * .55); V(a1, rm1 - width * .45 + j1, h1 * .55); V(a0, rm0, h0);
-      V(a0, rm0, h0); V(a1, rm1 - width * .45 + j1, h1 * .55); V(a1, rm1, h1);
-      // outer slope â€” wound to face outward
-      V(a0, rm0, h0);       V(a1, rm1, h1);        V(a0, rm0 + width * .45 + j0, h0 * .55);
-      V(a0, rm0 + width * .45 + j0, h0 * .55); V(a1, rm1, h1); V(a1, rm1 + width * .45 + j1, h1 * .55);
-      V(a0, rm0 + width * .45 + j0, h0 * .55); V(a1, rm1 + width * .45 + j1, h1 * .55); V(a0, rm0 + width, 0);
-      V(a0, rm0 + width, 0); V(a1, rm1 + width * .45 + j1, h1 * .55); V(a1, rm1 + width, 0);
+    const H = a => hMax * Math.max(.10, env(a) * (.25 + .95 * rid(a)));
+    const rugF = Math.min(1, hMax / 300);      // low foothills stay smooth
+    const R0 = a => rMid + 120 * Math.sin(2 * a + seed * 2) + 60 * Math.sin(6 * a + seed);
+    // ragged snowline per angle (higher peaks keep snow in the gullies)
+    const snowLine = a => snowAt + .09 * nz(a * 3, seed * 5);
+    const vbase = pos.length / 3;
+    for (let i = 0; i <= N; i++) {
+      const a = i / N * Math.PI * 2;
+      const h = H(a), rm = R0(a);
+      for (let j = 0; j <= M; j++) {
+        const u = j / M;                       // 0 = inner base, .5 = crest, 1 = outer base
+        // asymmetric slope profile: concave foot, steep headwall at crest
+        const prof = u < .5 ? Math.pow(u * 2, 1.55) : Math.pow((1 - u) * 2, 1.55);
+        // mid-slope crag: radial + height displacement grows toward the crest
+        const cragA = Math.sin(a * 23 + seed * 3 + j * 1.7) * .5
+                    + Math.sin(a * 41 + seed * 7 + j * 2.3) * .3;
+        const rj = cragA * width * .10 * rugF * Math.sin(Math.PI * u);
+        const r = rm + width * (2 * u - 1) + rj;
+        const y = Math.max(0, h * prof + h * .035 * cragA * rugF * Math.sin(Math.PI * u));
+        pos.push(Math.cos(a) * r, y, Math.sin(a) * r);
+        /* color: forest -> talus -> rock -> snow with per-vertex mottle and
+           gully streaks running downslope */
+        const t = y / hMax;
+        const mottle = Math.min(1, Math.max(0, .5 + .5 * nz(a * 9 + u * 4.2, seed + 2)
+                     + .18 * Math.sin(a * 37 + u * 9 + seed)));
+        const gully = Math.abs(Math.sin(a * 17 + seed * 4))
+                    * (.5 + .5 * Math.abs(Math.sin(a * 7 + seed * 6)));
+        if (t > snowLine(a)) {
+          // snowfield with shaded gully lips
+          vc.copy(cSnow).lerp(cSnowSh, .25 + .45 * mottle * gully);
+        } else if (t > .38) {
+          // talus/rock band - warmer scree streaked by gullies
+          vc.copy(cRock).lerp(cScr, .25 + .55 * mottle);
+          vc.multiplyScalar(.82 + .18 * gully);
+          const treeline = snowLine(a) - .10 - .04 * mottle;
+          if (t > treeline) vc.lerp(cSnow, (t - treeline) / .10);
+        } else {
+          // forested foot - mottled canopy darkening into gullies
+          vc.copy(cFor).lerp(cForD, .15 + .6 * mottle);
+          vc.lerp(cRock, Math.max(0, (t - .30) / .08) * .8);
+        }
+        col.push(vc.r, vc.g, vc.b);
+      }
+    }
+    for (let i = 0; i < N; i++) for (let j = 0; j < M; j++) {
+      const a = vbase + i * (M + 1) + j, b = a + M + 1;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
   };
-  ridge(1500, 140, 160, 4.7, 1.25);  // near wooded foothill band — never snows
-  ridge(1700, 350, 240, 0.0, .86);   // green foothills, thin snow cap
-  ridge(2600, 760, 460, 2.4, .58);   // taller far range, deeper snowline
+  ridge(1500, 150, 180, 4.7, 1.25, 720, 12);   // near wooded foothill band - never snows
+  ridge(1700, 380, 260, 0.0, .80, 720, 12);    // green foothills, thin snow cap
+  ridge(2600, 790, 500, 2.4, .55, 640, 14);    // taller far range, deeper snowline
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.computeVertexNormals();          // non-indexed â†’ crisp facets
+  g.setIndex(idx);
+  g.computeVertexNormals();                    // indexed -> smooth terrain shading
   const m = new THREE.Mesh(g, VCOL());
   m.receiveShadow = true;
   scene.add(m);
