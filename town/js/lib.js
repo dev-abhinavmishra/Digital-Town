@@ -868,32 +868,18 @@ export function skyTexture({ mode = 'day', sunAz = 0, sunEl = .6 } = {}) {
   return t;
 }
 
-/* cumulus sprite — lobes cluster along a flat base line and the alpha
-   silhouette is then shaded top-to-bottom via source-atop, giving a lit
-   crown and gray underside instead of a uniform white blob. v=0 keeps the
-   exact R() draw sequence the old texture consumed; extra variants draw
-   from dedicated streams so the global seed order never shifts. */
-export function cloudSpriteTexture(v = 0) {
-  return cachedTex('cloudspr' + v, () => {
+/* soft drifting cloud sprite texture (fixed: proper premultiplied-friendly alpha) */
+export function cloudSpriteTexture() {
+  return cachedTex('cloudspr', () => {
     const [c, x] = makeCanvas(256, 128);
-    const src = v === 0 ? () => R() : mulberry32(7100 + v * 97);
     for (let i = 0; i < 30; i++) {
-      const gx = 40 + src() * 176, gyRaw = 45 + src() * 40,
-            r = 12 + src() * 26;
-      const gy = Math.min(gyRaw, 94 - r * .4);           // big lobes ride high
+      const gx = 40 + R() * 176, gy = 45 + R() * 40, r = 12 + R() * 26;
       const gr = x.createRadialGradient(gx, gy, 0, gx, gy, r);
-      gr.addColorStop(0, 'rgba(255,255,255,.72)');
-      gr.addColorStop(.7, 'rgba(245,250,252,.4)');
+      gr.addColorStop(0, 'rgba(255,255,255,.7)');
+      gr.addColorStop(.7, 'rgba(245,250,252,.35)');
       gr.addColorStop(1, 'rgba(255,255,255,0)');
       x.fillStyle = gr; x.beginPath(); x.arc(gx, gy, r, 0, 7); x.fill();
     }
-    x.globalCompositeOperation = 'source-atop';          // shade within the silhouette
-    const sh = x.createLinearGradient(0, 18, 0, 118);
-    sh.addColorStop(0, 'rgba(255,255,255,.55)');
-    sh.addColorStop(.55, 'rgba(232,240,248,.3)');
-    sh.addColorStop(1, 'rgba(158,172,196,.85)');
-    x.fillStyle = sh; x.fillRect(0, 0, 256, 128);
-    x.globalCompositeOperation = 'source-over';
     return canvasTex(c);
   });
 }
