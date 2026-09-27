@@ -52,7 +52,7 @@ renderer.setPixelRatio(pixelRatio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : 1.0;
+renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : TIME === 'day' ? 1.06 : 1.0;
 document.getElementById('app').appendChild(renderer.domElement);
 // survive GPU OOM context loss on weak iGPUs — allow restore, then reload clean
 renderer.domElement.addEventListener('webglcontextlost', e => e.preventDefault());
@@ -65,7 +65,7 @@ const sunDir = new THREE.Vector3();
 if (TIME === 'golden') sunDir.set(-1500, 210, 700);
 else if (TIME === 'dusk') sunDir.set(-1200, 120, 500);
 else if (TIME === 'night') sunDir.set(-500, 1100, -350);   // high moon, cool
-else sunDir.set(900, 750, 620);
+else sunDir.set(900, 590, 640);
 sunDir.normalize();
 
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -99,8 +99,8 @@ scene.fog = new THREE.FogExp2(
 
 /* ---------- sun + fill ---------- */
 const sun = new THREE.DirectionalLight(RAIN ? 0xc8d4de : TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a
-    : TIME === 'night' ? 0x9fb8e0 : 0xfff1dc,
-  (TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 2.95) * (RAIN ? .38 : 1));
+    : TIME === 'night' ? 0x9fb8e0 : 0xffe9c4,
+  (TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 3.15) * (RAIN ? .38 : 1));
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -113,7 +113,7 @@ scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.HemisphereLight(
   TIME === 'golden' ? 0xd8b088 : TIME === 'night' ? 0x18243a : 0xbdd6e8,
   TIME === 'golden' ? 0x7a6848 : TIME === 'night' ? 0x05070a : 0x5d7050,
-  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .46));
+  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .40));
 
 /* ---------- ground ---------- */
 const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');

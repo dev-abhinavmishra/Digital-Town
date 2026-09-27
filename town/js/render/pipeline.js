@@ -126,7 +126,7 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
   // dusk cool split-tone. All stay pre-tonemap HDR-safe: shadow tinting is
   // multiplicative below mid so it never folds like the old S-curve did.
   const GRADE = {
-    day:    { warm: .03,  sat: 1.11, vig: .33, shTint: [.96, .99, 1.05], shStr: .18 },
+    day:    { warm: .045, sat: 1.15, vig: .27, shTint: [.95, .99, 1.06], shStr: .26 },
     golden: { warm: .07,  sat: 1.12, vig: .30, shTint: [1.10, .97, .85], shStr: .45 },
     dusk:   { warm: .09,  sat: .95,  vig: .34, shTint: [.80, .87, 1.10], shStr: .55 },
     night:  { warm: .0,   sat: .88,  vig: .40, shTint: [.70, .82, 1.16], shStr: .55 },
