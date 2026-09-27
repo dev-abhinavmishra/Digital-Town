@@ -1,0 +1,32 @@
+{
+  "branch": "devin/1790452029-aaa-detail-pass",
+  "served": "http://127.0.0.1:8778 (node town/server.cjs)",
+  "browser": "Chrome 137 for Testing, headed, SwiftShader (--enable-unsafe-swiftshader), viewport 1280x720",
+  "loads": [
+    { "url": "?view=aerial&still=1",   "ready": true, "readySecs": 143, "consoleErrors": 0, "calls": 625, "tris": 1751159, "fps": 23.4 },
+    { "url": "?view=mainstreet&still=1","ready": true, "readySecs": 193, "consoleErrors": 0, "calls": 388, "tris": 1743775, "fps": 22.8 },
+    { "url": "?view=park&still=1",      "ready": true, "readySecs": 184, "consoleErrors": 0, "calls": 284, "tris": 1735665, "fps": 22.1 },
+    { "url": "?view=downtown&still=1",  "ready": true, "readySecs": 191, "consoleErrors": 0, "calls": 414, "tris": 1742399, "fps": 22.4 },
+    { "url": "?view=mainstreet&time=dusk&still=1", "ready": true, "readySecs": 196, "consoleErrors": 0, "calls": 385, "tris": 1797515, "fps": 22.7 }
+  ],
+  "hud": {
+    "budgetChipText": "$9.95M / $10.00M",
+    "budgetExpand": "open class toggles; breakdown: health $6.25M/13, community $3.70M/11, free 2, headroom $0.05M",
+    "drawer": "opens via FACILITIES; 3 groups (free 2, health 13, community 11)",
+    "card+hospital": "click fi[hospital] -> card '#3 Havenbrook General Hospital', 'Cost $1.50M'; cam flew (540,620,660) -> (-6.9,107.2,-688.2) == flyToBuilding formula",
+    "card+mall(dusk)": "click fi[mall] -> card '#17 Havenbrook Commons Mall'; cam -> (956,50,559) == formula",
+    "tour": "TOUR -> bar shows, caption 'Anchored free: the University School of Medicine', '1 / 8', btn .on; NEXT advanced (bar stayed shown); Esc ended + cam returned to (540,620,660); canvas mousedown also ended",
+    "rubric": "PROJECT BRIEF -> overlay 'HAVENBROOK — Project Brief', 9/9 check rows; X closes"
+  },
+  "visual": {
+    "aerial": "3 mountain ridges incl. wooded foothill + snowline; reduced day haze",
+    "mainstreet": "card-foliage trees, parked+moving vehicles (sedan/SUV/pickup w/ wheels, plates, exhaust), articulated pedestrians, lettered street blades, parking meters, grass tufts, asphalt wear streaks",
+    "park": "ponds, paths, card-foliage trees, bandshell area",
+    "downtown": "tower cluster, grid traffic, foothill ridge",
+    "dusk": "lit windows (emissive), headlight/taillight glow quads, lamp pools, dusk grade"
+  },
+  "notes": [
+    "Chrome 137 on this box requires --enable-unsafe-swiftshader for WebGL; without it the page watchdog reloads forever (no app fault — env flag issue)",
+    "fps ~22-23 under SwiftShader software GL; all five loads reached __ready in 143-196s with zero console errors/pageerrors"
+  ]
+}

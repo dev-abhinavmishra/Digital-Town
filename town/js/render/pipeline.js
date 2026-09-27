@@ -30,13 +30,13 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
   if (ao) {
     gtao = new GTAOPass(scene, camera, size.x, size.y);
     gtao.output = GTAOPass.OUTPUT.Default;
-    gtao.blendIntensity = 0.9;
+    gtao.blendIntensity = 1.0;
     gtao.updateGtaoMaterial({
-      radius: 12,            // world metres — contact-scale AO for a town scene
-      distanceExponent: 1.2,
-      thickness: 2,
-      scale: 1.4,
-      samples: 16,
+      radius: 4,             // tight contact-scale AO — grounds buildings/props
+      distanceExponent: 1.0,
+      thickness: 1.5,
+      scale: 1.9,
+      samples: 24,
       distanceFallOff: 1,
       screenSpaceRadius: false,
     });
@@ -59,17 +59,27 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
       for (let i = 0; i < 16; i++)
         if (Math.abs(cm[i] - lastCamMat[i]) > 1e-4) { moved = true; break; }
       if (moved) {
-        // camera in motion → forward beauty unmodified, AO rebuilds on settle
+        // camera in motion → crossfade the stale AO out over ~10 frames
+        // (screen-space AO ghosts if it lingers; a hard drop pops). The
+        // settle path rebuilds AO on the next frame.
         lastCamMat.set(cm);
         settleN = 0;
-        if (aoFresh) aoFresh = false;
-        this._state = 'moving';
+        this.dirty = true;                 // first settled frame must rebuild —
+        this._state = 'moving';            // the cached buffer matches the old pose
         this.copyMaterial.uniforms.tDiffuse.value = readBuffer.texture;
         this.copyMaterial.blending = THREE.NoBlending;
         this.renderPass(renderer2, this.copyMaterial,
           this.renderToScreen ? null : writeBuffer);
+        const fade = aoFresh ? Math.max(0, 1 - (this._moveN = (this._moveN || 0) + 1) / 10) : 0;
+        if (fade > 0) {
+          this.blendMaterial.uniforms.intensity.value = this.blendIntensity * fade;
+          this.blendMaterial.uniforms.tDiffuse.value = this.pdRenderTarget.texture;
+          this.renderPass(renderer2, this.blendMaterial,
+            this.renderToScreen ? null : writeBuffer);
+        }
         return;
       }
+      this._moveN = 0;
       if (!aoFresh || this.dirty || (++settleN % 90 === 0)) {
         this._state = 'rebuild';
         origRender(renderer2, writeBuffer, readBuffer);   // full G-buffer + AO
@@ -115,7 +125,7 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
   // dusk cool split-tone. All stay pre-tonemap HDR-safe: shadow tinting is
   // multiplicative below mid so it never folds like the old S-curve did.
   const GRADE = {
-    day:    { warm: .025, sat: 1.07, vig: .28, shTint: [1, 1, 1], shStr: 0 },
+    day:    { warm: .03,  sat: 1.11, vig: .33, shTint: [.96, .99, 1.05], shStr: .18 },
     golden: { warm: .07,  sat: 1.12, vig: .30, shTint: [1.10, .97, .85], shStr: .45 },
     dusk:   { warm: .09,  sat: .95,  vig: .34, shTint: [.80, .87, 1.10], shStr: .55 },
   }[time] || { warm: .025, sat: 1.07, vig: .28, shTint: [1, 1, 1], shStr: 0 };

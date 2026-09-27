@@ -6,13 +6,17 @@ export const CITY = {
   ramps: 0, tactilePads: 0, aprons: 0,
   markings: { dyellow: 0, dash: 0, edge: 0, stopbar: 0, crosswalkBars: 0,
               arrows: 0, twltlArrows: 0 },
-  drains: 0, manholes: 0,
+  drains: 0, manholes: 0, wear: 0,
   parcels: [],
   // sprint-03 landmark registry — every leaf carries {placed, parts, pos}.
   // pos = [x,z] for singletons, [[x,z],...] for multi-site keys.
   hero: {},
   wayfinding: 0,
   wayfindingItems: [],
+  furniture: 0,   // city/furniture.js fills this with a per-type breakdown
+  // ground-detail pass (city/ground.js): counts of placed cover per layer
+  ground: { overlays: 0, paths: 0, litter: 0, mulch: 0, flowers: 0, stains: 0,
+            grass: 0 },
 };
 export function publishCity() {
   if (typeof window !== 'undefined') window.__city = CITY;
