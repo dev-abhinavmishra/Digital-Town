@@ -1037,6 +1037,30 @@ export function buildPark(scene) {
     pondJet = { pts: jpts, pos: jp, seed: js, cx: fx, cz: fz };
   }
 
+  // moored sailboats off the dock end - hull, mast, triangle main+jib
+  const sailSh = (w, h) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0); sh.lineTo(w, 0); sh.lineTo(0, h);
+    return new THREE.ShapeGeometry(sh);
+  };
+  const boatDefs = [[552, 160, .9, '#e8e2d4'], [596, 132, -2.2, '#c8543e']];
+  for (const [bx, bz, br, trim] of boatDefs) {
+    const sb = [
+      { geo: new THREE.BoxGeometry(4.6, .6, 1.4), color: '#f0ebe0', y: .34 },
+      { geo: new THREE.CylinderGeometry(0, .72, 1.5, 4), color: '#f0ebe0',
+        x: 2.7, y: .34, rz: -1.5708 },
+      { geo: new THREE.BoxGeometry(3.2, .16, 1.0), color: trim, y: .68 },
+      { geo: new THREE.CylinderGeometry(.06, .08, 7.4, 6), color: '#8a7048',
+        y: 4.2 },
+      { geo: sailSh(2.6, 4.2), color: '#f2f2ee', x: .1, y: 2.2 },
+      { geo: sailSh(1.9, 3.4), color: trim, x: -.15, y: 2.4, ry: Math.PI },
+    ];
+    const sm = new THREE.Mesh(colored(sb), VCOL());
+    sm.position.set(bx, Y + .02, bz); sm.rotation.y = br;
+    sm.castShadow = true;
+    scene.add(sm);
+  }
+
   // playground
   const pg = new THREE.Group();
   pg.add(plane(34, 24, mat('#d4b98a'), 0, Y + .005, 0));
