@@ -2079,6 +2079,7 @@ export function buildWindmill(scene) {
   ]), VCOL());
   head.add(tail);
   head.rotation.y = HEAD;
+  head.userData.dynamic = true;                  // yaws - keep out of mergeStatic
   scene.add(head);
   windmill = { head, rotor };
 }
