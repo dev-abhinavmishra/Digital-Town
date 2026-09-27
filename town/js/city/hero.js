@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CITYHALL_B64 } from '../../assets/cityhall.js';
+import { WATERTOWER_B64 } from '../../assets/watertower.js';
 import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick, RUNENV } from '../lib.js';
 import { pbr } from '../mats.js';
 import { ROADS } from '../layout.js';
@@ -295,9 +296,35 @@ function buildCityHall(scene) {
     err => console.error('cityhall.glb parse failed:', err));
 }
 
+/* A7 — water tower on the NE farmland edge: raked steel legs + X-braces,
+   banded tank, cone cap. Sited by isFree candidates like the pylon. */
+function buildWaterTower(scene) {
+  const cands = [[620, -620], [560, -640], [640, -560], [500, -660], [660, -640]];
+  let site = null;
+  for (const [x, z] of cands) if (isFree(x, z, 9)) { site = [x, z]; break; }
+  if (!site) return 0;
+  const [x, z] = site;
+  occupyRect(x, z, 14, 14, 1);
+  const bin = Uint8Array.from(atob(WATERTOWER_B64), c => c.charCodeAt(0));
+  new GLTFLoader().parse(bin.buffer, '', g => {
+    const wt = g.scene;
+    wt.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = true;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material])
+        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+    });
+    wt.position.set(x, Y, z);
+    wt.rotation.y = .6;                    // face the diagonal, town-wards
+    scene.add(wt);
+    heroLeaf('landmark', 'watertower', 1, [x, z]);
+  }, err => console.error('watertower.glb parse failed:', err));
+}
+
 export function buildHero(scene) {
   buildPylon(scene);
   buildCityHall(scene);
+  buildWaterTower(scene);
   buildQuad(scene);
   buildPavilion(scene);
   buildWayfinding(scene);
