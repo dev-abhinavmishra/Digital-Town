@@ -34,5 +34,14 @@ description: How to run and verify the Havenbrook 3D town (town/server.cjs :8778
 - Pedestrian cluster (idlers): plaza (60,−205)±35, cam (35,5,−168)→(62,1.2,−205).
 - Dusk headlight glows: any moving/parked car on Main St, e.g. (55,4,−24)→(95,1.2,−48).
 
+## Linux box variant (this machine)
+- Node lives at `~/.local/node/bin` (prepend PATH); `~/.local/bin/google-chrome` symlinks to `/opt/.devin/chrome/.../chrome` (Chrome for Testing 137). `playwright-core` resolves from `.verify/node_modules` — run scripts from `.verify/`.
+- `.verify/shots-linux.mjs` is the headless variant (Playwright, `--enable-unsafe-swiftshader --use-angle=swiftshader --disable-gpu-sandbox --no-sandbox`, viewport 1280x720). Each `__ready` load is ~5-7 min under SwiftShader, more under contention.
+- CRITICAL: `page.goto(..., {waitUntil:'domcontentloaded'})` TIMES OUT at 60s — module top-level eval (the whole scene build) delays DOMContentLoaded for minutes. Use `waitUntil:'commit'`, then `waitForFunction('window.__ready === true', {timeout:900000})`.
+- Headed/recorded runs work on `DISPLAY=:0` (launch with `headless:false`, `env:{...process.env, DISPLAY:':0'}`). Minimize the environment's own Chrome window first (`xdotool windowminimize <id>`) so it doesn't cover the test window.
+- Page probes include `__setCam(px,py,pz,tx,ty,tz)` and a `?cam=px,py,pz,tx,ty,tz` URL param for deterministic eval cameras — cheap way to get extra angles off an already-loaded page (no reload).
+- Builders merge into a single VCOL mega-mesh (`scene.traverse` → non-indexed Mesh, ~2M verts, radius ~3300): you can't find individual builder geometry post-merge. To verify a builder ran, compare the mega-mesh's position.count before/after or vs a baseline worktree render (e.g. mountains rebuild added exactly +138,720 verts / +46,240 tris).
+- Same-URL before/after baseline: `git worktree add /tmp/dt-base HEAD~1`, `cp -al town/node_modules /tmp/dt-base/town/` (node_modules is untracked), `sed -i 's/8778/8779/'` the worktree's server.cjs, run it — instant second server serving the old commit for A/B shots.
+
 ## Devin secrets needed
 None — fully local static app.
