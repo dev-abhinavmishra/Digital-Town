@@ -2122,6 +2122,28 @@ export function buildRain(scene) {
   for (const m of WET_SURFACES) {                  // parking lots + gutters wet too
     m.roughness = .3; m.envMapIntensity = 1.35;
   }
+
+  /* standing puddles along lane edges - dark glossy ellipses that pick up
+     the (rain-dimmed) env map. Same dedicated stream; runs only under
+     ?weather=rain since buildRain is gated on it. */
+  const pudG = new THREE.CircleGeometry(1, 14);
+  pudG.scale(1, .62, 1); pudG.rotateX(-Math.PI / 2); pudG.translate(0, Y + .055, 0);
+  const pudM = new M({ color: '#20303a', roughness: .07, metalness: .08 });
+  pudM.envMapIntensity = 1.8 * RUNENV.envScale;
+  const pudL = [];
+  for (const r of ROADS) {
+    const len = r.a1 - r.a0;
+    for (let a = 14; a < len - 14; a += 30) {
+      if (Rr() > .55) continue;
+      const off = rf(-(r.w / 2 - 2.2), r.w / 2 - 2.2);
+      pudL.push({ x: r.axis === 'v' ? r.c + off : r.a0 + a,
+                  z: r.axis === 'v' ? r.a0 + a : r.c + off,
+                  s: rf(1.0, 2.6), ry: rf(0, 6.28) });
+    }
+  }
+  const pudIM = instances(pudG, pudM, pudL, { shadow: false });
+  pudIM.receiveShadow = true;
+  scene.add(pudIM);
 }
 
 const _mx = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(),
