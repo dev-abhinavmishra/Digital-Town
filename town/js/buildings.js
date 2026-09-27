@@ -1205,6 +1205,12 @@ function tower(s) {
   const glassy = R() < .45;
   const tint = pick(['#7fa6bd', '#8fb4c6', '#6d8ea0', '#9ab4c2']);
   const baseC = pick(['#b8a894', '#a89a88', '#9aa2a8', '#b0a690', '#8f7f6c', '#7a8a94']);
+  /* per-tower curtain-wall identity hashed off the lot position — gives each
+     glass tower its own frame color / banding without consuming the R()
+     stream (a new draw here would reshuffle every seed downstream) */
+  const hid = Math.abs(Math.sin(s.x * 12.9898 + s.z * 78.233) * 43758.5453) % 1;
+  const frame = ['#c6cfd4', '#b5aa92', '#4a4238', '#39424c', '#7e8890'][Math.floor(hid * 5)];
+  const banded = (hid * 7) % 1 < .38;
   // podium (2 floors, storefront)
   const podH = 7;
   const pod = box(w, podH, d, null);
@@ -1224,7 +1230,7 @@ function tower(s) {
     const th = i === tiers - 1 ? (h - y) : (h - podH) * (i === 0 ? .55 : .32);
     const b = box(ww, th, dd, null, cx, y, cz);
     b.material = glassy
-      ? wallMats(glassFacadeMaps({ rows: Math.max(3, Math.round(th / 3)), cols: Math.round(ww / 4), litRatio: .14, tint }), mat('#8a949a'))
+      ? wallMats(glassFacadeMaps({ rows: Math.max(3, Math.round(th / 3)), cols: Math.round(ww / 4), litRatio: .14, tint, frame, banded }), mat('#8a949a'))
       : wallMats(facadeMaps({ base: baseC, rows: Math.max(3, Math.round(th / 3.2)), cols: Math.round(ww / 5), win: '#2b3b46' }), mat('#8a949a'));
     g.add(b);
     parapet(g, ww, dd, y + th);

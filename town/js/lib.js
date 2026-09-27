@@ -520,8 +520,9 @@ export function facadeMaps({ base = '#b8a58e', win = '#24333d', rows = 4, cols =
 export function facadeTexture(opts = {}) { return facadeMaps(opts).map; }
 
 /* big glass curtain wall (hospital / offices) */
-export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRatio = .12 } = {}) {
-  const key = 'glass' + JSON.stringify([tint, rows, cols, litRatio]);
+export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12,
+  litRatio = .12, frame = '#c6cfd4', banded = false } = {}) {
+  const key = 'glass' + JSON.stringify([tint, rows, cols, litRatio, frame, banded]);
   return cachedTex(key, () => {
     const SS = 2, W = 512, H = 512;
     const [c, x] = makeCanvas(W * SS, H * SS);   x.scale(SS, SS);
@@ -533,10 +534,15 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRat
     xe.fillStyle = '#000'; xe.fillRect(0, 0, W / 2, H / 2);
     xe.scale(.5, .5);
     xr.fillStyle = '#8c8c8c'; xr.fillRect(0, 0, W, H);   // frame/spandrel mid-rough
-    x.fillStyle = '#c6cfd4'; x.fillRect(0, 0, W, H);
-    const cw = W / cols, rh = H / rows;
+    x.fillStyle = frame; x.fillRect(0, 0, W, H);
+    const cw = W / cols, rh = H / rows,
+          /* banded = thick dark spandrel strip per floor (banded curtain wall);
+             default keeps the thin band and the original cell metrics */
+          sb = banded ? Math.max(5, Math.round(rh * .34)) : 3,
+          spand = '#' + new THREE.Color(frame).multiplyScalar(.42).getHexString();
     for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
-      const wx = col * cw + 3, wy = r * rh + 3, ww = cw - 6, wh = rh - 6;
+      const wx = col * cw + 3, wy = r * rh + (banded ? sb + 2 : 3),
+            ww = cw - 6, wh = rh - (banded ? sb + 5 : 6);
       const lit = R() < litRatio;
       const gg = x.createLinearGradient(wx, wy, wx, wy + wh);
       if (lit) {
@@ -562,11 +568,12 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12, litRat
         for (let d = 0; d < 2; d++) { x.beginPath(); x.arc(wx + ww * (.3 + d * .4), wy + 5, 1.8, 0, 7); x.fill(); }
       }
       // spandrel + mullion
-      x.fillStyle = 'rgba(30,40,50,.4)'; x.fillRect(col * cw, r * rh, cw, 3);
+      x.fillStyle = banded ? spand : 'rgba(30,40,50,.4)';
+      x.fillRect(col * cw, r * rh, cw, sb);
       x.fillStyle = 'rgba(255,255,255,.4)'; x.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
-      xb.fillStyle = '#a0a0a0'; xb.fillRect(col * cw, r * rh, cw, 3);
+      xb.fillStyle = '#a0a0a0'; xb.fillRect(col * cw, r * rh, cw, sb);
       xb.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
-      xr.fillStyle = '#9a9a9a'; xr.fillRect(col * cw, r * rh, cw, 3);   // matte spandrel band
+      xr.fillStyle = '#9a9a9a'; xr.fillRect(col * cw, r * rh, cw, sb);   // matte spandrel band
       xr.fillRect(col * cw + cw / 2 - 1, r * rh, 2, rh);
     }
     // micro grain at device res
