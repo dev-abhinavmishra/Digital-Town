@@ -4,3 +4,4 @@ town-*/.git
 *.log
 Thumbs.db
 .DS_Store
+.verify/shots/

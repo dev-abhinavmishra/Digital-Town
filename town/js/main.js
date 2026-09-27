@@ -12,10 +12,14 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildLights, buildWater, buildPark, buildPlaza, buildPeople,
          buildProps, occupyRect, isFree, buildAthleticPark, buildTraffic,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
-         tickWorld } from './details.js';
+         buildContactShadows, tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
-         groundOverlayTexture, uTime, WATERFX } from './lib.js';
+         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX } from './lib.js';
 import { M_GRASS, pbr, texReport } from './mats.js';
+import { buildFurniture } from './city/furniture.js';
+import { buildGroundDetail } from './city/ground.js';
+import { buildBacklots } from './city/backlots.js';
+import { installUI } from './ui.js';
 
 const params = new URLSearchParams(location.search);
 const VIEW = params.get('view') || 'aerial';
@@ -88,8 +92,8 @@ scene.fog = new THREE.FogExp2(
   TIME === 'dusk' ? 0.00032 : 0.00017);
 
 /* ---------- sun + fill ---------- */
-const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a : 0xfff2dd,
-  TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : 2.6);
+const sun = new THREE.DirectionalLight(TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a : 0xfff1dc,
+  TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : 2.95);
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -102,10 +106,21 @@ scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.HemisphereLight(
   TIME === 'golden' ? 0xd8b088 : 0xbdd6e8,
   TIME === 'golden' ? 0x7a6848 : 0x5d7050,
-  TIME === 'dusk' ? .6 : TIME === 'golden' ? .72 : .55));
+  TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .46));
 
 /* ---------- ground ---------- */
 const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');
+/* micro-detail multiply — the vendored grass tex repeats every 60m, so at eye
+   level it reads flat; a fine luminance noise at 5m frequency restores close
+   range texture without adding a draw call */
+groundM.onBeforeCompile = sh => {
+  sh.uniforms.uDetail = { value: detailNoiseTexture() };
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;')
+    .replace('#include <map_fragment>', `#include <map_fragment>
+      diffuseColor.rgb *= texture2D(uDetail, vMapUv * 12.0).rgb;`);
+};
+attachDriftShadow(groundM, .0015, .0009, .30);  // ~660m cloud shadow field
 scene.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
 // large-scale blotch overlay so the lawn never reads as flat tiling
 const ovM = new THREE.MeshStandardMaterial({ map: groundOverlayTexture(), transparent: true,
@@ -124,6 +139,7 @@ buildPark(scene);
 buildAthleticPark(scene);
 buildPlaza(scene, PLAZA);
 buildProps(scene);
+buildContactShadows(scene);
 
 for (const b of BUILDINGS) if (b.w) scene.add(makeBuilding(b));
 for (const f of FILLER) { scene.add(makeBuilding({ name: '', ...f })); occupyRect(f.x, f.z, f.w, f.d, 4); }
@@ -185,6 +201,11 @@ buildPeople(scene);
 buildFences(scene);
 buildCountryside(scene);
 buildMountains(scene);
+// subagent passes: street furniture + ground cover run last so isFree()
+// sees the full occupancy map
+buildFurniture(scene);
+buildGroundDetail(scene);
+buildBacklots(scene);
 if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
 // sprint-02 atmo module: cumulus billboards, height-haze + aerial fog patch,
 // dusk lamp pools/halos — all render-side over B's objects (js/render/atmo.js)
@@ -226,6 +247,10 @@ scene.add(cyl(4, 4.4, .9, mat('#9aa0a3'), -480, .3, -532, 20));
 /* collapse all static geometry into one mesh per material */
 const _tm = performance.now();
 mergeStatic(scene);
+
+/* presentation layer — budget tracker, facility directory, info cards, tour
+   (independent of ?labels: the directory/cards work either way) */
+installUI();
 (window.__prof ||= []).push(['mergeStatic', Math.round(performance.now() - _tm)]);
 
 /* lit windows + material-upgrade pass on the shared cached materials:
@@ -307,7 +332,7 @@ function syncAnglesFromCam() {
   fly.yaw = Math.atan2(-d.x, -d.z);
 }
 syncAnglesFromCam();
-addEventListener('mousedown', e => { fly.dragging = true; fly.lx = e.clientX; fly.ly = e.clientY; fly.auto = false; });
+addEventListener('mousedown', e => { fly.dragging = true; fly.lx = e.clientX; fly.ly = e.clientY; fly.auto = false; camTween.on = false; });
 addEventListener('mouseup', () => fly.dragging = false);
 addEventListener('mousemove', e => {
   if (!fly.dragging) return;
@@ -325,12 +350,40 @@ addEventListener('dblclick', () => fly.auto = !fly.auto);
    Disables auto-orbit; fly drag/keys still work afterwards. */
 function setCam(px, py, pz, tx, ty, tz) {
   if (orthoCam) return;
+  camTween.on = false;             // a setCam call wins over an active flight
   camera.position.set(px, py, pz);
   camera.lookAt(tx, ty, tz);
   fly.auto = false;
   syncAnglesFromCam();
 }
 window.__setCam = setCam;
+
+/* smooth camera flight — used by the tour + facility directory. The tween
+   runs inside the render loop so it composes correctly with fly controls:
+   while active it owns the camera; on completion the fly yaw/pitch re-sync
+   and the user can drag away seamlessly. */
+const camTween = { on: false, t0: 0, dur: 1,
+  p0: new THREE.Vector3(), t0v: new THREE.Vector3(),
+  p1: new THREE.Vector3(), t1: new THREE.Vector3() };
+const _lookTgt = new THREE.Vector3();
+window.__flyTo = (px, py, pz, tx, ty, tz, dur = 1.7) => {
+  if (orthoCam) { orthoCam.position.set(tx, 1500, tz); orthoCam.lookAt(tx, 0, tz); return; }
+  fly.auto = false;
+  camTween.on = true; camTween.t0 = performance.now(); camTween.dur = Math.max(.2, dur) * 1000;
+  camTween.p0.copy(camera.position);
+  camera.getWorldDirection(_lookTgt);                     // current look target ≈ pos + dir·k
+  camTween.t0v.copy(camera.position).addScaledVector(_lookTgt, Math.max(40, camera.position.distanceTo(new THREE.Vector3(tx, ty, tz)) * .5));
+  camTween.p1.set(px, py, pz); camTween.t1.set(tx, ty, tz);
+};
+function tweenCam(now) {
+  const k = Math.min(1, (now - camTween.t0) / camTween.dur);
+  const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;   // easeInOutQuad
+  camera.position.lerpVectors(camTween.p0, camTween.p1, e);
+  _lookTgt.lerpVectors(camTween.t0v, camTween.t1, e);
+  camera.lookAt(_lookTgt);
+  if (k >= 1) { camTween.on = false; syncAnglesFromCam(); }
+}
+window.__flyDone = () => !camTween.on;
 if (CAMP && !orthoCam) {
   const v = CAMP.split(',').map(Number);
   if (v.length === 6 && v.every(Number.isFinite)) setCam(...v);
@@ -345,6 +398,7 @@ if (LABELS) {
     d.className = 'lbl' + (cat === 'free' ? ' free' : '') + (minor ? ' minor' : '');
     d.innerHTML = `<span class="dot" style="background:${CATEGORY_COLORS[cat] || '#555'}"></span>` +
       (num ? `<span class="num">${num}</span>` : '') + `<span>${txt}</span>`;
+    if (num) { d.style.pointerEvents = 'auto'; d.style.cursor = 'pointer'; }
     holder.appendChild(d);
     labelDivs.push({ d, p: new THREE.Vector3(x, y, z) });
   };
@@ -579,6 +633,8 @@ function tick() {
       camera.position.y = v.p[1];
       camera.lookAt(...v.t);
       syncAnglesFromCam();
+    } else if (camTween.on) {
+      tweenCam(performance.now());
     } else {
       const sp = fly.speed * (fly.keys.ShiftLeft || fly.keys.ShiftRight ? 3 : 1);
       fwd.set(-Math.sin(fly.yaw) * Math.cos(fly.pitch), Math.sin(fly.pitch), -Math.cos(fly.yaw) * Math.cos(fly.pitch));

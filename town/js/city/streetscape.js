@@ -6,11 +6,12 @@
 // storm drains. Everything static funnels through GeoBin — few draw calls.
 import * as THREE from 'three';
 import { ROADS, LOTS, HOUSE_BLOCKS } from '../layout.js';
-import { plane, mat, canvasTex, makeCanvas, R, rr } from '../lib.js';
+import { plane, mat, canvasTex, makeCanvas, attachDriftShadow, R, rr } from '../lib.js';
 import { pbr } from '../mats.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
 import { streetBand } from './occ.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const M = THREE.MeshStandardMaterial;
 const Y = 0.28;                 // match details.js surface lift
@@ -109,6 +110,10 @@ export function buildStreetscape(scene) {
   const walkM = pbr('precast_stone_paving', { repeat: [4, 4], color: '#b2ac9f' });
   const apronM = pbr('concrete', { repeat: [5, 5], color: '#9d998e' });
   const vergeM = pbr('grass_ground', { repeat: [3, 3], color: '#8fae74' });
+  // one continuous world-space cloud-shadow field across every flat surface
+  // (default asphalt is shared with details.js ASPH — already drifted there)
+  for (const m of [gutterM, walkM, apronM, vergeM])
+    attachDriftShadow(m, .0015, .0009, m === vergeM ? .30 : .34);
   const white = mat('#e8e6df'), yellow = mat('#d9b23a'), drainM = mat('#26292c');
   const ix = intersections();
   const bin = new GeoBin();
@@ -395,6 +400,63 @@ export function buildStreetscape(scene) {
     bin.plane(rp.w > rp.d ? pin : rp.w - .6, rp.w > rp.d ? rp.d - .6 : pin,
       tactileMat(), rp.x, Y + .055, rp.z);
     CITY.tactilePads++;
+  }
+
+  /* ---------- asphalt wear pass ----------
+     wheel-track polish + oil stains + repair patches + junction scuff.
+     All translucent decals — one merged mesh, one draw call. */
+  {
+    const wear = [];
+    const quad = (w, d, x, z, ry = 0, lift = .021) => {
+      const g = new THREE.PlaneGeometry(w, d);
+      g.rotateX(-Math.PI / 2); if (ry) g.rotateY(ry);
+      g.translate(x, Y + lift, z);
+      wear.push(g);
+    };
+    for (const r of ROADS) {
+      const len = r.a1 - r.a0;
+      // wheel-track polish strips — two ruts per direction, ~.9m apart
+      for (const s of [-1, 1]) for (const lane of [-1, 1]) {
+        const wo = (r.w / 4) * s + lane * .9;                   // wheel path offset
+        for (let a = r.a0 + 20; a < r.a1 - 20; a += rr(60, 130))
+          quad(r.axis === 'v' ? .8 : rr(9, 22), r.axis === 'v' ? rr(9, 22) : .8,
+            r.axis === 'v' ? r.c + wo : a, r.axis === 'v' ? a : r.c + wo);
+      }
+      // oil stains at rest positions — denser where traffic queues
+      for (let a = r.a0 + 30; a < r.a1 - 30; a += rr(90, 170)) {
+        if (nearIx(r, a)) continue;
+        const o = rr(-r.w / 4, r.w / 4);
+        quad(rr(1.2, 2.4), rr(1.6, 3.2),
+          r.axis === 'v' ? r.c + o : a, r.axis === 'v' ? a : r.c + o, rr(0, 3.1));
+      }
+      // repair patches — darker fresh-asphalt rectangles
+      for (let a = r.a0 + rr(50, 90); a < r.a1 - 40; a += rr(140, 260)) {
+        if (nearIx(r, a)) continue;
+        quad(r.axis === 'v' ? rr(2.2, r.w * .45) : rr(6, 14),
+             r.axis === 'v' ? rr(6, 14) : rr(2.2, r.w * .45),
+             r.axis === 'v' ? r.c + rr(-r.w / 4, r.w / 4) : a,
+             r.axis === 'v' ? a : r.c + rr(-r.w / 4, r.w / 4));
+        CITY.wear++;
+      }
+      // faint hairline cracks — short thin dark strokes
+      for (let a = r.a0 + 40; a < r.a1 - 40; a += rr(110, 200)) {
+        if (nearIx(r, a)) continue;
+        quad(rr(.06, .12), rr(3, 7),
+          r.axis === 'v' ? r.c + rr(-r.w / 2, r.w / 2) : a + rr(0, 8),
+          r.axis === 'v' ? a + rr(0, 8) : r.c + rr(-r.w / 2, r.w / 2), rr(0, 3.1));
+      }
+    }
+    // scuff polish in junction middles — lifted just under the crosswalk /
+    // stop-bar paint so markings stay bright (wear = asphalt, not paint)
+    for (const i of ix)
+      quad(i.wv * .8, i.wh * .8, i.x, i.z, 0, .009);
+    const wearM = new THREE.MeshBasicMaterial({
+      color: '#141619', transparent: true, opacity: .34,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+    });
+    const wearMesh = new THREE.Mesh(mergeGeometries(wear, false), wearM);
+    wearMesh.renderOrder = 1; wearMesh.receiveShadow = false;
+    scene.add(wearMesh);
   }
 
   bin.build(scene);
