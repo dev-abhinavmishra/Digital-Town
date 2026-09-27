@@ -1125,7 +1125,7 @@ export function buildPark(scene) {
 }
 
 /* ---------------- downtown plaza ---------------- */
-let fountain = null, pondJet = null;
+let fountain = null, pondJet = null, balloons = null;
 export function buildPlaza(scene, spec) {
   const pz = pbr('precast_stone_paving'); pz.color = new THREE.Color('#c9bfae');
   scene.add(plane(spec.w, spec.d, pz, spec.x, Y - .02, spec.z, -Math.PI / 2, 3.2));
@@ -2094,6 +2094,42 @@ export function buildFerrisWheel(scene) {
   ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
 }
 
+/* ---------------- hot air balloons ---------------- */
+export function buildBalloons(scene) {
+  /* two striped envelopes drifting lazy circuits over the town - wedge-sliced
+     sphere gores, basket + rope lines, animated drift/bob in tickWorld.
+     dynamic groups so mergeStatic leaves them alone; zero R() draws. */
+  const DEFS = [
+    { cx: 300, cz: -180, r: 220, h: 95, ph: 0,   v: .008,
+      cols: ['#c0392b', '#f2d49b'] },           // crimson/cream over downtown
+    { cx: 520, cz: 150,  r: 160, h: 120, ph: 2.4, v: .006,
+      cols: ['#3d6b8a', '#e8e2d4'] },           // blue/bone over the park
+  ];
+  balloons = [];
+  for (const d of DEFS) {
+    const grp = new THREE.Group();
+    grp.userData.dynamic = true;
+    const parts = [];
+    for (let i = 0; i < 10; i++)
+      parts.push({ geo: new THREE.SphereGeometry(4.2, 3, 9,
+                     i / 10 * Math.PI * 2, Math.PI * 2 / 10 + .01),
+                   color: d.cols[i % 2], sy: 1.18 });
+    parts.push({ geo: new THREE.CylinderGeometry(.9, 1.6, 1.1, 8),
+                 color: '#6e5138', y: -4.2 });
+    parts.push({ geo: new THREE.CylinderGeometry(.42, .55, .5, 8),
+                 color: '#8a7048', y: -3.5 });
+    for (const [rx, rz] of [[.7, .7], [-.7, .7], [.7, -.7], [-.7, -.7]])
+      parts.push({ geo: new THREE.CylinderGeometry(.03, .03, 2.6, 4),
+                   color: '#8a7a5a', x: rx * 1.1, y: -2.4, z: rz * 1.1 });
+    const env = new THREE.Mesh(colored(parts), VCOL());
+    env.castShadow = true;
+    grp.add(env);
+    grp.position.set(d.cx, Y + d.h, d.cz);
+    scene.add(grp);
+    balloons.push({ grp, ...d });
+  }
+}
+
 /* ---------------- tennis courts ---------------- */
 export function buildTennisCourts(scene) {
   /* pair of fenced hard courts on the park's north lawn between the ponds -
@@ -2557,6 +2593,13 @@ export function tickWorld(t, dt) {
       attr.array[b.idx] = on ? 1 : .04;
     }
     attr.needsUpdate = true;
+  }
+  // hot air balloons - lazy circuit + bob + slow rotation
+  if (balloons) for (const b of balloons) {
+    const a = b.ph + t * b.v;
+    b.grp.position.set(b.cx + Math.cos(a) * b.r, Y + b.h + Math.sin(t * .5 + b.ph) * 4,
+                       b.cz + Math.sin(a) * b.r);
+    b.grp.rotation.y = t * .04 + b.ph;
   }
   // pond jet - taller plume, wider mushroom crown
   if (pondJet) {
