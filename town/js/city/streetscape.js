@@ -104,7 +104,9 @@ const HEAD_RY = { nb: 0, sb: Math.PI, eb: -Math.PI / 2, wb: Math.PI / 2 };
 
 export function buildStreetscape(scene) {
   const asph = pbr('asphalt_02');
-  asph.color = new THREE.Color('#484c52'); asph.roughness = .97;
+  // albedo averages ~rgb(90); near-black tint crushed it to a void ribbon —
+  // lift toward worn-asphalt gray so markings + wheel polish read
+  asph.color = new THREE.Color('#9aa0a6'); asph.roughness = .97;
   const gutterM = pbr('asphalt_02', { repeat: [4, 4], color: '#373b41' });
   const curbM = pbr('concrete', { repeat: [6, 1], color: '#b6b2a8' });
   const walkM = pbr('precast_stone_paving', { repeat: [4, 4], color: '#b2ac9f' });
@@ -118,6 +120,52 @@ export function buildStreetscape(scene) {
   const ix = intersections();
   const bin = new GeoBin();
   const cw = 3.2, bars = 6;
+
+  /* wheel-track wear overlay — polished tire bands per lane, gutter grime,
+     crown fade, patch repairs; translucent decal stretched the road length.
+     Canvas bands sit along the v axis (across the road): 'h' roads use it
+     directly, 'v' roads get the canvas transposed. Keyed by axis+width. */
+  const _wearM = new Map();
+  const wearMat = (axis, w, lanes) => {
+    const key = `${axis}:${w}:${lanes.join(',')}`;
+    if (_wearM.has(key)) return _wearM.get(key);
+    const S = 256, [c, x] = makeCanvas(S, S);
+    x.clearRect(0, 0, S, S);
+    if (axis === 'v') x.setTransform(0, 1, 1, 0, 0, 0);  // transpose: bands on x
+    for (const lp of lanes) for (const sg of [-1, 1]) {
+      const lc = .5 + lp * sg / w;                   // lane center, 0..1 across
+      for (const s of [-1, 1]) {                     // twin polished tracks
+        const wy = (lc + s * .85 / w) * S, bw = Math.max(3, .62 / w * S);
+        const g = x.createLinearGradient(0, wy - bw, 0, wy + bw);
+        g.addColorStop(0, 'rgba(16,18,20,0)');
+        g.addColorStop(.5, `rgba(16,18,20,${(.10 + R() * .06).toFixed(3)})`);
+        g.addColorStop(1, 'rgba(16,18,20,0)');
+        x.fillStyle = g; x.fillRect(0, wy - bw, S, bw * 2);
+      }
+      x.fillStyle = 'rgba(14,15,16,.10)';            // dripped-oil lane center
+      x.fillRect(0, lc * S - 1, S, 2);
+    }
+    for (const e of [0, 1]) {                        // gutter grime at edges
+      const g = x.createLinearGradient(0, e ? S : 0, 0, e ? S * .91 : S * .09);
+      g.addColorStop(0, 'rgba(20,22,24,.16)'); g.addColorStop(1, 'rgba(20,22,24,0)');
+      x.fillStyle = g; x.fillRect(0, e ? S * .91 : 0, S, S * .09);
+    }
+    const gc = x.createLinearGradient(0, S * .42, 0, S * .58);
+    gc.addColorStop(0, 'rgba(215,220,224,0)'); gc.addColorStop(.5, 'rgba(215,220,224,.07)');
+    gc.addColorStop(1, 'rgba(215,220,224,0)');
+    x.fillStyle = gc; x.fillRect(0, S * .42, S, S * .16);   // crown sun-bleach
+    for (let i = 0; i < 4; i++) {                    // patch repairs
+      x.fillStyle = `rgba(14,15,16,${.08 + R() * .07})`;
+      x.fillRect(R() * S, R() * S, 30 + R() * 60, 8 + R() * 20);
+    }
+    const tex = canvasTex(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true,
+      depthWrite: false, polygonOffset: true,
+      polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    _wearM.set(key, m);
+    return m;
+  };
 
   /* junction pad intervals + painted-leg curb cuts */
   const padCuts = new Map(), legCuts = new Map(), apronCuts = new Map();
@@ -222,6 +270,29 @@ export function buildStreetscape(scene) {
       ? plane(r.w, len, asph, r.c, Y, mid, -Math.PI / 2, 6)
       : plane(len, r.w, asph, mid, Y, r.c, -Math.PI / 2, 6));
     CITY.roads++;
+
+    // wheel-track wear decal — v axis spans the road width exactly once so
+    // band positions land on lanes; u repeats every 48 m along the span.
+    // Lane centers come from the painted bounds (Commerce's TWLTL through
+    // lanes sit inside ±2.15/±5.6/edge, not on quarter marks), and the decal
+    // splits at pad intervals so the opaque junction pad isn't overdrawn.
+    const laneOffs = r.name === 'Commerce Blvd' ? [3.875, 7.45]
+      : r.w >= 16 ? [.25 + r.w / 8, 3 * r.w / 8 - .35]
+      : [r.w >= 11 ? r.w / 4 - .35 : r.w / 4];
+    for (const [u0, u1] of freeRuns(r.a0, r.a1, padCuts.get(r))) {
+      const slen = u1 - u0, smid = (u0 + u1) / 2;
+      const wg = new THREE.PlaneGeometry(r.axis === 'v' ? r.w : slen,
+        r.axis === 'v' ? slen : r.w);
+      const wuv = wg.attributes.uv, pw = wg.parameters.width,
+            ph = wg.parameters.height;
+      for (let i = 0; i < wuv.count; i++)
+        wuv.setXY(i, wuv.getX(i) * pw / (r.axis === 'v' ? pw : 48),
+          wuv.getY(i) * ph / (r.axis === 'v' ? 48 : ph));
+      wg.rotateX(-Math.PI / 2);
+      wg.translate(r.axis === 'v' ? r.c : smid, Y + .003,
+        r.axis === 'v' ? smid : r.c);
+      bin.add(wg, wearMat(r.axis, r.w, laneOffs), 0, 0, 0);
+    }
 
     const gutCuts = mergeCuts([...padCuts.get(r),
       ...apronCuts.get(r).map(c => [c.a0, c.a1])]);
