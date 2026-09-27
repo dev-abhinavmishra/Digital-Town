@@ -2000,11 +2000,11 @@ export function buildRain(scene) {
                  v: rf(46, 68), s: rf(.8, 1.3), len: rf(2.4, 4.0) });
   /* crossed quads - a single Y-facing plane goes edge-on to streets that run
      along X; two perpendicular panels keep a visible face from every azimuth */
-  const qA = new THREE.PlaneGeometry(.09, 1); qA.translate(0, -.5, 0);
+  const qA = new THREE.PlaneGeometry(.12, 1); qA.translate(0, -.5, 0);
   const qB = qA.clone(); qB.rotateY(Math.PI / 2);  // anchor at drop head
   const streakG = mergeGeometries([qA, qB]);
   const streakM = new THREE.MeshBasicMaterial({ color: '#d8e6ee',
-    transparent: true, opacity: .4, depthWrite: false,
+    transparent: true, opacity: .55, depthWrite: false,
     side: THREE.DoubleSide, fog: false });
   const rim = new THREE.InstancedMesh(streakG, streakM, drops.length);
   rim.frustumCulled = false;
