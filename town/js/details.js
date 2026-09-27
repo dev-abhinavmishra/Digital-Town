@@ -1904,13 +1904,28 @@ export function buildClouds(scene) {
   const t = cloudSpriteTexture();
   const items = [];
   for (let i = 0; i < 12; i++) {
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true,
-      opacity: rr(.4, .7), depthWrite: false }));
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t,
+      transparent: true, opacity: rr(.4, .7), depthWrite: false }));
     const s = rr(200, 380);
     sp.scale.set(s, s * .38, 1);
     sp.position.set(rr(-1600, 1600), rr(240, 460), rr(-1400, 500));
     scene.add(sp);
     items.push({ sp, v: rr(2, 5) });
+  }
+  /* extra high cirrus deck - dedicated stream so the original 12 keep their
+     exact positions/R() draws. userData.cirrus tells upgradeClouds to keep
+     them thin (no cumulus map swap / puff children). */
+  const Rc = mulberry32(6603), rc = (a, b) => a + Rc() * (b - a);
+  for (let i = 0; i < 7; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: t, transparent: true, opacity: rc(.16, .3),
+      depthWrite: false }));
+    sp.userData.cirrus = true;
+    const s = rc(420, 700);
+    sp.scale.set(s, s * .16, 1);
+    sp.position.set(rc(-1800, 1800), rc(560, 780), rc(-1600, 400));
+    scene.add(sp);
+    items.push({ sp, v: rc(1, 2.5) });
   }
   clouds = items;
 }
