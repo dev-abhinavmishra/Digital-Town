@@ -2066,6 +2066,39 @@ export function buildFerrisWheel(scene) {
   ferris = { wheel, cabIM, cx: fx, cy: Y + HY, cz: fz, R0, face: FACE };
 }
 
+/* ---------------- fireflies ---------------- */
+let fireflies = null;
+export function buildFireflies(scene) {
+  /* night-only drift of glowing points over the park + pond - additive
+     PointsMaterial, bobbing on per-fly sine paths. Dedicated stream, zero
+     R() draws; only built when main.js gates it on ?time=night. */
+  const Rf = mulberry32(5197), rf = (a, b) => a + Rf() * (b - a);
+  const FLIES = [], zones = [
+    { x: 560, z: 210, rx: 190, rz: 80 },        // park SE lawn
+    { x: 585, z: 150, rx: 100, rz: 70 },        // over the pond
+    { x: -755, z: 340, rx: 40, rz: 330 },       // west green belt
+  ];
+  for (const zn of zones)
+    for (let i = 0; i < 80; i++)
+      FLIES.push({ x: zn.x + rf(-zn.rx, zn.rx), z: zn.z + rf(-zn.rz, zn.rz),
+                   h: rf(.6, 3.2), ph: rf(0, 6.28), v: rf(.4, 1.1),
+                   amp: rf(.8, 2.2), tw: rf(1.5, 4) });
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(FLIES.length * 3),
+        col = new Float32Array(FLIES.length * 3).fill(1);
+  FLIES.forEach((f, i) => { pos[i * 3] = f.x; pos[i * 3 + 1] = Y + f.h; pos[i * 3 + 2] = f.z; });
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pm = new THREE.PointsMaterial({ color: '#d8e86a', size: .34,
+    transparent: true, opacity: .9, depthWrite: false, vertexColors: true,
+    blending: THREE.AdditiveBlending, sizeAttenuation: true });
+  const pts = new THREE.Points(g, pm);
+  pts.frustumCulled = false;
+  pts.userData.dynamic = true;
+  scene.add(pts);
+  fireflies = { pts, list: FLIES };
+}
+
 /* ---------------- tower crane ---------------- */
 let crane = null;
 export function buildCrane(scene) {
@@ -2463,6 +2496,21 @@ export function tickWorld(t, dt) {
     });
     _s1.set(1, 1, 1);
     im.instanceMatrix.needsUpdate = true;
+  }
+  // fireflies - lazy drift + bob + twinkle fade
+  if (fireflies) {
+    const { pts, list } = fireflies, arr = pts.geometry.attributes.position.array;
+    list.forEach((f, i) => {
+      const t2 = t * f.v + f.ph;
+      arr[i * 3] = f.x + Math.sin(t2) * f.amp + Math.sin(t2 * .37) * f.amp * .5;
+      arr[i * 3 + 1] = Y + f.h + Math.sin(t2 * 1.7) * .5;
+      arr[i * 3 + 2] = f.z + Math.cos(t2 * .8) * f.amp;
+      const tw = .15 + .85 * Math.max(0, Math.sin(t * f.tw + f.ph * 3));
+      const ca = pts.geometry.attributes.color.array;
+      ca[i * 3] = tw; ca[i * 3 + 1] = tw; ca[i * 3 + 2] = tw * .6;
+    });
+    pts.geometry.attributes.position.needsUpdate = true;
+    pts.geometry.attributes.color.needsUpdate = true;
   }
   // tower crane - slow slew like a real site crane at idle
   if (crane) crane.slew.rotation.y = t * .045 + Math.sin(t * .3) * .06;
