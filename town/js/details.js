@@ -893,14 +893,16 @@ export function buildWater(scene) {
       x: -.62, y: .42, z: 0, rz: 1.9 },
   ]);
   const duckL = [];
+  const keepClear = (ax, az) => (ax - 570) ** 2 + (az - 152) ** 2 > 225;  // island
   for (const wdef of WATER) {
     if (wdef.r < 40) continue;                         // big pond only
     const n = Math.round(wdef.r * .26);
     for (let i = 0; i < n; i++) {
       const a0 = rd(0, 6.28), rad = rd(.12, .72);
-      duckL.push({ ax: wdef.x + Math.cos(a0) * wdef.r * rad * wdef.sx,
-                   az: wdef.z + Math.sin(a0) * wdef.r * rad * wdef.sz,
-                   r: rd(1.5, 5), ph: rd(0, 6.28),
+      const dax = wdef.x + Math.cos(a0) * wdef.r * rad * wdef.sx,
+            daz = wdef.z + Math.sin(a0) * wdef.r * rad * wdef.sz;
+      if (!keepClear(dax, daz)) continue;
+      duckL.push({ ax: dax, az: daz, r: rd(1.5, 5), ph: rd(0, 6.28),
                    vv: rd(.05, .12) * (Rd() < .5 ? 1 : -1), s: rd(.8, 1.25) });
     }
   }
@@ -931,6 +933,36 @@ export function buildWater(scene) {
     b.position.set(bx, Y + .1, bz); b.rotation.y = br2;
     b.castShadow = true;
     scene.add(b);
+  }
+
+  /* pond island gazebo - a destination the rowboats imply. Static colored
+     merge; every number is literal so zero R() draws are consumed. */
+  {
+    const parts = [
+      { geo: new THREE.CylinderGeometry(9.4, 9.9, .9, 26), color: '#6b6f72', y: .3 },
+      { geo: new THREE.CylinderGeometry(8.6, 9.0, .55, 26), color: '#79a35c', y: .72 },
+      { geo: new THREE.CylinderGeometry(3.6, 3.8, .45, 6), color: '#c9bfae', y: 1.1 },
+      { geo: new THREE.CylinderGeometry(.42, 4.05, 2.3, 6), color: '#5a6a74', y: 4.75 },
+      { geo: new THREE.SphereGeometry(.3, 8, 6), color: '#d8b23a', y: 6.05 },
+      { geo: new THREE.SphereGeometry(1.1, 8, 6), color: '#7d8184', x: 6.9, y: 1.0, z: 4.4, sy: .7 },
+      { geo: new THREE.SphereGeometry(.8, 8, 6), color: '#6f7477', x: -7.4, y: .85, z: -3.2, sy: .62 },
+      { geo: new THREE.SphereGeometry(1.5, 8, 6), color: '#4e7d46', x: -5.6, y: 1.4, z: 4.6, sy: .8 },
+      { geo: new THREE.SphereGeometry(1.2, 8, 6), color: '#5d8a3c', x: 5.2, y: 1.3, z: -5.4, sy: .75 },
+    ];
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      parts.push({ geo: new THREE.CylinderGeometry(.15, .15, 2.9, 6), color: '#f0ead8',
+        x: ca * 2.9, y: 2.55, z: sa * 2.9 });
+      const a2 = a + Math.PI / 6;                        // rail between posts
+      parts.push({ geo: new THREE.BoxGeometry(3.0, .42, .09), color: '#8a6a48',
+        x: Math.cos(a2) * 2.9, y: 1.8, z: Math.sin(a2) * 2.9, ry: -a2 });
+      parts.push({ geo: new THREE.BoxGeometry(3.0, .14, .12), color: '#a8885e',
+        x: Math.cos(a2) * 2.9, y: 2.28, z: Math.sin(a2) * 2.9, ry: -a2 });
+    }
+    const island = new THREE.Mesh(colored(parts), VCOL());
+    island.position.set(570, Y - .15, 152);
+    island.castShadow = island.receiveShadow = true;
+    scene.add(island);
   }
 }
 
