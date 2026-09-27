@@ -2002,6 +2002,7 @@ export function buildFerrisWheel(scene) {
   const wheel = new THREE.Mesh(colored(wp), VCOL());
   wheel.position.set(fx, Y + HY, fz);
   wheel.castShadow = true;
+  wheel.rotation.y = FACE;                    // static yaw (freeze-safe rest pose)
   wheel.userData.dynamic = true;              // spins - keep out of mergeStatic
   scene.add(wheel);
 
