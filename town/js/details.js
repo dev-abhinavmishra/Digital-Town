@@ -875,6 +875,62 @@ export function buildWater(scene) {
     scene.add(instances(padG, new M({ color: '#fff', roughness: .9 }), pads, { shadow: false }));
     scene.add(instances(reedG, new M({ color: '#fff', roughness: .95 }), reeds, { shadow: false }));
   }
+
+  /* pond life - ducks paddle lazy circles (animated in tickWorld), rowboats
+     rest at the dock. Dedicated seed stream: zero R() draws consumed. */
+  const Rd = mulberry32(4401), rd = (a, b) => a + Rd() * (b - a);
+  const duckG = colored([
+    { geo: new THREE.SphereGeometry(.5, 9, 7), color: '#7a6248',
+      x: 0, y: .3, z: 0, sy: .78, sz: .7 },
+    { geo: new THREE.CylinderGeometry(.1, .16, .32, 5), color: '#6e5a42',
+      x: .4, y: .55, z: 0, rz: .5 },
+    { geo: new THREE.SphereGeometry(.23, 8, 6), color: '#39543a',
+      x: .52, y: .7, z: 0 },
+    { geo: new THREE.ConeGeometry(.08, .3, 5), color: '#d8892e',
+      x: .78, y: .7, z: 0, rz: -1.57 },
+    { geo: new THREE.ConeGeometry(.15, .45, 5), color: '#64503a',
+      x: -.62, y: .42, z: 0, rz: 1.9 },
+  ]);
+  const duckL = [];
+  for (const wdef of WATER) {
+    if (wdef.r < 40) continue;                         // big pond only
+    const n = Math.round(wdef.r * .26);
+    for (let i = 0; i < n; i++) {
+      const a0 = rd(0, 6.28), rad = rd(.12, .72);
+      duckL.push({ ax: wdef.x + Math.cos(a0) * wdef.r * rad * wdef.sx,
+                   az: wdef.z + Math.sin(a0) * wdef.r * rad * wdef.sz,
+                   r: rd(1.5, 5), ph: rd(0, 6.28),
+                   vv: rd(.05, .12) * (Rd() < .5 ? 1 : -1), s: rd(.8, 1.25) });
+    }
+  }
+  if (duckL.length) {
+    const duckIM = new THREE.InstancedMesh(duckG, VCOL(), duckL.length);
+    duckIM.frustumCulled = false;
+    scene.add(duckIM);
+    ducks = { im: duckIM, list: duckL };
+  }
+  // rowboats - hull + wedge bow + benches + resting oar, merged colored geo
+  const boatG = colored([
+    { geo: new THREE.BoxGeometry(3.2, .5, 1.1), color: '#6e4630',
+      x: 0, y: .26, z: 0 },
+    { geo: new THREE.CylinderGeometry(0, .56, 1.1, 4), color: '#6e4630',
+      x: 1.85, y: .26, z: 0, rz: -1.5708 },
+    { geo: new THREE.BoxGeometry(2.2, .1, .78), color: '#43301f',
+      x: -.2, y: .52, z: 0 },
+    { geo: new THREE.BoxGeometry(.7, .1, 1.0), color: '#c8b896',
+      x: .6, y: .5, z: 0 },
+    { geo: new THREE.BoxGeometry(.7, .1, 1.0), color: '#c8b896',
+      x: -.9, y: .5, z: 0 },
+    { geo: new THREE.CylinderGeometry(.04, .04, 2.8, 5), color: '#8a7048',
+      x: 0, y: .58, z: 0, ry: .5, rz: 1.5708 },
+  ]);
+  const boatM = VCOL();
+  for (const [bx, bz, br2] of [[548, 146, .9], [618, 170, 2.5]]) {
+    const b = new THREE.Mesh(boatG, boatM);
+    b.position.set(bx, Y + .1, bz); b.rotation.y = br2;
+    b.castShadow = true;
+    scene.add(b);
+  }
 }
 
 export function buildPark(scene) {
@@ -1872,6 +1928,7 @@ export function buildMountains(scene) {
 
 /* ---------------- bird flocks ---------------- */
 let birds = null;
+let ducks = null;
 export function buildBirds(scene) {
   // tiny chevron: two triangles sharing a body vertex â€” reads as a gliding bird
   const bg = new THREE.BufferGeometry();
@@ -2098,6 +2155,24 @@ export function tickWorld(t, dt) {
       _eul.set(flap * .3, -a + (b.vv > 0 ? 0 : Math.PI), flap);
       _q.setFromEuler(_eul);
       _s1.setScalar(b.s);
+      _mx.compose(_p, _q, _s1);
+      im.setMatrixAt(i, _mx);
+    });
+    _s1.set(1, 1, 1);
+    im.instanceMatrix.needsUpdate = true;
+  }
+  // paddling ducks - lazy circles on the pond, gentle bob, tangent heading
+  if (ducks) {
+    const { im, list } = ducks;
+    list.forEach((d, i) => {
+      const a = d.ph + t * d.vv;
+      _p.set(d.ax + Math.cos(a) * d.r,
+             Y + .12 + Math.sin(t * 1.6 + d.ph) * .05,
+             d.az + Math.sin(a) * d.r);
+      _eul.set(0, d.vv > 0 ? -a - 1.5708 : 1.5708 - a,
+               Math.sin(t * 2 + d.ph) * .04);
+      _q.setFromEuler(_eul);
+      _s1.setScalar(d.s);
       _mx.compose(_p, _q, _s1);
       im.setMatrixAt(i, _mx);
     });
