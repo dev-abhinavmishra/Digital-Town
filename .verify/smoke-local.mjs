@@ -1,5 +1,5 @@
 // smoke-local.mjs — run town builders under node with DOM stubs (this box).
-const TOWN = 'file:///C:/Users/Administrator/repos/Digital-Town/town/';
+const TOWN = new URL('../town/', import.meta.url).href;
 const ctxStub = () => new Proxy({ canvas: null }, {
   get(t, k) {
     if (k === 'measureText') return () => ({ width: 10 });
