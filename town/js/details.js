@@ -8,7 +8,7 @@ import { box, cyl, plane, mat, signTexture, fieldTexture, cropTexture, colored, 
          instances, waterMaterial, cloudSpriteTexture, uTime,
          makeCanvas, canvasTex, blobShadowTexture, warmGlowTexture,
          attachDriftShadow, R, rr, pick, mulberry32 } from './lib.js';
-import { pbr, M_BARK } from './mats.js';
+import { pbr, M_BARK, WET_SURFACES } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
 import { GeoBin } from './city/geo.js';
@@ -53,6 +53,7 @@ export function buildLots(scene) {
   for (const l of LOTS) {
     const lotM = pbr('asphalt_02', { color: LOT_TINTS[lotIdx++ % LOT_TINTS.length] });
     lotM.roughness = .97;
+    WET_SURFACES.push(lotM);
     attachDriftShadow(lotM, .0015, .0009, .34);
     scene.add(plane(l.w, l.d, lotM, l.x, Y - .015, l.z, -Math.PI / 2, 6));
     if (l.plain) continue;   // apron/pad: bare asphalt, no stalls
@@ -1997,8 +1998,11 @@ export function buildRain(scene) {
   for (let i = 0; i < 1300; i++)
     drops.push({ x: rf(-780, 780), y: rf(0, 260), z: rf(-780, 780),
                  v: rf(46, 68), s: rf(.8, 1.3), len: rf(2.4, 4.0) });
-  const streakG = new THREE.PlaneGeometry(.09, 1);
-  streakG.translate(0, -.5, 0);                    // anchor at drop head
+  /* crossed quads - a single Y-facing plane goes edge-on to streets that run
+     along X; two perpendicular panels keep a visible face from every azimuth */
+  const qA = new THREE.PlaneGeometry(.09, 1); qA.translate(0, -.5, 0);
+  const qB = qA.clone(); qB.rotateY(Math.PI / 2);  // anchor at drop head
+  const streakG = mergeGeometries([qA, qB]);
   const streakM = new THREE.MeshBasicMaterial({ color: '#d8e6ee',
     transparent: true, opacity: .4, depthWrite: false,
     side: THREE.DoubleSide, fog: false });
@@ -2008,6 +2012,9 @@ export function buildRain(scene) {
   rain = { im: rim, list: drops };
   ASPH.roughness = .3;                             // rain-slick pavement
   ASPH.envMapIntensity = 1.35;
+  for (const m of WET_SURFACES) {                  // parking lots + gutters wet too
+    m.roughness = .3; m.envMapIntensity = 1.35;
+  }
 }
 
 const _mx = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(),

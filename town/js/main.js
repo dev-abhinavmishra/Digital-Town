@@ -76,7 +76,7 @@ const skyTex = skyTexture({
 scene.background = skyTex;
 scene.backgroundIntensity = (TIME === 'golden' ? 1.0 : TIME === 'night' ? .9 : 0.95) * (RAIN ? .55 : 1);
 scene.environment = pmrem.fromEquirectangular(skyTex).texture;
-scene.environmentIntensity = (TIME === 'golden' ? .9 : .8) * (RAIN ? .5 : 1);
+scene.environmentIntensity = TIME === 'golden' ? .9 : .8;  // r160: dead property; real gain is envScale below
 // HDR image-based lighting — vendored Poly Haven sky feeds PBR reflections.
 // Background stays procedural so the visible sun matches the directional light.
 const envInfo = { envType: 'fallback', envSrc: 'procedural-sky',
@@ -90,7 +90,7 @@ loadEnvironment(renderer, { mode: TIME, skyTex }).then(e => {
 });
 // per-time env gain applied to materials post-build (r160 has no
 // scene.environmentIntensity — multiply envMapIntensity instead)
-const envScale = TIME === 'night' ? .22 : TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0;
+const envScale = (TIME === 'night' ? .22 : TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0) * (RAIN ? .5 : 1);
 scene.fog = new THREE.FogExp2(
   TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258
     : TIME === 'night' ? 0x0b111c : 0xd4e2ec,

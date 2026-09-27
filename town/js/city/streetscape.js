@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { ROADS, LOTS, HOUSE_BLOCKS } from '../layout.js';
 import { plane, mat, canvasTex, makeCanvas, attachDriftShadow, R, rr } from '../lib.js';
-import { pbr } from '../mats.js';
+import { pbr, WET_SURFACES } from '../mats.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
 import { streetBand } from './occ.js';
@@ -112,6 +112,7 @@ export function buildStreetscape(scene) {
   // lift toward worn-asphalt gray so markings + wheel polish read
   asph.color = new THREE.Color('#9aa0a6'); asph.roughness = .97;
   const gutterM = pbr('asphalt_02', { repeat: [4, 4], color: '#373b41' });
+  WET_SURFACES.push(gutterM);
   const curbM = pbr('concrete', { repeat: [6, 1], color: '#b6b2a8' });
   const walkM = pbr('precast_stone_paving', { repeat: [4, 4], color: '#b2ac9f' });
   const apronM = pbr('concrete', { repeat: [5, 5], color: '#9d998e' });
