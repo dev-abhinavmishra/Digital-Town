@@ -7,7 +7,7 @@ import { ROADS, LOTS, WATER, PARK_ZONE, BUILDINGS, APARTMENTS,
 import { box, cyl, plane, mat, signTexture, fieldTexture, cropTexture, colored, VCOL,
          instances, waterMaterial, cloudSpriteTexture, uTime,
          makeCanvas, canvasTex, blobShadowTexture, warmGlowTexture,
-         attachDriftShadow, R, rr, pick } from './lib.js';
+         attachDriftShadow, R, rr, pick, mulberry32 } from './lib.js';
 import { pbr, M_BARK } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
@@ -1813,10 +1813,43 @@ export function buildMountains(scene) {
       const a = vbase + i * (M + 1) + j, b = a + M + 1;
       idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
+    return { H, R0, rugF, width, hMax, seed, M };
   };
-  ridge(1500, 150, 180, 4.7, 1.25, 720, 12);   // near wooded foothill band - never snows
-  ridge(1700, 380, 260, 0.0, .80, 720, 12);    // green foothills, thin snow cap
-  ridge(2600, 790, 500, 2.4, .55, 640, 14);    // taller far range, deeper snowline
+  const rg1 = ridge(1500, 150, 180, 4.7, 1.25, 720, 12);   // near wooded foothill band - never snows
+  const rg2 = ridge(1700, 380, 260, 0.0, .80, 720, 12);    // green foothills, thin snow cap
+  ridge(2600, 790, 500, 2.4, .55, 640, 14);                // taller far range, deeper snowline
+
+  /* conifer cover on the forest-band slopes - instanced firs sized to read
+     as canopy at city distance. A dedicated seeded stream keeps the global
+     R() draw order (and every downstream placement) untouched. */
+  const R2 = mulberry32(7771);
+  const rr2 = (a, b) => a + R2() * (b - a);
+  const firG = colored([
+    { geo: new THREE.CylinderGeometry(.16, .26, 1.6, 5), color: '#33241a', x: 0, y: .8, z: 0 },
+    { geo: new THREE.ConeGeometry(1.35, 4.4, 7), color: '#2e4a2c', x: 0, y: 3.6, z: 0 },
+    { geo: new THREE.ConeGeometry(.9, 2.6, 7), color: '#395631', x: 0, y: 5.5, z: 0 },
+  ]);
+  const firL = [], FIR_TINTS = ['#24401f', '#2e4a2c', '#3a5a33', '#2a4630'];
+  for (const rg of [rg1, rg2]) {
+    for (let i = 0; i < 4200; i++) {
+      const a = rr2(0, Math.PI * 2), u = rr2(.12, .88), jf = u * rg.M,
+            prof = u < .5 ? Math.pow(u * 2, 1.55) : Math.pow((1 - u) * 2, 1.55),
+            cragA = Math.sin(a * 23 + rg.seed * 3 + jf * 1.7) * .5
+                  + Math.sin(a * 41 + rg.seed * 7 + jf * 2.3) * .3,
+            h = rg.H(a),
+            r = rg.R0(a) + rg.width * (2 * u - 1)
+              + cragA * rg.width * .10 * rg.rugF * Math.sin(Math.PI * u),
+            y = Math.max(0, h * prof + h * .035 * cragA * rg.rugF * Math.sin(Math.PI * u));
+      if (y < 4 || y > .38 * rg.hMax) continue;          // forest band only
+      const px = Math.cos(a) * r, pz = Math.sin(a) * r;
+      if (px * px + pz * pz < 800 * 800) continue;       // never inside town
+      firL.push({ x: px, y: y - 1.2, z: pz, s: rr2(1.4, 3.2), ry: rr2(0, 6.28),
+                  color: FIR_TINTS[Math.floor(R2() * 4)] });
+    }
+  }
+  const fim = instances(firG, VCOL(), firL, { shadow: false });
+  fim.frustumCulled = false;
+  scene.add(fim);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
