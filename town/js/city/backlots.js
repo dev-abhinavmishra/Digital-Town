@@ -25,7 +25,7 @@ import { BUILDINGS, FILLER, APARTMENTS, LOTS, HOUSE_BLOCKS,
 import { colored, instances, mat, canvasTex, makeCanvas, VCOL,
          R, rr, pick } from '../lib.js';
 import { GeoBin } from './geo.js';
-import { occupied, isFree, occupyRect, streetBand } from './occ.js';
+import { occupied, occupyRect, streetBand } from './occ.js';
 
 const M = THREE.MeshStandardMaterial;
 const Y = 0.28;                    // surface lift — matches details.js/streetscape.js
@@ -56,6 +56,10 @@ const BLOCK_RECTS = [
 ];
 
 const TAKEN = [];                  // props placed this pass — self-avoidance
+/* sentinel occupyRect tags: a pen/dock pad is a hard boundary for EVERYONE
+   (including the host's own later props — vans mustn't park inside the pen)
+   — unlike building/lot pads it is never exempted as a host's own rect. */
+const PEN_TAG = { pen: true }, DOCK_TAG = { dock: true };
 
 /* freePt — isFree() plus: `host` may exempt its own pad rect (BUILDINGS tag
    themselves; FILLER pads register untagged, so the untagged rect containing
@@ -103,14 +107,14 @@ function roadMetrics(x, z) {
 
 /* spread n anchor points along the back wall, each occupancy-probed.
    Returns world {x,z,ry} plus the local lx for pen sizing. */
-function backLine(b, f, n, off, r, margin = 2.5) {
+function backLine(b, f, n, off, r, margin = 2.5, skipKind = null) {
   const out = [];
   const span = Math.max(0, b.w / 2 - margin);
   for (let i = 0; i < n; i++) {
     const lx = n === 1 ? rr(-span * .4, span * .4)
                        : -span + (i + .5) / n * span * 2 + rr(-1.1, 1.1);
     const [x, z] = pt(b, f, lx, -(b.d / 2 + off));
-    if (freePt(x, z, r, b)) out.push({ x, z, ry: f.r, lx });
+    if (freePt(x, z, r, b, skipKind)) out.push({ x, z, ry: f.r, lx });
   }
   return out;
 }
@@ -390,7 +394,7 @@ export function buildBacklots(scene) {
     const xs = cs.map(c => c[0]), zs = cs.map(c => c[1]);
     occupyRect((Math.min(...xs) + Math.max(...xs)) / 2,
       (Math.min(...zs) + Math.max(...zs)) / 2,
-      Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), .3, b);
+      Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), .3, PEN_TAG, 'fence');
   };
 
   const addDumpBay = (b, f, n, penned) => {
@@ -425,7 +429,7 @@ export function buildBacklots(scene) {
     const xs = corners.map(c => c[0]), zs = corners.map(c => c[1]);
     occupyRect((Math.min(...xs) + Math.max(...xs)) / 2,
       (Math.min(...zs) + Math.max(...zs)) / 2,
-      Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), .3, b);
+      Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), .3, DOCK_TAG);
     take(px, pz, 3); stat.docks++;
   };
 
@@ -448,9 +452,9 @@ export function buildBacklots(scene) {
       front[1] > l.z - l.d / 2 - 20 && front[1] < l.z + l.d / 2 + 20);
     if (lot) {
       const cx = lot.x + lot.w / 2 - .8, cz = lot.z + lot.d / 2 - .8;
-      if (isFree(cx, cz, .5, lot)) {
+      if (freePt(cx, cz, .5, lot)) {
         set.cart.push({ x: cx, y: Y, z: cz, ry: rr(0, TAU) });
-        stat.carts++;
+        take(cx, cz, 1.2); stat.carts++;
       }
     }
   };
@@ -469,15 +473,26 @@ export function buildBacklots(scene) {
   };
   const addNews = (b, f) => {
     const s = pick([-1, 1]);
-    const lx = s * (b.w / 2 - 1.2);
     let ok = 0;
+    const drop = (x, z, ry) => {
+      const rm = roadMetrics(x, z);
+      if (!freePt(x, z, .5, b) || rm.walk || rm.asphalt) return false;
+      set.news.push({ x, y: 0, z, ry, color: pick(NEWS_TINTS) });
+      ok++; return true;
+    };
+    const lx = s * (b.w / 2 - 1.2);
     for (let i = 0; i < 3; i++) {
       const [x, z] = pt(b, f, lx - s * i * .8, b.d / 2 + 1.3);
-      const rm = roadMetrics(x, z);
-      if (!freePt(x, z, .5, b) || rm.walk || rm.asphalt) continue;
-      set.news.push({ x, y: 0, z, ry: f.r + rr(-.12, .12), color: pick(NEWS_TINTS) });
-      ok++;
+      drop(x, z, f.r + rr(-.12, .12));
     }
+    /* sidewalk bands can veto the whole front strip (e.g. Main St's walk is
+       registered wall-to-curb) — fall back to the side face, marching back
+       from the front corner with the door facing the street side */
+    if (!ok)
+      for (let lz = b.d / 2 - 1.0; ok < 3 && lz > -b.d / 2 + .8; lz -= .85) {
+        const [x, z] = pt(b, f, s * (b.w / 2 + .5), lz);
+        drop(x, z, f.r + s * Math.PI / 2 + rr(-.08, .08));
+      }
     if (ok) { const [x, z] = pt(b, f, lx, b.d / 2 + 1.3); take(x, z, 1.6); stat.newsboxes += ok; }
   };
 
@@ -492,9 +507,10 @@ export function buildBacklots(scene) {
     take(x, z, 3); stat.vans++;
   };
 
-  /* extension ladder leaning on the back wall — municipal/maintenance cue */
+  /* extension ladder leaning on the back wall — municipal/maintenance cue;
+     skipKind 'fence': a ladder stored inside a dumpster pen reads fine */
   const addLadder = (b, f) => {
-    for (const a of backLine(b, f, 1, 1.0, .5, 4)) {
+    for (const a of backLine(b, f, 1, 1.0, .5, 4, 'fence')) {
       set.ladder.push({ x: a.x, y: 0, z: a.z, ry: f.r });
       take(a.x, a.z, .7); stat.ladders++;
       return;
@@ -652,10 +668,10 @@ export function buildBacklots(scene) {
     if (l.plain || l.w < 40) continue;
     for (const zs of [-1, 1]) {
       const cx = l.x + l.w / 2 - .8, cz = l.z + zs * (l.d / 2 - .8);
-      if (!isFree(cx, cz, .5, l)) continue;
+      if (!freePt(cx, cz, .5, l)) continue;
       (R() < .5 ? set.canR : set.canS)
         .push({ x: cx, y: Y, z: cz, ry: rr(0, TAU), color: pick(CAN_TINTS) });
-      stat.cans++;
+      take(cx, cz, 1.0); stat.cans++;
     }
   }
 
