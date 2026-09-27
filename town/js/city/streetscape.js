@@ -126,15 +126,14 @@ export function buildStreetscape(scene) {
      Canvas bands sit along the v axis (across the road): 'h' roads use it
      directly, 'v' roads get the canvas transposed. Keyed by axis+width. */
   const _wearM = new Map();
-  const wearMat = (axis, w) => {
-    const key = `${axis}:${w}`;
+  const wearMat = (axis, w, lanes) => {
+    const key = `${axis}:${w}:${lanes.join(',')}`;
     if (_wearM.has(key)) return _wearM.get(key);
     const S = 256, [c, x] = makeCanvas(S, S);
     x.clearRect(0, 0, S, S);
     if (axis === 'v') x.setTransform(0, 1, 1, 0, 0, 0);  // transpose: bands on x
-    const lanes = w >= 16 ? 4 : 2;
-    for (let i = 0; i < lanes; i++) {
-      const lc = (i + .5) / lanes;
+    for (const lp of lanes) for (const sg of [-1, 1]) {
+      const lc = .5 + lp * sg / w;                   // lane center, 0..1 across
       for (const s of [-1, 1]) {                     // twin polished tracks
         const wy = (lc + s * .85 / w) * S, bw = Math.max(3, .62 / w * S);
         const g = x.createLinearGradient(0, wy - bw, 0, wy + bw);
@@ -273,19 +272,26 @@ export function buildStreetscape(scene) {
     CITY.roads++;
 
     // wheel-track wear decal — v axis spans the road width exactly once so
-    // band positions land on lanes; u repeats every 48 m along the span
-    {
-      const wg = new THREE.PlaneGeometry(r.axis === 'v' ? r.w : len,
-        r.axis === 'v' ? len : r.w);
+    // band positions land on lanes; u repeats every 48 m along the span.
+    // Lane centers come from the painted bounds (Commerce's TWLTL through
+    // lanes sit inside ±2.15/±5.6/edge, not on quarter marks), and the decal
+    // splits at pad intervals so the opaque junction pad isn't overdrawn.
+    const laneOffs = r.name === 'Commerce Blvd' ? [3.875, 7.45]
+      : r.w >= 16 ? [.25 + r.w / 8, 3 * r.w / 8 - .35]
+      : [r.w >= 11 ? r.w / 4 - .35 : r.w / 4];
+    for (const [u0, u1] of freeRuns(r.a0, r.a1, padCuts.get(r))) {
+      const slen = u1 - u0, smid = (u0 + u1) / 2;
+      const wg = new THREE.PlaneGeometry(r.axis === 'v' ? r.w : slen,
+        r.axis === 'v' ? slen : r.w);
       const wuv = wg.attributes.uv, pw = wg.parameters.width,
             ph = wg.parameters.height;
       for (let i = 0; i < wuv.count; i++)
         wuv.setXY(i, wuv.getX(i) * pw / (r.axis === 'v' ? pw : 48),
           wuv.getY(i) * ph / (r.axis === 'v' ? 48 : ph));
       wg.rotateX(-Math.PI / 2);
-      wg.translate(r.axis === 'v' ? r.c : mid, Y + .003,
-        r.axis === 'v' ? mid : r.c);
-      bin.add(wg, wearMat(r.axis, r.w), 0, 0, 0);
+      wg.translate(r.axis === 'v' ? r.c : smid, Y + .003,
+        r.axis === 'v' ? smid : r.c);
+      bin.add(wg, wearMat(r.axis, r.w, laneOffs), 0, 0, 0);
     }
 
     const gutCuts = mergeCuts([...padCuts.get(r),
