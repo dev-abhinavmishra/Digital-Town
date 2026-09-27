@@ -130,8 +130,8 @@ function radialTex(size, inner, outer, stops) {
    Materials with fog:false (clouds, pools, halos) skip these chunks entirely —
    the guard clause is automatic. */
 const FOGP = {
-  day:    { hazeH: 95,  hazeK: .00045, hazeW: .16, airLo: 380, airHi: 1750,
-            tint: '0.788,0.847,0.902', desat: .20 },
+  day:    { hazeH: 95,  hazeK: .00042, hazeW: .13, airLo: 700, airHi: 2600,
+            tint: '0.788,0.847,0.902', desat: .13 },
   golden: { hazeH: 110, hazeK: .00055, hazeW: .34, airLo: 200, airHi: 1400,
             tint: '0.914,0.769,0.608', desat: .15 },
   dusk:   { hazeH: 80,  hazeK: .00070, hazeW: .40, airLo: 160, airHi: 1100,
