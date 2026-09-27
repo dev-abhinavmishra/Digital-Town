@@ -163,17 +163,20 @@ function sidingSkin() {
   return _sidSkin;
 }
 
-/* flat-roof finish palette — membrane / gravel / asphalt, cached 3 ways */
-const _flatRoofs = [null, null, null];
+/* flat-roof finish palette — membrane / gravel / asphalt / tan EPDM /
+   weathered green-gray, cached per finish */
+const _flatRoofs = [null, null, null, null, null];
 function flatRoofMat() {
-  const i = Math.floor(R() * 3);
+  const i = Math.floor(R() * _flatRoofs.length);
   if (!_flatRoofs[i]) {
-    const finish = [['#c8ccc5', .55], ['#84827c', 1], ['#4a4d51', .97]][i];
+    const finish = [['#c8ccc5', .55], ['#84827c', 1], ['#4a4d51', .97],
+                    ['#b0a58e', .85], ['#5c6460', .9]][i];
     _flatRoofs[i] = mat(finish[0], { roughness: finish[1] });
     const skin = roofSkin();
     _flatRoofs[i].map = skin.map;
     _flatRoofs[i].bumpMap = skin.bump; _flatRoofs[i].bumpScale = .04;
-    _flatRoofs[i].roughnessMap = skin.rough; _flatRoofs[i].roughness = 1;
+    _flatRoofs[i].roughnessMap = skin.rough;
+    _flatRoofs[i].roughness = finish[1];
   }
   return _flatRoofs[i];
 }
@@ -948,7 +951,8 @@ function storefront(s, style = {}) {
   const st = style.sign ? style : SHOP_STYLES[_shopIdx++ % SHOP_STYLES.length];
   const name = s.name || st.sign;   // a named facility keeps its real name on the facade
   const b = box(w, s.h, d, null);
-  b.material = wallMats(facadeMaps({ base: style.base || pick(['#c4b49a', '#b8a894', '#cbb8a0', '#bfae92']),
+  b.material = wallMats(facadeMaps({ base: style.base || pick(['#c4b49a', '#b8a894',
+    '#cbb8a0', '#bfae92', '#9a6a52', '#7d8894', '#8c7f6e']),
     rows: 1, cols: 4, storefront: true, signText: name, signBg: st.signBg || '#33526b',
     brickLines: R() < .5, trim: '#ddd6c8' }), flatRoofMat());
   g.add(b);
@@ -973,7 +977,8 @@ function bigbox(s, brand) {
   const isTarget = brand === 'target';
   const body = box(w, s.h, d, null);
   body.material = wallMats(
-    facadeMaps({ base: isTarget ? '#d8d3c8' : '#cbb9a0', rows: 1, cols: 10, storefront: true, brickLines: false }),
+    facadeMaps({ base: isTarget ? '#d8d3c8' : pick(['#cbb9a0', '#a8a090', '#8f8a7c',
+      '#b5a894']), rows: 1, cols: 10, storefront: true, brickLines: false }),
     flatRoofMat());
   g.add(body);
   parapet(g, w, d, s.h, { ph: rr(1.2, 1.8) }); hvac(g, w, d, s.h, 8);
@@ -1152,7 +1157,8 @@ function fastfood(s) {
 function apartment(s) {
   const g = new THREE.Group();
   const { w, d } = s;
-  const maps = facadeMaps({ base: pick(['#b97d5a', '#a87468', '#bfae8e']), win: '#26333d',
+  const maps = facadeMaps({ base: pick(['#b97d5a', '#a87468', '#bfae8e', '#8a5a44',
+    '#cfc5a8', '#9aa28c']), win: '#26333d',
     rows: Math.round(s.h / 3.2), cols: Math.round(w / 5.5), litRatio: .2 });
   const b = box(w, s.h, d, null);
   b.material = wallMats(maps, flatRoofMat());
@@ -1199,7 +1205,7 @@ function tower(s) {
   const { w, d, h } = s;
   const glassy = R() < .45;
   const tint = pick(['#7fa6bd', '#8fb4c6', '#6d8ea0', '#9ab4c2']);
-  const baseC = pick(['#b8a894', '#a89a88', '#9aa2a8', '#b0a690']);
+  const baseC = pick(['#b8a894', '#a89a88', '#9aa2a8', '#b0a690', '#8f7f6c', '#7a8a94']);
   // podium (2 floors, storefront)
   const podH = 7;
   const pod = box(w, podH, d, null);
@@ -1309,7 +1315,8 @@ function gas(s) {
 }
 
 const HOUSE_COLORS = ['#d9cbb2', '#c2d1c5', '#d4b8ae', '#b9c4d1', '#ddd2be', '#cbb9a4', '#b5c7b8'];
-const ROOF_COLORS = ['#5a5048', '#6d4c3d', '#4d5560', '#6b5a4d', '#54504a'];
+const ROOF_COLORS = ['#5a5048', '#6d4c3d', '#4d5560', '#6b5a4d', '#54504a',
+  '#3e4a58', '#8a4a34', '#3f4a3c'];
 function house(s = {}) {
   const g = new THREE.Group();
   const w = s.w || rr(10, 14), d = s.d || rr(9, 12), h = s.h || rr(5.5, 7.5);
