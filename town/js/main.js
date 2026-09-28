@@ -1,6 +1,7 @@
 // main.js — Havenbrook 3D town: procedural sky, cinematic post fx, fly-spectator controls
 import * as THREE from 'three';
 import { createPipeline } from './render/pipeline.js';
+import { pickTier, TIER_CFG, noteContextLost, noteStableBoot } from './render/perf.js';
 import { loadEnvironment } from './render/env.js';
 import { installAtmo } from './render/atmo.js';
 import { upgradeGlassMaterials, glassProbe } from './render/glass.js';
@@ -42,11 +43,18 @@ const FPSDBG = params.get('fps') === '1';
 const CAMP = params.get('cam');   // ?cam=px,py,pz,tx,ty,tz — deterministic eval camera
 const CAM_BOUND = 1200;   // fly-cam stays inside the mountain ring
 
+/* ---------- quality tier (render/perf.js) ---------- */
+const TIER = pickTier(params);            // auto HIGH on capable GPUs — full fidelity
+const TC = TIER_CFG[TIER];
+
 /* ---------- renderer ---------- */
-const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true,
+const renderer = new THREE.WebGLRenderer({ antialias: false,
+  // preserveDrawingBuffer costs a full-res copy every frame — only eval
+  // probes (freeze/still/cam/determinism shots) need readPixels access
+  preserveDrawingBuffer: FREEZEQ || params.has('still') || DEBUG || FPSDBG || !!CAMP,
   powerPreference: 'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
-const MAX_RATIO = Math.min(devicePixelRatio, 2);
+const MAX_RATIO = Math.min(devicePixelRatio, TC.maxRatio);
 let pixelRatio = MAX_RATIO;
 renderer.setPixelRatio(pixelRatio);
 renderer.shadowMap.enabled = true;
@@ -54,8 +62,9 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : TIME === 'day' ? 1.06 : 1.0;
 document.getElementById('app').appendChild(renderer.domElement);
-// survive GPU OOM context loss on weak iGPUs — allow restore, then reload clean
-renderer.domElement.addEventListener('webglcontextlost', e => e.preventDefault());
+// survive GPU OOM context loss on weak iGPUs — count the loss so the next
+// boot drops a tier instead of crash-looping on the same settings
+renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); noteContextLost(); });
 renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
 
 const scene = new THREE.Scene();
@@ -103,7 +112,7 @@ const sun = new THREE.DirectionalLight(RAIN ? 0xc8d4de : TIME === 'golden' ? 0xf
   (TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 3.15) * (RAIN ? .38 : 1));
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(TC.shadow, TC.shadow);
 sun.shadow.camera.left = -700; sun.shadow.camera.right = 700;
 sun.shadow.camera.top = 700; sun.shadow.camera.bottom = -700;
 sun.shadow.camera.near = 200; sun.shadow.camera.far = 3600;
@@ -258,7 +267,7 @@ scene.traverse(o => {
 
 /* campus quad — sized to sit clear of the med hall & the campus lot */
 const quadM = pbr('grass_ground'); quadM.color = new THREE.Color('#93b377');
-scene.add(plane(190, 92, quadM, -480, .31, -532, -Math.PI / 2, 10));
+scene.add(plane(190, 84, quadM, -480, .31, -530, -Math.PI / 2, 10));
 const qp = pbr('precast_stone_paving'); qp.color = new THREE.Color('#c4b49a');
 for (const a of [.62, -.62]) {
   const g = new THREE.PlaneGeometry(6, 170); g.rotateX(-Math.PI / 2); g.rotateY(a);
@@ -519,19 +528,23 @@ function updateLabels() {
 }
 
 /* ---------- post processing (js/render/pipeline.js) ---------- */
-const MSAAQ = params.get('msaa');    // eval/perf override — default 4x
-const msaaSamples = MSAAQ === null ? 4 : Math.max(0, Math.min(8, +MSAAQ || 0));
+const MSAAQ = params.get('msaa');    // eval/perf override — default per-tier
+const msaaSamples = MSAAQ === null ? TC.msaa : Math.max(0, Math.min(8, +MSAAQ || 0));
 const POSTSKIP = params.get('postskip');  // diagnostics: ?postskip=bloom,smaa
+const skipSet = POSTSKIP ? new Set(POSTSKIP.split(',')) : new Set();
+if (!TC.bloom) skipSet.add('bloom');
+if (!TC.smaa) skipSet.add('smaa');
 let composer = null, pipe = null;
 if (!NOFX) {
   pipe = createPipeline(renderer, scene, activeCam,
-    { time: TIME, ao: !NOAO, pixelRatio, msaa: msaaSamples,
-      skip: POSTSKIP ? new Set(POSTSKIP.split(',')) : null });
+    { time: TIME, ao: !NOAO && TC.ao, pixelRatio, msaa: msaaSamples,
+      skip: skipSet.size ? skipSet : null });
   composer = pipe.composer;
 }
 
 /* ---------- evaluator probe ---------- */
 const __fx = {
+  tier: TIER,
   get ao() { return !!(pipe && pipe.gtao && pipe.gtao.enabled); },
   aoPresent: !!(pipe && pipe.gtao),     // pass exists in chain even if map-view disables it
   get aoState() { return pipe && pipe.gtao ? (pipe.gtao.enabled ? pipe.gtao._state : 'map-off') : 'off'; },
@@ -725,7 +738,15 @@ function tick() {
     } else if (fpsEMA > 57 && pixelRatio < MAX_RATIO) {
       pixelRatio = Math.min(MAX_RATIO, pixelRatio + .25); resync();
     }
+    // resolution alone didn't rescue a weak GPU — shed heavy passes next
+    if (fpsEMA < 30 && pixelRatio <= .6) {
+      if (pipe && pipe.gtao && pipe.gtao.enabled) { pipe.gtao.enabled = false; }
+      else if (pipe && pipe.bloom && pipe.bloom.enabled) { pipe.bloom.enabled = false; }
+    }
   }
+  // a clean 45s run proves the boot settings are stable — clear any
+  // context-loss strikes so we don't pin this device to a lower tier
+  if (t > 45 && !window.__dtStable) { window.__dtStable = true; noteStableBoot(); }
   if (++frames === 40) {
     __fx.tex = texReport();
     const lo = document.getElementById('loading');

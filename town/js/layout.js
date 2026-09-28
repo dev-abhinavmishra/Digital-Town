@@ -43,7 +43,7 @@ export const WATER = [
 export const BUILDINGS = [
   /* ======== FREE — required ======== */
   { id:'medhall',  cat:'free', type:'medhall', name:'Havenbrook University School of Medicine',
-    x:-480, z:-600, w:96, d:40, h:16, cost:0, label:'univ', num:1,
+    x:-480, z:-600, w:124, d:52, h:24, cost:0, label:'univ', num:1,
     desc:'State medical university anchoring the north district.' },
   { id:'medlib',   cat:'free', type:'campusb', name:'University Medical Library',
     x:-480, z:-430, w:52, d:34, h:12, cost:0, nolabel:true },
@@ -54,6 +54,9 @@ export const BUILDINGS = [
   { id:'housing',  cat:'free', type:'zone',    name:'The Preserve at Havenbrook (Housing Development)',
     x:-460, z:150, cost:0, label:'housing', num:2,
     desc:'Mixed housing: student apartments, family homes, senior cottages.' },
+  { id:'preservecommons', cat:'free', type:'zone', name:'Preserve Commons Apartments',
+    x:-530, z:230, cost:0,
+    desc:'Landmark mid-rise apartment court in the housing development — student + family flats.' },
 
   /* ======== HEALTHCARE (13 facilities) ======== */
   { id:'hospital', cat:'health', type:'hospital', name:'Havenbrook General Hospital',

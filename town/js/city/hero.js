@@ -16,6 +16,7 @@ import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick, RUNENV }
 import { pbr } from '../mats.js';
 import { ROADS } from '../layout.js';
 import { occupyRect, isFree } from './occ.js';
+import { makeBuilding } from '../buildings.js';
 import { heroLeaf, wayItem } from './stats.js';
 
 const M = THREE.MeshStandardMaterial;
@@ -90,7 +91,7 @@ function buildQuad(scene) {
   med.rotation.x = -Math.PI / 2; med.position.set(cx, Y + .07, cz); med.receiveShadow = true;
   add(med);
   const paths = [
-    plane(3.6, 34, PAVEH, cx, Y + .06, -561),          // N → medhall steps
+    plane(3.6, 30, PAVEH, cx, Y + .06, -550),          // N → medhall steps
     plane(3.6, 30, PAVEH, cx, Y + .06, -502),          // S → quad lot
     plane(84, 3.6, PAVEH, -430, Y + .06, cz),          // E → clinical sciences
     plane(84, 3.6, PAVEH, -530, Y + .06, cz),          // W → anatomy hall
@@ -353,6 +354,53 @@ function buildWaterTower(scene) {
   }, err => console.error('watertower.glb parse failed:', err));
 }
 
+/* ---------- A6 — Preserve Commons Apartments ----------
+   Landmark mid-rise housing anchor in Residential West: twin 5-storey slabs
+   around a paved resident courtyard with an entry sign reading THE PRESERVE.
+   Makes the (free, required) housing development read as a real district
+   landmark instead of anonymous houses. */
+function buildPreserveCommons(scene) {
+  // mid-block green inside the Residential West family block — the corridor
+  // between its two house rows is the only footprint big enough (z 214-246)
+  const cx = -530, cz = 230;
+  if (!isFree(cx, cz, 30)) return;
+  const g = new THREE.Group();
+  const spec = (x) => ({ type: 'apartment', x, z: cz - 6, w: 26, d: 14, h: 16, rot: Math.PI });
+  const a = makeBuilding(spec(cx - 22)), b = makeBuilding(spec(cx + 22));
+  g.add(a); g.add(b);
+  // paved courtyard between the slabs, opening south
+  const court = new THREE.Mesh(new THREE.CircleGeometry(15, 28), PAVEH);
+  court.rotation.x = -Math.PI / 2; court.position.set(cx, Y + .07, cz + 14);
+  court.receiveShadow = true; g.add(court);
+  // entry sign pylon — reads toward the neighborhood street
+  const pyl = texPanel('THE PRESERVE\nAPARTMENT LIVING', 9, 2.6,
+    { bg: '#3d5a44', fg: '#efe8d4', font: 'bold 54px Georgia', h: 160 });
+  pyl.position.set(cx, Y + 4.2, cz + 28); g.add(pyl);
+  g.add(box(9.6, .5, .8, TRIM(), cx, Y + 5.7, cz + 28));
+  g.add(box(.9, 5.6, .9, STONE(), cx - 4.6, Y, cz + 28));
+  g.add(box(.9, 5.6, .9, STONE(), cx + 4.6, Y, cz + 28));
+  // courtyard benches + young trees (all static → merge)
+  const parts = [];
+  for (const a of [.6, 2.1, 4.2, 5.7]) {
+    const bx = cx + Math.cos(a) * 10, bz = cz + 14 + Math.sin(a) * 10;
+    parts.push({ geo: new THREE.BoxGeometry(2.4, .14, .6), color: '#7a5c3e', x: bx, y: Y + .62, z: bz, ry: -a });
+    for (const lx of [-1, 1])
+      parts.push({ geo: new THREE.BoxGeometry(.16, .5, .5), color: '#3a3f43',
+        x: bx + lx * Math.cos(a), y: Y + .3, z: bz + lx * Math.sin(a), ry: -a });
+  }
+  for (const a of [1.2, 3.0, 5.0]) {
+    const tx = cx + Math.cos(a) * 13.5, tz = cz + 14 + Math.sin(a) * 13.5;
+    parts.push({ geo: new THREE.CylinderGeometry(.14, .2, 2.6, 6), color: '#6b4a32', x: tx, y: Y, z: tz });
+    parts.push({ geo: new THREE.SphereGeometry(1.7, 8, 6), color: '#4d7a3f', x: tx, y: Y + 3.4, z: tz });
+    parts.push({ geo: new THREE.SphereGeometry(1.15, 7, 5), color: '#5d8a48', x: tx + .9, y: Y + 2.9, z: tz + .5 });
+  }
+  const cm = new THREE.Mesh(colored(parts), VCOL());
+  cm.castShadow = cm.receiveShadow = true; g.add(cm);
+  scene.add(g);
+  occupyRect(cx, cz + 8, 74, 52, 2);
+  heroLeaf('preserve-commons', null, g.children.length, [cx, cz]);
+}
+
 export function buildHero(scene) {
   buildPylon(scene);
   buildCityHall(scene);
@@ -361,4 +409,5 @@ export function buildHero(scene) {
   buildQuad(scene);
   buildPavilion(scene);
   buildWayfinding(scene);
+  buildPreserveCommons(scene);
 }

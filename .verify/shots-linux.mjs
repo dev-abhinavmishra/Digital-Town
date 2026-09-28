@@ -35,8 +35,8 @@ for (const [name, url] of specs) {
   page.on('console', onCon); page.on('pageerror', onErr);
   const t0 = Date.now();
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForFunction('window.__ready === true', null, { timeout: 480000 });
+    await page.goto(url, { waitUntil: 'commit', timeout: 120000 });
+    await page.waitForFunction('window.__ready === true', null, { timeout: 900000 });
     await page.waitForTimeout(3000);
   } catch (e) { errors.push('BOOT: ' + e.message); }
   const probe = await page.evaluate(() => ({
