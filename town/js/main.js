@@ -1,7 +1,7 @@
 // main.js — Havenbrook 3D town: procedural sky, cinematic post fx, fly-spectator controls
 import * as THREE from 'three';
 import { createPipeline } from './render/pipeline.js';
-import { pickTier, TIER_CFG, noteContextLost, noteStableBoot } from './render/perf.js';
+import { pickTier, TIER_CFG, noteContextLost } from './render/perf.js';
 import { loadEnvironment } from './render/env.js';
 import { installAtmo } from './render/atmo.js';
 import { upgradeGlassMaterials, glassProbe } from './render/glass.js';
@@ -535,6 +535,7 @@ const skipSet = POSTSKIP ? new Set(POSTSKIP.split(',')) : new Set();
 if (!TC.bloom) skipSet.add('bloom');
 if (!TC.smaa) skipSet.add('smaa');
 let composer = null, pipe = null;
+let aoShed = false, bloomShed = false;   // latched fps fallbacks (see tick)
 if (!NOFX) {
   pipe = createPipeline(renderer, scene, activeCam,
     { time: TIME, ao: !NOAO && TC.ao, pixelRatio, msaa: msaaSamples,
@@ -708,8 +709,10 @@ function tick() {
       if (composer.passes[1] && composer.passes[1].camera) composer.passes[1].camera = activeCam;
     }
     // AO off in the ortho map view — the map is a schematic overlay, and
-    // GTAO assumes a perspective projection anyway
-    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam;
+    // GTAO assumes a perspective projection anyway; aoShed is a persistent
+    // low-fps fallback — once shed it stays off (re-enabling would re-add
+    // the pass on exactly the GPU that couldn't afford it)
+    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam && !aoShed;
     if (composer._grade) composer._grade.uniforms.uTime.value = t;
     composer.render();
   } else {
@@ -738,15 +741,13 @@ function tick() {
     } else if (fpsEMA > 57 && pixelRatio < MAX_RATIO) {
       pixelRatio = Math.min(MAX_RATIO, pixelRatio + .25); resync();
     }
-    // resolution alone didn't rescue a weak GPU — shed heavy passes next
+    // resolution alone didn't rescue a weak GPU — shed heavy passes next.
+    // latched: the per-frame AO write would re-enable it otherwise
     if (fpsEMA < 30 && pixelRatio <= .6) {
-      if (pipe && pipe.gtao && pipe.gtao.enabled) { pipe.gtao.enabled = false; }
-      else if (pipe && pipe.bloom && pipe.bloom.enabled) { pipe.bloom.enabled = false; }
+      if (pipe && pipe.gtao && pipe.gtao.enabled && !aoShed) { aoShed = true; pipe.gtao.enabled = false; }
+      else if (pipe && pipe.bloom && pipe.bloom.enabled && !bloomShed) { bloomShed = true; pipe.bloom.enabled = false; }
     }
   }
-  // a clean 45s run proves the boot settings are stable — clear any
-  // context-loss strikes so we don't pin this device to a lower tier
-  if (t > 45 && !window.__dtStable) { window.__dtStable = true; noteStableBoot(); }
   if (++frames === 40) {
     __fx.tex = texReport();
     const lo = document.getElementById('loading');

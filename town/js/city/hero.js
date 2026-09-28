@@ -91,7 +91,7 @@ function buildQuad(scene) {
   med.rotation.x = -Math.PI / 2; med.position.set(cx, Y + .07, cz); med.receiveShadow = true;
   add(med);
   const paths = [
-    plane(3.6, 30, PAVEH, cx, Y + .06, -550),          // N → medhall steps
+    plane(3.6, 34, PAVEH, cx, Y + .06, -550),          // N → medhall steps
     plane(3.6, 30, PAVEH, cx, Y + .06, -502),          // S → quad lot
     plane(84, 3.6, PAVEH, -430, Y + .06, cz),          // E → clinical sciences
     plane(84, 3.6, PAVEH, -530, Y + .06, cz),          // W → anatomy hall

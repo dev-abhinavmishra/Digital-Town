@@ -6,6 +6,32 @@
    ?q=high|med|low forces a tier (eval + manual override). */
 
 const CRASH_KEY = 'dt_ctxlost';
+const WINDOW_MS = 15 * 60 * 1000;   // strikes older than this age out and retry
+const MAX_STRIKES = 8;
+
+/* strikes = timestamps of context losses. Keeping history (not a bare count)
+   means losses late in a session still accumulate — a device that crashes at
+   second 55 of every boot reaches the LOW threshold instead of seeing one
+   fresh strike per boot. There is no "stable boot" reset: a long clean run
+   simply lets old strikes age out of the window. */
+function strikes() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CRASH_KEY) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
+}
+
+export function crashes() {
+  const now = Date.now();
+  const s = strikes().filter(t => now - t < WINDOW_MS);
+  if (s.length !== strikes().length)
+    try { localStorage.setItem(CRASH_KEY, JSON.stringify(s)); } catch {}
+  return s.length;
+}
+export function noteContextLost() {
+  const s = strikes(); s.push(Date.now());
+  try { localStorage.setItem(CRASH_KEY, JSON.stringify(s.slice(-MAX_STRIKES))); } catch {}
+}
 
 function gpuName() {
   try {
@@ -19,16 +45,6 @@ function gpuName() {
     if (lc) lc.loseContext();
     return String(name || '');
   } catch { return ''; }
-}
-
-export function crashes() {
-  try { return +localStorage.getItem(CRASH_KEY) || 0; } catch { return 0; }
-}
-export function noteContextLost() {
-  try { localStorage.setItem(CRASH_KEY, String(crashes() + 1)); } catch {}
-}
-export function noteStableBoot() {
-  try { if (crashes()) localStorage.removeItem(CRASH_KEY); } catch {}
 }
 
 export function pickTier(params) {
