@@ -7,7 +7,7 @@ import { ROADS, LOTS, WATER, PARK_ZONE, BUILDINGS, APARTMENTS,
 import { box, cyl, plane, mat, signTexture, fieldTexture, cropTexture, colored, VCOL,
          instances, waterMaterial, cloudSpriteTexture, uTime,
          makeCanvas, canvasTex, blobShadowTexture, warmGlowTexture,
-         attachDriftShadow, R, rr, pick, mulberry32, RUNENV } from './lib.js';
+         attachDriftShadow, R, rr, pick, mulberry32, RUNENV, DETAIL, thin } from './lib.js';
 import { pbr, M_BARK, WET_SURFACES } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
@@ -170,18 +170,21 @@ export function buildTrees(scene) {
     spots.push({ x, z, s: rr(1.0, 1.8), t: R() < .55 ? 'c' : 'p' });
   }
 
+  // MIN tier keeps an evenly-spread subset — same species mix, fewer crowns
+  const kept = thin(spots);
+
   // soft canopy shadows under every tree — outside the shadow camera's box
   // (aerial, far verge) this is the only thing keeping trees grounded
-  blobShadows(scene, spots.map(s => {
+  blobShadows(scene, kept.map(s => {
     const r = (s.t === 'c' || s.t === 'p' ? 3.4 : 5.6) * s.s;
     return { x: s.x, z: s.z, ry: 0, sx: r, sz: r };
   }), .22);
 
-  const oak = spots.filter(s => s.t === 'o'), con = spots.filter(s => s.t === 'c'),
-        maple = spots.filter(s => s.t === 'm'), birch = spots.filter(s => s.t === 'b'),
-        pine = spots.filter(s => s.t === 'p'), sakura = spots.filter(s => s.t === 's'),
-        elm = spots.filter(s => s.t === 'e'), poplar = spots.filter(s => s.t === 'u'),
-        willow = spots.filter(s => s.t === 'w'), dogwood = spots.filter(s => s.t === 'd');
+  const oak = kept.filter(s => s.t === 'o'), con = kept.filter(s => s.t === 'c'),
+        maple = kept.filter(s => s.t === 'm'), birch = kept.filter(s => s.t === 'b'),
+        pine = kept.filter(s => s.t === 'p'), sakura = kept.filter(s => s.t === 's'),
+        elm = kept.filter(s => s.t === 'e'), poplar = kept.filter(s => s.t === 'u'),
+        willow = kept.filter(s => s.t === 'w'), dogwood = kept.filter(s => s.t === 'd');
   // tapered trunk + branch scaffold — branches show through the leaf cards
   const br = (len, r, yaw, pitch, y) => {
     const g = new THREE.CylinderGeometry(r * .42, r, len, 5);
@@ -325,7 +328,7 @@ export function buildTrees(scene) {
     window.__city.trees = {
       archetypes: [oak, maple, birch, con, pine, sakura, elm, poplar, willow, dogwood]
         .filter(l => l.length).map(l => l[0].t),
-      total: spots.length,
+      total: kept.length,
       districts: DISTRICT_TREES.map(d => ({ name: d.name, mix: Object.fromEntries(d.mix) })),
     };
   }
@@ -349,10 +352,11 @@ export function buildTrees(scene) {
   }
   const bgeo = new THREE.IcosahedronGeometry(1, 0); bgeo.scale(1, .72, 1);
   const bmat = new M({ color: '#ffffff', roughness: .95, flatShading: true });
-  const bim = new THREE.InstancedMesh(bgeo, bmat, bushes.length);
+  const keptB = thin(bushes);
+  const bim = new THREE.InstancedMesh(bgeo, bmat, keptB.length);
   {
     const Mx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
-    bushes.forEach((t, i) => {
+    keptB.forEach((t, i) => {
       p.set(t.x, .5 * t.s, t.z);
       sc.set(t.s * rr(.8, 1.4), t.s, t.s * rr(.8, 1.4));
       q.setFromEuler(new THREE.Euler(0, rr(0, 6.28), 0));
@@ -363,7 +367,7 @@ export function buildTrees(scene) {
     bim.castShadow = bim.receiveShadow = true;
     scene.add(bim);
   }
-  return spots.length;
+  return kept.length;
 }
 
 /* ---------------- vehicles ---------------- */
@@ -526,7 +530,7 @@ export function buildCars(scene) {
   // parked in lots
   for (const l of LOTS) {
     if (l.plain) continue;
-    const count = Math.floor(l.w / 4.2);
+    const count = Math.floor(l.w / 4.2 * DETAIL.f);
     for (let i = 0; i < count; i++) {
       if (R() > .62) continue;
       const px = l.x - l.w / 2 + 2 + i * (l.w / count);
@@ -562,7 +566,7 @@ export function buildCars(scene) {
   }
   let nParked = 0;
   for (const k in parkedByKind) {
-    const list = parkedByKind[k];
+    const list = thin(parkedByKind[k]);
     if (!list.length) continue;
     nParked += list.length; parked.push(...list);
     const { body, trim } = vehGeos(k);
@@ -667,17 +671,20 @@ function roadGraph() {
 }
 export function buildTraffic(scene) {
   const edges = roadGraph();
-  const cars = [];
+  const carsRaw = [];
   for (const e of edges) {
     const len = e.a1 - e.a0;
     const want = e.w >= 16 ? Math.floor(len / 90) : Math.floor(len / 200);
     for (let i = 0; i < want; i++) {
-      cars.push({
+      carsRaw.push({
         e, t: rr(.05, .95), dir: pick([1, -1]),
         v: rr(9, 15) * (e.w >= 16 ? 1.15 : 1), col: pick(CAR_COLORS),
       });
     }
   }
+  // MIN: thin the global fleet (not per-edge — per-edge scaling floors
+  // short blocks to zero and empties most streets)
+  const cars = thin(carsRaw);
   // signalized nodes for traffic causality (same junction list as the bulbs)
   const skey = (x, z) => Math.round(x / 4) + ',' + Math.round(z / 4);
   const sigNodes = new Map();
@@ -820,7 +827,7 @@ export function buildLights(scene) {
       const dx = .5 * Math.cos(l.ry + Math.PI / 2), dz = .5 * Math.sin(l.ry + Math.PI / 2);
       banners.push({ x: l.x + dx, z: l.z + dz, y: 4.4, ry: l.ry + Math.PI / 2 });
     }
-    scene.add(instances(banG, banM, banners, { shadow: false }));
+    scene.add(instances(banG, banM, thin(banners), { shadow: false }));
   }
   if (_lowLightQuery()) {
     lampM.emissive = new THREE.Color('#ffb46a'); lampM.emissiveIntensity = 2.4;
@@ -873,8 +880,8 @@ export function buildWater(scene) {
     }
     const padG = new THREE.CircleGeometry(1, 8); padG.rotateX(-Math.PI / 2); padG.translate(0, Y + .07, 0);
     const reedG = new THREE.ConeGeometry(.09, 1.6, 5); reedG.translate(0, .8, 0);
-    scene.add(instances(padG, new M({ color: '#fff', roughness: .9 }), pads, { shadow: false }));
-    scene.add(instances(reedG, new M({ color: '#fff', roughness: .95 }), reeds, { shadow: false }));
+    scene.add(instances(padG, new M({ color: '#fff', roughness: .9 }), thin(pads), { shadow: false }));
+    scene.add(instances(reedG, new M({ color: '#fff', roughness: .95 }), thin(reeds), { shadow: false }));
   }
 
   /* pond life - ducks paddle lazy circles (animated in tickWorld), rowboats
@@ -1136,7 +1143,7 @@ export function buildPark(scene) {
   scene.add(propMesh);
   const flG = new THREE.IcosahedronGeometry(.22, 0); flG.translate(0, .45, 0);
   const flStem = new THREE.ConeGeometry(.05, .5, 4); flStem.translate(0, .25, 0);
-  scene.add(instances(flG, new M({ color: '#fff', roughness: .8 }), flowers, { shadow: false }));
+  scene.add(instances(flG, new M({ color: '#fff', roughness: .8 }), thin(flowers), { shadow: false }));
 
   // keep scattered trees off the built features & the walking path
   occupyRect(505, 95, 13, 13, 3);            // gazebo
@@ -1332,7 +1339,7 @@ export function buildPeople(scene) {
   const HAIR = ['#2a2119', '#0f0d0b', '#5c4630', '#8a6b45', '#4a4a4a', '#b8b0a5', '#7a3b22'];
 
   // spots: static idlers + sidewalk walkers on the road graph
-  const idlers = [
+  const idlers = thin([
     ...Array.from({ length: 14 }, () => [60 + rr(-35, 35), -205 + rr(-28, 28)]),
     ...Array.from({ length: 14 }, () => [-480 + rr(-65, 65), -530 + rr(-45, 45)]),
     ...Array.from({ length: 10 }, () => [rr(380, 700), rr(345, 430)]),
@@ -1340,10 +1347,10 @@ export function buildPeople(scene) {
     ...Array.from({ length: 8 }, () => [rr(360, 700), rr(-470, -380)]),
     ...Array.from({ length: 10 }, () => [rr(-60, 300), rr(335, 425)]),
     ...Array.from({ length: 8 }, () => [rr(-160, 320), rr(60, 240)]),
-  ];
+  ]);
   const edges = roadGraph();
   const walkers = [];
-  for (let i = 0; i < 130; i++) {
+  for (let i = 0; i < Math.max(8, Math.round(130 * DETAIL.f)); i++) {
     const e = edges[Math.floor(R() * edges.length)];
     if (e.a1 - e.a0 < 30) { i--; continue; }
     walkers.push({ e, t: rr(0, 1), dir: pick([1, -1]), v: rr(1.1, 1.9), ph: rr(0, 6.28),
@@ -1710,7 +1717,7 @@ export function buildProps(scene) {
         }
       }
     }
-    const tuftIM = instances(tuftG, tuftM, tufts, { shadow: false });
+    const tuftIM = instances(tuftG, tuftM, thin(tufts), { shadow: false });
     tuftIM.receiveShadow = true;
     scene.add(tuftIM);
     if (window.__city) (window.__city.veg ||= {}).tufts = tufts.length;
@@ -1822,7 +1829,7 @@ export function buildFences(scene) {
       const front = rI === 0 ? -1 : 1;   // which side faces street
       for (let i = 0; i < n; i++) {
         const x = blk.x0 + 14 + i * (W - 28) / Math.max(1, n - 1);
-        if (R() < .5) continue;
+        if (R() < .5 || R() > DETAIL.f) continue;
         const fz = z + front * 9;
         const fw = rr(9, 13);
         // rails + pickets
@@ -1893,8 +1900,8 @@ export function buildCountryside(scene) {
     ], false);
     const sprigM = kind => new M({ map: cropTexture(kind), alphaTest: .35,
       side: THREE.DoubleSide, roughness: .95 });
-    scene.add(instances(bladeG, sprigM('corn'), corn, { shadow: false }));
-    scene.add(instances(bladeG, sprigM('wheat'), wheat, { shadow: false }));
+    scene.add(instances(bladeG, sprigM('corn'), thin(corn), { shadow: false }));
+    scene.add(instances(bladeG, sprigM('wheat'), thin(wheat), { shadow: false }));
   }
   // farmhouses + barns scattered in fields (merged colored)
   const parts = [];
@@ -1916,7 +1923,7 @@ export function buildCountryside(scene) {
         s: rr(1.4, 2.4), color: '#527a44' });
     }
   const tlG = new THREE.IcosahedronGeometry(3, 0); tlG.translate(0, 4, 0);
-  scene.add(instances(tlG, new M({ color: '#fff', roughness: .95, flatShading: true }), tl));
+  scene.add(instances(tlG, new M({ color: '#fff', roughness: .95, flatShading: true }), thin(tl)));
 }
 
 /* ---------------- mountain ring — the hard edge of the world ----------------
@@ -1998,9 +2005,13 @@ export function buildMountains(scene) {
     }
     return { H, R0, rugF, width, hMax, seed, M };
   };
-  const rg1 = ridge(1500, 150, 180, 4.7, 1.25, 720, 12);   // near wooded foothill band - never snows
-  const rg2 = ridge(1700, 380, 260, 0.0, .80, 720, 12);    // green foothills, thin snow cap
-  ridge(2600, 790, 500, 2.4, .55, 640, 14);                // taller far range, deeper snowline
+  // MIN tier: fewer angular samples (silhouette stays intact at city
+  // distance) — M must NOT drop: firs plant by the continuous slope
+  // profile, so coarser radial rows would interpolate above them
+  const MR = DETAIL.f < 1 ? .42 : 1;
+  const rg1 = ridge(1500, 150, 180, 4.7, 1.25, Math.round(720 * MR), 12);   // near wooded foothill band - never snows
+  const rg2 = ridge(1700, 380, 260, 0.0, .80, Math.round(720 * MR), 12);    // green foothills, thin snow cap
+  ridge(2600, 790, 500, 2.4, .55, Math.round(640 * MR), 14);                // taller far range, deeper snowline
 
   /* conifer cover on the forest-band slopes - instanced firs sized to read
      as canopy at city distance. A dedicated seeded stream keeps the global
@@ -2030,7 +2041,7 @@ export function buildMountains(scene) {
                   color: FIR_TINTS[Math.floor(R2() * 4)] });
     }
   }
-  const fim = instances(firG, VCOL(), firL, { shadow: false });
+  const fim = instances(firG, VCOL(), thin(firL), { shadow: false });
   fim.frustumCulled = false;
   scene.add(fim);
   const g = new THREE.BufferGeometry();

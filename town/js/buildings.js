@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { box, cyl, plane, gableRoof, hipRoof, mat, facadeMaps, glassFacadeMaps,
          sidingTexture, brickTexture, garageDoorTexture, awningTexture,
          signTexture, crossTexture, clockTexture, colored, VCOL, flagMaterial,
-         makeCanvas, canvasTex, R, rr, pick } from './lib.js';
+         makeCanvas, canvasTex, R, rr, pick, DETAIL } from './lib.js';
 import { M_CONCRETE, M_ROOFGRAY, M_ROOFCLAY } from './mats.js';
 import { CITY, heroLeaf, heroCrown } from './city/stats.js';
 
@@ -472,6 +472,7 @@ function storefrontKitMesh(g, w, d, h, o) {
    stair bulkhead, solar arrays, water tank, condenser lines, mech screens.
    Seeded 2–3 kinds per roof. */
 function clutter(g, w, d, h, o = {}) {
+  if (DETAIL.f < 1) return;          // MIN tier: bare roofs, keep silhouettes
   const parts = [];
   const kinds = [];
   if (o.fans !== false && w > 14) kinds.push('fans');
@@ -550,6 +551,7 @@ function clutter(g, w, d, h, o = {}) {
   }
 }
 function hvac(g, w, d, h, n = 3) {
+  n = Math.ceil(n * DETAIL.f);
   for (let i = 0; i < n; i++) {
     const hw = rr(2, 3.5), hd = rr(2, 3.5), hx = rr(-w / 2 + 4, w / 2 - 4), hz = rr(-d / 2 + 4, d / 2 - 4);
     g.add(box(hw, rr(1, 1.8), hd, mat('#8b9094'), hx, h, hz));

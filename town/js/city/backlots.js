@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { BUILDINGS, FILLER, APARTMENTS, LOTS, HOUSE_BLOCKS,
          PLAZA, PARK_ZONE, GREEN_BELT, SE_GREEN } from '../layout.js';
 import { colored, instances, mat, canvasTex, makeCanvas, VCOL,
-         R, rr, pick } from '../lib.js';
+         R, rr, pick, DETAIL } from '../lib.js';
 import { GeoBin } from './geo.js';
 import { occupied, occupyRect, streetBand } from './occ.js';
 
@@ -547,6 +547,10 @@ export function buildBacklots(scene) {
     ...APARTMENTS,
   ];
   for (const b of hosts) {
+    /* MIN: skip whole installations — each surviving backlot keeps its
+       pen, stacked crates, occupancy and stats consistent (thinning the
+       emit lists instead would leave empty pens / floating crates) */
+    if (DETAIL.f < 1 && R() > DETAIL.f) continue;
     const f = frame(b);
     switch (b.type || 'apartment') {
       case 'bigbox':
@@ -667,6 +671,7 @@ export function buildBacklots(scene) {
   for (const l of LOTS) {
     if (l.plain || l.w < 40) continue;
     for (const zs of [-1, 1]) {
+      if (DETAIL.f < 1 && R() > DETAIL.f) continue;
       const cx = l.x + l.w / 2 - .8, cz = l.z + zs * (l.d / 2 - .8);
       if (!freePt(cx, cz, .5, l)) continue;
       (R() < .5 ? set.canR : set.canS)

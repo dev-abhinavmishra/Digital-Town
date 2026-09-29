@@ -52,7 +52,7 @@ function gpuName() {
 export function savedTier() {
   try {
     const v = localStorage.getItem(TIER_KEY);
-    return v === 'high' || v === 'med' || v === 'low' ? v : null;
+    return v === 'high' || v === 'med' || v === 'low' || v === 'min' ? v : null;
   } catch { return null; }
 }
 export function setTierPref(v) {
@@ -62,12 +62,12 @@ export function setTierPref(v) {
   } catch {}
 }
 
-const TIER_ORD = { low: 0, med: 1, high: 2 };
+const TIER_ORD = { min: 0, low: 1, med: 2, high: 3 };
 const lower = (a, b) => TIER_ORD[a] <= TIER_ORD[b] ? a : b;
 
 export function pickTier(params) {
   const q = (params.get('q') || params.get('quality') || '').toLowerCase();
-  if (q === 'high' || q === 'med' || q === 'medium' || q === 'low')
+  if (q === 'high' || q === 'med' || q === 'medium' || q === 'low' || q === 'min')
     return q === 'medium' ? 'med' : q;
 
   let pick = savedTier();
@@ -76,24 +76,27 @@ export function pickTier(params) {
     const cores = navigator.hardwareConcurrency || 8;
     const weak = /swiftshader|llvmpipe|softpipe|software|basic render|mali-[g4]?[0-9]{1,2}\b|powervr|adreno [1-4][0-9]{2}|intel.*(hd|uhd|gma)/i
       .test(gpuName());
-    /* <=4GB RAM is the binding constraint regardless of GPU — the JS heap +
-       geometry buffers alone can OOM the tab */
-    if (mem <= 4) pick = 'low';
-    else if (cores <= 4 || weak) pick = 'med';
+    /* <=4GB RAM means a Pentium-class iGPU too — a full scene can't
+       rasterize; the thinned MIN scene is what actually runs */
+    if (mem <= 4) pick = 'min';
+    else if (cores <= 4 || weak) pick = 'low';
     else pick = 'high';
   }
   /* crash strikes act as a ceiling over BOTH a saved pref and auto-detect —
      a device that keeps losing its WebGL context must not keep reloading the
      tier that crashes it (only an explicit ?q= URL beats this) */
   const n = crashes();
-  if (n >= 2) return lower(pick, 'low');
-  if (n >= 1) return lower(pick, 'med');
+  if (n >= 2) return lower(pick, 'min');
+  if (n >= 1) return lower(pick, 'low');
   return pick;
 }
 
 /* per-tier budget. HIGH reproduces the previous pipeline verbatim. */
 export const TIER_CFG = {
-  high: { maxRatio: 2,   msaa: 4, ao: true,  bloom: true, smaa: true,  shadow: 4096 },
-  med:  { maxRatio: 1.5, msaa: 2, ao: false, bloom: true, smaa: true,  shadow: 2048 },
-  low:  { maxRatio: 1,   msaa: 0, ao: false, bloom: false, smaa: true,  shadow: 1024 },
+  high: { maxRatio: 2,   msaa: 4, ao: true,  bloom: true, smaa: true,  shadow: 4096, detail: 1 },
+  med:  { maxRatio: 1.5, msaa: 2, ao: false, bloom: true, smaa: true,  shadow: 2048, detail: 1 },
+  low:  { maxRatio: 1,   msaa: 0, ao: false, bloom: false, smaa: true,  shadow: 1024, detail: 1 },
+  /* thinned scene for devices that cannot rasterize the full town —
+     ~22% of scattered instanced content, no shadow pass, .6x pixels */
+  min:  { maxRatio: .6,  msaa: 0, ao: false, bloom: false, smaa: false, shadow: 0,    detail: .22 },
 };
