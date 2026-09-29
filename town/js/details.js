@@ -328,7 +328,7 @@ export function buildTrees(scene) {
     window.__city.trees = {
       archetypes: [oak, maple, birch, con, pine, sakura, elm, poplar, willow, dogwood]
         .filter(l => l.length).map(l => l[0].t),
-      total: spots.length,
+      total: kept.length,
       districts: DISTRICT_TREES.map(d => ({ name: d.name, mix: Object.fromEntries(d.mix) })),
     };
   }
@@ -367,7 +367,7 @@ export function buildTrees(scene) {
     bim.castShadow = bim.receiveShadow = true;
     scene.add(bim);
   }
-  return spots.length;
+  return kept.length;
 }
 
 /* ---------------- vehicles ---------------- */
@@ -671,17 +671,20 @@ function roadGraph() {
 }
 export function buildTraffic(scene) {
   const edges = roadGraph();
-  const cars = [];
+  const carsRaw = [];
   for (const e of edges) {
     const len = e.a1 - e.a0;
-    const want = Math.floor((e.w >= 16 ? len / 90 : len / 200) * DETAIL.f);
+    const want = e.w >= 16 ? Math.floor(len / 90) : Math.floor(len / 200);
     for (let i = 0; i < want; i++) {
-      cars.push({
+      carsRaw.push({
         e, t: rr(.05, .95), dir: pick([1, -1]),
         v: rr(9, 15) * (e.w >= 16 ? 1.15 : 1), col: pick(CAR_COLORS),
       });
     }
   }
+  // MIN: thin the global fleet (not per-edge — per-edge scaling floors
+  // short blocks to zero and empties most streets)
+  const cars = thin(carsRaw);
   // signalized nodes for traffic causality (same junction list as the bulbs)
   const skey = (x, z) => Math.round(x / 4) + ',' + Math.round(z / 4);
   const sigNodes = new Map();
@@ -2002,11 +2005,13 @@ export function buildMountains(scene) {
     }
     return { H, R0, rugF, width, hMax, seed, M };
   };
-  // MIN tier: same silhouettes at ~1/3 grid resolution — far ridges only
-  const MR = DETAIL.f < 1 ? .36 : 1;
-  const rg1 = ridge(1500, 150, 180, 4.7, 1.25, Math.round(720 * MR), Math.max(4, Math.round(12 * MR)));   // near wooded foothill band - never snows
-  const rg2 = ridge(1700, 380, 260, 0.0, .80, Math.round(720 * MR), Math.max(4, Math.round(12 * MR)));    // green foothills, thin snow cap
-  ridge(2600, 790, 500, 2.4, .55, Math.round(640 * MR), Math.max(4, Math.round(14 * MR)));                // taller far range, deeper snowline
+  // MIN tier: fewer angular samples (silhouette stays intact at city
+  // distance) — M must NOT drop: firs plant by the continuous slope
+  // profile, so coarser radial rows would interpolate above them
+  const MR = DETAIL.f < 1 ? .42 : 1;
+  const rg1 = ridge(1500, 150, 180, 4.7, 1.25, Math.round(720 * MR), 12);   // near wooded foothill band - never snows
+  const rg2 = ridge(1700, 380, 260, 0.0, .80, Math.round(720 * MR), 12);    // green foothills, thin snow cap
+  ridge(2600, 790, 500, 2.4, .55, Math.round(640 * MR), 14);                // taller far range, deeper snowline
 
   /* conifer cover on the forest-band slopes - instanced firs sized to read
      as canopy at city distance. A dedicated seeded stream keeps the global

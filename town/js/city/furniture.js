@@ -296,6 +296,14 @@ export function buildFurniture(scene) {
   put(manholeGeo(), manholes, false);
   put(kioskGeo(), kiosks, true);
 
-  CITY.furniture = { ...n, total: Object.values(n).reduce((a, b) => a + b, 0) };
+  /* report kept (instanced) counts — on MIN the placed lists are thinned,
+     so raw n.* would overstate what the scene renders */
+  const kept = l => thin(l).length;
+  CITY.furniture = {
+    bench: kept(benches), planter: kept(planters), hydrant: kept(hydrants),
+    shelter: kept(shelters), mailbox: kept(mailboxes), newsbox: kept(newsboxes),
+    bin: kept(bins), manhole: kept(manholes), kiosk: kept(kiosks),
+  };
+  CITY.furniture.total = Object.values(CITY.furniture).reduce((a, b) => a + b, 0);
   return CITY.furniture;
 }
