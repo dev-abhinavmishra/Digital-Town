@@ -98,6 +98,8 @@ const features = [
   { name: 'feat:gazebo', ...rect(505, 95, 11, 11) },
   { name: 'feat:dock', ...rect(540, 132, 20, 16) },
   { name: 'feat:swalk', ...rect(81, -52, 388, 8) },
+  { name: 'feat:campusgate', ...rect(-480, -505, 26, 4) },
+  { name: 'feat:preservecommons', ...rect(-530, 238, 74, 52) },
 ];
 
 console.log('=== ROADS vs BUILDINGS ===');
