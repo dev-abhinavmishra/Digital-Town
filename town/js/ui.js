@@ -224,10 +224,13 @@ export function installUI() {
       <span class="chip" style="background:${CATEGORY_COLORS[b.cat] || '#555'}">${CAT_NAME[b.cat] || b.cat}</span>
       <div class="cost">${b.cost ? 'Cost ' + money(b.cost) : 'Provided free under the town plan'}</div>
       ${b.desc ? `<p>${b.desc}</p>` : ''}
-      <div class="fly">&#x2708; fly there</div>`;
+      <div class="fly">&#x2708; fly there</div>
+      ${b.w && b.id ? `<div class="fly" data-act="in" style="color:#9fe8b0">&#x1F6AA; step inside</div>` : ''}`;
     card.classList.add('show');
     $('#uiCardX').onclick = () => card.classList.remove('show');
     card.querySelector('.fly').onclick = () => flyToBuilding(b);
+    const inL = card.querySelector('[data-act="in"]');
+    if (inL) inL.onclick = () => { card.classList.remove('show'); window.__enterInterior && window.__enterInterior(b.id); };
     if (fly) flyToBuilding(b);
   }
   function flyToBuilding(b) {
@@ -283,6 +286,7 @@ export function installUI() {
     $('#uiBtnTour').classList.remove('on');
     window.__flyTo(540, 620, 660, -30, 0, -40, 2.2);   // return to the aerial
   }
+  window.__endTour = endTour;   // interior entry stops an in-flight tour
   $('#uiBtnTour').addEventListener('click', () => {
     if (tourI >= 0) { endTour(); return; }
     $('#uiBtnTour').classList.add('on');

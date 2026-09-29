@@ -27,11 +27,12 @@ const elStub = () => ({
 globalThis.document = {
   createElement: tag => tag === 'canvas' ? canvasStub() : elStub(),
   createElementNS: () => elStub(),
-  body: { appendChild() {} },
+  body: { appendChild() {}, append() {} },
 };
 globalThis.window = { __city: {} };
 globalThis.self = globalThis;
 globalThis.location = { search: '' };
+globalThis.addEventListener = () => {};
 
 const THREE = await import(TOWN + 'node_modules/three/build/three.module.js');
 const L = await import(TOWN + 'js/layout.js');
@@ -63,6 +64,27 @@ for (const [mod, fn] of [['city/furniture.js', 'buildFurniture'],
     console.log('OK', fn);
   } catch (e) { console.log('FAIL', fn, e.message, e.stack?.split('\n')[1]?.trim()); }
 }
+// interior: footprint picking must resolve a building at each declared centre,
+// and an enter/exit cycle must run headlessly (DOM stubs above)
+try {
+  const I = await import(TOWN + 'js/interior.js');
+  const sized = L.BUILDINGS.filter(b => b.w);
+  let hits = 0;
+  for (const b of sized) if (I.pickBuildingAt(b.x, b.z)) hits++;
+  console.log('OK pickBuildingAt', hits + '/' + sized.length);
+  const cam = new THREE.PerspectiveCamera(70, 1.6, .1, 4000);
+  const fly = { yaw: 0, pitch: 0, auto: true, speed: 10, keys: {}, vel: new THREE.Vector3() };
+  const inst = I.installInterior({ scene, camera: cam, getOrtho: () => null,
+    renderer: { domElement: { addEventListener() {} } }, fly,
+    syncAnglesFromCam() {}, setActiveCam() {}, camTween: { on: false } });
+  inst.byId(L.BUILDINGS.find(b => b.id).id);
+  await new Promise(r => setTimeout(r, 260));
+  const onAfterEnter = inst.on;
+  inst.tick(0.016);
+  inst.exit();
+  await new Promise(r => setTimeout(r, 260));
+  console.log('OK interior enter=' + onAfterEnter + ' exit on=' + inst.on);
+} catch (e) { console.log('FAIL interior', e.message, e.stack?.split('\n')[1]?.trim()); }
 scene.traverse(o => {
   if (o.geometry?.attributes?.position) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1);
 });

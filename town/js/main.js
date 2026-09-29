@@ -24,6 +24,7 @@ import { buildFurniture } from './city/furniture.js';
 import { buildGroundDetail } from './city/ground.js';
 import { buildBacklots } from './city/backlots.js';
 import { installUI } from './ui.js';
+import { installInterior } from './interior.js';
 
 const params = new URLSearchParams(location.search);
 const VIEW = params.get('view') || 'aerial';
@@ -425,6 +426,14 @@ function tweenCam(now) {
   if (k >= 1) { camTween.on = false; syncAnglesFromCam(); }
 }
 window.__flyDone = () => !camTween.on;
+
+/* click-to-enter building interiors — interior.js owns picking, the
+   underground stage rooms, walk controls and the info HUD */
+const interior = installInterior({ scene, camera, renderer, fly,
+  getOrtho: () => orthoCam,
+  setActiveCam: c => { activeCam = c; },
+  syncAnglesFromCam, camTween });
+if (params.get('interior')) interior.byId(params.get('interior'));   // eval/deep-link
 if (CAMP && !orthoCam) {
   const v = CAMP.split(',').map(Number);
   if (v.length === 6 && v.every(Number.isFinite)) setCam(...v);
@@ -674,7 +683,9 @@ function tick() {
   renderer.info.reset();
   const dt = Math.min(clock.getDelta(), .05);
   const t = clock.elapsedTime;
-  if (!orthoCam) {
+  if (interior && interior.on) {
+    interior.tick(dt);
+  } else if (!orthoCam) {
     if (fly.auto) {
       const v = P[VIEW] || P.aerial;
       const a = t * .05;
