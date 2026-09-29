@@ -321,7 +321,8 @@ const inRect = (b, px, pz, pad = 0) => {
   return Math.abs(lx) <= (b.w || 0) / 2 + pad && Math.abs(lz) <= (b.d || 0) / 2 + pad;
 };
 // zones carry no w/d — give the two named zones a generous implicit rect
-const ZONE_RECT = { housing: { w: 460, d: 290 }, preservecommons: { w: 120, d: 90 }, park: null };
+const ZONE_RECT = { housing: { w: 460, d: 290 }, preservecommons: { w: 120, d: 90 },
+  park: { w: 448, d: 360 } };   // PARK_ZONE x0:352..800, z0:-60..300
 
 export function pickBuildingAt(px, pz) {
   let best = null, bestArea = 1e12;
@@ -390,11 +391,13 @@ export function installInterior({ scene, camera, getOrtho, renderer, fly, syncAn
     if (kind === null) { window.__uiShowCard && window.__uiShowCard(b.id); return; }
     window.__endTour && window.__endTour();
     if (camTween) camTween.on = false;
-    I.on = true; I.b = b; I.kind = kind;
+    // capture the outdoor pose synchronously — inside the timeout the tick
+    // loop would have already run against a stale spec and clamped the camera
+    I.saved.p.copy(camera.position); I.saved.q.copy(camera.quaternion);
+    I.saved.ortho = !!getOrtho();
+    I.on = true; I.b = b; I.kind = kind; I.spec = null;
     fade.style.opacity = '1';
     setTimeout(() => {
-      I.saved.p.copy(camera.position); I.saved.q.copy(camera.quaternion);
-      I.saved.ortho = !!getOrtho();
       let spec = rooms.get(kind);
       if (!spec) {
         spec = roomSpec(kind, b);
@@ -440,7 +443,7 @@ export function installInterior({ scene, camera, getOrtho, renderer, fly, syncAn
       if (I.saved.ortho && getOrtho()) setActiveCam(getOrtho());
       syncAnglesFromCam();
       panel.style.display = 'none'; hint.style.display = 'none'; exitBtn.style.display = 'none';
-      I.on = false; I.b = null; fly.auto = false;
+      I.on = false; I.b = null; I.spec = null; fly.auto = false;
       fade.style.opacity = '0';
     }, 190);
   }
@@ -451,7 +454,9 @@ export function installInterior({ scene, camera, getOrtho, renderer, fly, syncAn
   dom.addEventListener('pointerdown', e => { dx = e.clientX; dy = e.clientY; t0 = performance.now(); });
   dom.addEventListener('pointerup', e => {
     if (I.on) return;
-    if (Math.hypot(e.clientX - dx, e.clientY - dy) > 6 || performance.now() - t0 > 450) return;
+    // distance is the real click/drag discriminator; the time bound stays
+    // loose because software-GL input lag can stretch a click past ~1s
+    if (Math.hypot(e.clientX - dx, e.clientY - dy) > 6 || performance.now() - t0 > 1000) return;
     ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     ray.setFromCamera(ndc, getOrtho() || camera);
     ray.far = 4000;

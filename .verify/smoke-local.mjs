@@ -83,7 +83,18 @@ try {
   inst.tick(0.016);
   inst.exit();
   await new Promise(r => setTimeout(r, 260));
-  console.log('OK interior enter=' + onAfterEnter + ' exit on=' + inst.on);
+  // regression: second entry must capture THIS camera pose, not the prior
+  // room's clamped stage coords
+  cam.position.set(240, 90, -300);
+  const b2 = L.BUILDINGS.filter(b => b.id)[1];
+  inst.byId(b2.id);
+  inst.tick(0.016);   // tick fires before the enter timeout — spec is null → no clamp
+  await new Promise(r => setTimeout(r, 260));
+  const poseOK = Math.abs(inst.saved.p.y - 90) < .01 && Math.abs(inst.saved.p.x - 240) < .01;
+  inst.exit();
+  await new Promise(r => setTimeout(r, 260));
+  console.log('OK interior enter=' + onAfterEnter + ' exit on=' + inst.on +
+    ' reenterPose=' + (poseOK ? 'aerial' : 'BROKEN ' + JSON.stringify(inst.saved.p)));
 } catch (e) { console.log('FAIL interior', e.message, e.stack?.split('\n')[1]?.trim()); }
 scene.traverse(o => {
   if (o.geometry?.attributes?.position) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1);

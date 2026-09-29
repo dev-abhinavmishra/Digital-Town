@@ -230,7 +230,7 @@ export function installUI() {
     $('#uiCardX').onclick = () => card.classList.remove('show');
     card.querySelector('.fly').onclick = () => flyToBuilding(b);
     const inL = card.querySelector('[data-act="in"]');
-    if (inL) inL.onclick = () => { card.classList.remove('show'); window.__enterInterior && window.__enterInterior(b.id); };
+    if (inL) inL.onclick = () => { card.classList.remove('show'); drawer.classList.remove('open'); window.__enterInterior && window.__enterInterior(b.id); };
     if (fly) flyToBuilding(b);
   }
   function flyToBuilding(b) {
