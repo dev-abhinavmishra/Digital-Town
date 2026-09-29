@@ -191,11 +191,11 @@ export function installUI() {
   /* ---------------- guide + render-quality tiers ---------------- */
   const tierChip = $('#uiTier'), guide = $('#uiGuide');
   const TIERS = [
-    ['auto', 'Adapts to this device — picks high / med / low from GPU and memory.'],
-    ['high', 'Full fidelity — 4K soft shadows, ambient occlusion, bloom, densest scene detail.'],
-    ['med',  'Balanced — reduced shadow resolution and post effects, medium scene detail.'],
-    ['low',  'Performance — post-fx off, sparse scene detail. For weak GPUs / low RAM.'],
-    ['min',  'Minimal — no shadows or post-fx, no moving traffic or pedestrians, chunked map culling (~300k tris at street level). For very weak devices.'],
+    ['auto', 'Adapts to this device — picks high / low / min from GPU, CPU cores and memory.'],
+    ['high', 'Full fidelity — 4K soft shadows, ambient occlusion, bloom, SMAA, 2x pixels, full scene detail.'],
+    ['med',  'Balanced — 2K shadows, bloom + SMAA, no ambient occlusion, full scene detail.'],
+    ['low',  'Performance — 1K shadows, SMAA only (no AO / bloom), full scene detail. For weak GPUs / low RAM.'],
+    ['min',  'Minimal — no shadows or post-fx, no moving traffic or pedestrians, 12% scene detail with chunked map culling (~280k tris at street level). For very weak devices.'],
   ];
   let savedPref = 'auto';
   try { savedPref = localStorage.getItem('dt_q') || 'auto'; } catch {}

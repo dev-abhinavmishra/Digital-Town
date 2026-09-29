@@ -760,8 +760,13 @@ function tick() {
   if (MIN && (frames % 10) === 0) {
     const r = Math.max(300, activeCam.position.y * 3.0), r2 = r * r;
     const px = activeCam.position.x, pz = activeCam.position.z;
+    /* bounds-overlap test: each chunk is hidden only when its real baked
+       bounds clear the radius — town-spanning geometry never drops out
+       under the camera even when its cell centre is far away */
     for (const m of CHUNKS) {
-      const dx = m.userData.ccx - px, dz = m.userData.ccz - pz;
+      const b = m.userData.cb;
+      const dx = Math.max(b.x0 - px, px - b.x1, 0);
+      const dz = Math.max(b.z0 - pz, pz - b.z1, 0);
       m.visible = dx * dx + dz * dz < r2;
     }
   }

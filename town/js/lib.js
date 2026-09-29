@@ -1126,14 +1126,19 @@ export function splitInstanced(im, chunk) {
   const cells = new Map();
   const mm = im.instanceMatrix.array;
   for (let i = 0; i < im.count; i++) {
-    const k = (Math.floor(mm[i * 16 + 12] / chunk) + 512) * 1024
-            + Math.floor(mm[i * 16 + 14] / chunk) + 512;
-    let c = cells.get(k); if (!c) { c = []; cells.set(k, c); }
-    c.push(i);
+    const x = mm[i * 16 + 12], z = mm[i * 16 + 14];
+    const k = (Math.floor(x / chunk) + 512) * 1024
+            + Math.floor(z / chunk) + 512;
+    let c = cells.get(k);
+    if (!c) { c = { ids: [], x0: x, x1: x, z0: z, z1: z }; cells.set(k, c); }
+    c.ids.push(i);
+    if (x < c.x0) c.x0 = x; if (x > c.x1) c.x1 = x;
+    if (z < c.z0) c.z0 = z; if (z > c.z1) c.z1 = z;
   }
   const out = new THREE.Group();
   const cm = new THREE.Matrix4(), cc = new THREE.Color();
-  for (const [k, idx] of cells) {
+  for (const [k, c] of cells) {
+    const idx = c.ids;
     const sub = new THREE.InstancedMesh(im.geometry, im.material, idx.length);
     idx.forEach((src, dst) => {
       im.getMatrixAt(src, cm); sub.setMatrixAt(dst, cm);
@@ -1147,6 +1152,9 @@ export function splitInstanced(im, chunk) {
     sub.userData.staticInst = true;
     sub.userData.ccx = (Math.floor(k / 1024) - 512 + .5) * chunk;
     sub.userData.ccz = (k % 1024 - 512 + .5) * chunk;
+    /* true instance bounds padded for local geo extent — the MIN culler tests
+       these, not the cell centre, so nothing vanishes beneath the camera */
+    sub.userData.cb = { x0: c.x0 - 16, z0: c.z0 - 16, x1: c.x1 + 16, z1: c.z1 + 16 };
     out.add(sub);
   }
   return out;
@@ -1220,9 +1228,15 @@ export function mergeStatic(root, { chunk = 0 } = {}) {
       // indexed merge — weld the rare non-indexed parts (see colored())
       const merged = mergeGeometries(
         geos.map(g => g.index ? g : mergeVertices(g)), false);
+      merged.computeBoundingBox();
+      const bb = merged.boundingBox;
       const mesh = new THREE.Mesh(merged, material);
       mesh.castShadow = b.cast; mesh.receiveShadow = b.recv;
       mesh.matrixAutoUpdate = false;
+      /* world-baked xz bounds — the MIN culler tests these, so a geometry
+         that spans many cells (ground plane, mountain ring, district-wide
+         decals) stays visible wherever its bounds actually reach */
+      mesh.userData.cb = { x0: bb.min.x, z0: bb.min.z, x1: bb.max.x, z1: bb.max.z };
       if (chunk) {
         mesh.userData.ccx = (Math.floor(k / 1024) - 512 + .5) * chunk;
         mesh.userData.ccz = (k % 1024 - 512 + .5) * chunk;
