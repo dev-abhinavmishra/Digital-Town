@@ -394,6 +394,38 @@ function buildPreserveCommons(scene) {
     parts.push({ geo: new THREE.SphereGeometry(1.7, 8, 6), color: '#4d7a3f', x: tx, y: Y + 3.4, z: tz });
     parts.push({ geo: new THREE.SphereGeometry(1.15, 7, 5), color: '#5d8a48', x: tx + .9, y: Y + 2.9, z: tz + .5 });
   }
+  // amenity build-out: raised pool + umbrellas in the courtyard, a small
+  // playground west of it, and a hedge enclosing the court's open edges —
+  // reads as a lived-in apartment complex, not just two slabs
+  const POOLW = () => new M({ color: '#46a0c4', roughness: .18 });
+  g.add(box(10, .34, 6, TRIM(), cx + 2, Y + .18, cz + 15));        // coping slab
+  g.add(box(9, .4, 5, POOLW(), cx + 2, Y + .38, cz + 15));         // water inset
+  for (const [ux, uz] of [[cx - 1, cz + 21], [cx + 5, cz + 21]]) {
+    parts.push({ geo: new THREE.CylinderGeometry(.05, .07, 3, 6), color: '#8d949a', x: ux, y: Y + 1.5, z: uz });
+    parts.push({ geo: new THREE.ConeGeometry(1.15, .7, 8), color: '#c96f4a', x: ux, y: Y + 3.28, z: uz });
+  }
+  // swing set + slide (playground sits at the court's west lip)
+  const px = cx - 15, pz = cz + 18;
+  for (const lx of [-1.9, 1.9])
+    parts.push({ geo: new THREE.CylinderGeometry(.06, .08, 2.7, 6), color: '#3a6b4f', x: px + lx, y: Y + 1.35, z: pz });
+  parts.push({ geo: new THREE.BoxGeometry(4.3, .12, .12), color: '#3a6b4f', x: px, y: Y + 2.7, z: pz });
+  for (const sx of [-.9, .9]) {
+    for (const lx of [-.18, .18])
+      parts.push({ geo: new THREE.CylinderGeometry(.016, .016, 1.9, 4), color: '#b9c0c5', x: px + sx + lx, y: Y + 1.74, z: pz });
+    parts.push({ geo: new THREE.BoxGeometry(.5, .09, .3), color: '#7a5c3e', x: px + sx, y: Y + .78, z: pz });
+  }
+  const slide = box(.9, .12, 3.8, mat('#d4ac0d'), px - 3.4, Y + 1.3, pz + 1);
+  slide.rotation.x = -.62; g.add(slide);
+  g.add(box(.9, 2.4, .14, mat('#d4ac0d'), px - 3.4, Y + 1.2, pz + 2.6));
+  // hedge enclosing the open sides — gap south-center where the pylon meets the court
+  for (let hx = cx - 30; hx <= cx + 28; hx += 4) {
+    if (Math.abs(hx - cx) < 5) continue;
+    parts.push({ geo: new THREE.BoxGeometry(3.4, .95, .8), color: '#3f6b35', x: hx, y: Y + .48, z: cz + 28 });
+  }
+  for (const hz of [cz + 17, cz + 21, cz + 25]) {
+    for (const hx of [cx - 29, cx + 27])
+      parts.push({ geo: new THREE.BoxGeometry(.8, .95, 3.4), color: '#3f6b35', x: hx, y: Y + .48, z: hz });
+  }
   const cm = new THREE.Mesh(colored(parts), VCOL());
   cm.castShadow = cm.receiveShadow = true; g.add(cm);
   scene.add(g);

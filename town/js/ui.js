@@ -30,6 +30,8 @@ const css = `
 #uiBudget.open .sub { display:block; }
 #uiBudget .sub .k { color:#cdd7dd; }
 #uiBtns { display:flex; gap:7px; }
+#uiTier { font-size:9px; letter-spacing:1.4px; color:rgba(255,255,255,.38);
+  text-align:right; padding:3px 2px 0; user-select:none; }
 #uiTour { position:fixed; left:14px; bottom:14px; z-index:41; }
 #uiDrawer { position:fixed; top:64px; right:-340px; width:320px; height:calc(100% - 64px); z-index:45;
   background:rgba(11,15,19,.94); border-left:1px solid rgba(255,255,255,.12);
@@ -123,6 +125,7 @@ export function installUI() {
         <div class="btn" id="uiBtnTour">&#9654; TOUR</div>
         <div class="btn" id="uiBtnRubric">&#10003; PROJECT BRIEF</div>
       </div>
+      <div id="uiTier" title="Active render-quality tier — ?q=high|med|low overrides"></div>
     </div>
     <div id="uiDrawer"><h2>${TOWN.name} — FACILITY DIRECTORY
       <span id="uiDrawerX" style="float:right;cursor:pointer;color:#8a99a3">&times;</span></h2></div>
