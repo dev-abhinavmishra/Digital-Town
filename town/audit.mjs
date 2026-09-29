@@ -89,7 +89,7 @@ const features = [
   { name: 'feat:baseball', ...rect(160, 580, 76, 76) },
   { name: 'feat:retpond', ...rect(262, 655, 84, 62) },
   { name: 'feat:athplay', ...rect(130, 505, 30, 24) },
-  { name: 'feat:quad', ...rect(-480, -532, 190, 92) },
+  { name: 'feat:quad', ...rect(-480, -530, 190, 84) },
   { name: 'feat:trackring', ...rect(-730, 590, 137, 98) },   // ring 36*1.9 x, 36*1.35 z
   { name: 'feat:schfield', ...rect(-730, 590, 90, 55) },
   { name: 'feat:schplay', ...rect(-560, 645, 40, 26) },
@@ -98,6 +98,8 @@ const features = [
   { name: 'feat:gazebo', ...rect(505, 95, 11, 11) },
   { name: 'feat:dock', ...rect(540, 132, 20, 16) },
   { name: 'feat:swalk', ...rect(81, -52, 388, 8) },
+  { name: 'feat:campusgate', ...rect(-480, -505, 26, 4) },
+  { name: 'feat:preservecommons', ...rect(-530, 238, 74, 52) },
 ];
 
 console.log('=== ROADS vs BUILDINGS ===');

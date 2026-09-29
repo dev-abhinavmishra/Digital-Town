@@ -30,6 +30,8 @@ const css = `
 #uiBudget.open .sub { display:block; }
 #uiBudget .sub .k { color:#cdd7dd; }
 #uiBtns { display:flex; gap:7px; }
+#uiTier { font-size:9px; letter-spacing:1.4px; color:rgba(255,255,255,.38);
+  text-align:right; padding:3px 2px 0; user-select:none; }
 #uiTour { position:fixed; left:14px; bottom:14px; z-index:41; }
 #uiDrawer { position:fixed; top:64px; right:-340px; width:320px; height:calc(100% - 64px); z-index:45;
   background:rgba(11,15,19,.94); border-left:1px solid rgba(255,255,255,.12);
@@ -123,6 +125,7 @@ export function installUI() {
         <div class="btn" id="uiBtnTour">&#9654; TOUR</div>
         <div class="btn" id="uiBtnRubric">&#10003; PROJECT BRIEF</div>
       </div>
+      <div id="uiTier" title="Active render-quality tier — ?q=high|med|low overrides"></div>
     </div>
     <div id="uiDrawer"><h2>${TOWN.name} — FACILITY DIRECTORY
       <span id="uiDrawerX" style="float:right;cursor:pointer;color:#8a99a3">&times;</span></h2></div>
@@ -203,7 +206,7 @@ export function installUI() {
     { b: 'silveroaks', t: 'Silver Oaks Senior Living ($750k)', c: 'Senior care sits east, quiet and leafy, between the hospice and the park — a full ageing-in-place loop.' },
     { b: 'park',     t: 'Willow Creek Park ($200k)', c: 'Community green space with ponds, sports fields and the bandshell — the town\'s social heart.' },
     { b: 'mall',     t: 'Havenbrook Commons Mall ($1.0M)', c: 'Commerce Blvd concentrates retail south of downtown — walkable, on the same corridor as the pharmacy and grocery.' },
-    { b: 'housing',  t: 'The Preserve (free housing)', c: 'The donated housing development fills Residential West — cottage rows, duplexes, orchards, all inside a 5-minute walk of school and park.' },
+    { b: 'preservecommons', t: 'The Preserve (free housing)', c: 'The donated housing development fills Residential West — Preserve Commons anchors it: twin mid-rise slabs around a resident courtyard.' },
     { b: 'school',   t: 'Havenbrook Unified School District ($300k)', c: 'School district on Schoolhouse Rd with its own athletic park — buses staged on the frontage.' },
   ];
   const tourBar = $('#uiTourBar');

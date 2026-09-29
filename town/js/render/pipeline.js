@@ -103,11 +103,15 @@ export function createPipeline(renderer, scene, camera, { time = 'day', ao = tru
   }
 
   // dusk drops the threshold so lit windows + lamps actually bloom (C6);
-  // night drops it further — window/lamp points are the whole scene
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 4, size.y / 4),
-    time === 'golden' ? .22 : time === 'dusk' ? .30 : time === 'night' ? .38 : .12, .5,
-    time === 'night' ? .72 : time === 'dusk' ? .85 : 1.02);
-  if (!skip || !skip.has('bloom')) composer.addPass(bloom);
+  // night drops it further — window/lamp points are the whole scene.
+  // skipped bloom isn't constructed at all — its render targets are real
+  // GPU memory a low-tier device can't spare
+  const bloom = (!skip || !skip.has('bloom'))
+    ? new UnrealBloomPass(new THREE.Vector2(size.x / 4, size.y / 4),
+        time === 'golden' ? .22 : time === 'dusk' ? .30 : time === 'night' ? .38 : .12, .5,
+        time === 'night' ? .72 : time === 'dusk' ? .85 : 1.02)
+    : null;
+  if (bloom) composer.addPass(bloom);
 
   // tiny tiling noise texture for film grain — a texture fetch is far cheaper
   // than sin/fract hash math on integrated GPUs

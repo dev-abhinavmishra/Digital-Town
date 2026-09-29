@@ -732,7 +732,7 @@ function hospital(s) {
   return g;
 }
 
-function medhall(s) { // university main hall with clock tower
+function medhall(s) { // university main hall — landmark campus anchor
   const g = new THREE.Group();
   const { w, d } = s;
   const maps = facadeMaps({ base: '#8d4a38', rows: Math.max(3, Math.round(s.h / 4)),
@@ -740,29 +740,48 @@ function medhall(s) { // university main hall with clock tower
   const trim = mat('#e8e2d4'), roofM = M_ROOFGRAY(w / 7, d / 7, '#4a5560');
   const main = box(w, s.h, d, null); main.material = wallMats(maps, roofM); g.add(main);
   const roof = gableRoof(w, 7, d, roofM); roof.position.y = s.h; g.add(roof);
-  // clock tower
-  const tw = 12;
-  const tb = box(tw, s.h + 16, tw, null, 0, 0, 0);
+  // end pavilions — projecting wings read as a palatial institution
+  for (const sx of [-1, 1]) {
+    const pw = 18, ph = s.h * .78;
+    const pav = box(pw, ph, d + 7, null, sx * (w / 2 - pw / 2), 0, 0);
+    pav.material = wallMats(facadeMaps({ base: '#8d4a38', rows: 3,
+      cols: 3, win: '#2c3e50', brickLines: true }), roofM); g.add(pav);
+    const proof = hipRoof(pw + 3, 4.5, d + 10, roofM);
+    proof.position.set(sx * (w / 2 - pw / 2), ph, 0); g.add(proof);
+    for (const sz of [-1, 1])
+      g.add(box(1.4, ph, 1.4, trim, sx * (w / 2 - .9), 0, sz * (d / 2 + 2.6)));
+  }
+  // belt cornice + raised parapet band over the main block
+  g.add(box(w + .6, 1.0, d + .6, trim, 0, s.h - 1.1, 0));
+  // clock tower — taller, crowned with a domed cupola
+  const tw = 14, th = s.h + 22;
+  const tb = box(tw, th, tw, null, 0, 0, 0);
   tb.material = wallMats(maps, roofM); g.add(tb);
-  const cap = hipRoof(tw + 4, 7, tw + 4, roofM); cap.position.y = s.h + 16 + .1; g.add(cap);
+  g.add(box(tw + 2, 1.0, tw + 2, trim, 0, th - 6.5, 0));         // belfry cornice
+  const cap = hipRoof(tw + 4, 5.5, tw + 4, roofM); cap.position.y = th + .1; g.add(cap);
+  const drum = cyl(3.6, 4.2, 3.4, trim, 0, th + 4.6, 0, 12); g.add(drum);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(4.4, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    mat('#3d6b8a', { metalness: .35, roughness: .4 }));
+  dome.position.y = th + 8; g.add(dome);
+  g.add(cyl(.14, .3, 3.4, mat('#d4ac0d', { metalness: .6, roughness: .4 }), 0, th + 12.2, 0, 8));
   const cf = clockTexture();
   [[0, 0, tw / 2 + .2, 0], [0, 0, -tw / 2 - .2, Math.PI], [tw / 2 + .2, 0, 0, Math.PI / 2], [-tw / 2 - .2, 0, 0, -Math.PI / 2]]
     .forEach(([ox, , oz, ry]) => {
-      const f = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new M({ map: cf }));
-      f.position.set(ox, s.h + 10, oz); f.rotation.y = ry; g.add(f);
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 6.5), new M({ map: cf }));
+      f.position.set(ox, th - 3.4, oz); f.rotation.y = ry; g.add(f);
     });
   // corner quoins (limestone strips)
   for (const sx of [-1, 1]) for (const sz of [-1, 1])
     g.add(box(1.6, s.h, 1.6, trim, sx * (w / 2 - .5), 0, sz * (d / 2 - .5)));
-  // entry colonnade
-  for (let i = -2; i <= 2; i++) {
+  // entry colonnade — seven columns under a full entablature
+  for (let i = -3; i <= 3; i++) {
     g.add(cyl(.7, .8, 7, trim, i * 5, 0, d / 2 + 2.4));
     g.add(box(1.6, .5, 1.6, trim, i * 5, 6.8, d / 2 + 2.4));   // capitals
     g.add(box(1.8, .5, 1.8, trim, i * 5, 0, d / 2 + 2.4));     // bases
   }
-  const ent = box(26, 1.2, 6, trim, 0, 7, d / 2 + 2.4); g.add(ent);
-  const ped = gableRoof(26, 4, 6, roofM); ped.position.set(0, 8.2, d / 2 + 2.4); g.add(ped);
-  sign(g, 'SCHOOL OF MEDICINE', w * .5, s.h - 2, d / 2 + .3, { bg: '#4a3428', font: 'bold 40px Georgia' });
+  const ent = box(34, 1.2, 6, trim, 0, 7, d / 2 + 2.4); g.add(ent);
+  const ped = gableRoof(34, 4, 6, roofM); ped.position.set(0, 8.2, d / 2 + 2.4); g.add(ped);
+  sign(g, 'SCHOOL OF MEDICINE', w * .5, s.h - 3.4, d / 2 + .3, { bg: '#4a3428', font: 'bold 40px Georgia' });
   // window strips
   for (let i = -3; i <= 3; i++) {
     if (Math.abs(i) < 2) continue;

@@ -16,6 +16,7 @@ import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick, RUNENV }
 import { pbr } from '../mats.js';
 import { ROADS } from '../layout.js';
 import { occupyRect, isFree } from './occ.js';
+import { makeBuilding } from '../buildings.js';
 import { heroLeaf, wayItem } from './stats.js';
 
 const M = THREE.MeshStandardMaterial;
@@ -90,7 +91,7 @@ function buildQuad(scene) {
   med.rotation.x = -Math.PI / 2; med.position.set(cx, Y + .07, cz); med.receiveShadow = true;
   add(med);
   const paths = [
-    plane(3.6, 34, PAVEH, cx, Y + .06, -561),          // N → medhall steps
+    plane(3.6, 34, PAVEH, cx, Y + .06, -550),          // N → medhall steps
     plane(3.6, 30, PAVEH, cx, Y + .06, -502),          // S → quad lot
     plane(84, 3.6, PAVEH, -430, Y + .06, cz),          // E → clinical sciences
     plane(84, 3.6, PAVEH, -530, Y + .06, cz),          // W → anatomy hall
@@ -131,6 +132,40 @@ function buildQuad(scene) {
   scene.add(g);
   occupyRect(cx, cz, 21, 21, 1);
   heroLeaf('quad', null, n, [cx, cz]);
+}
+
+/* ---------- A2b — medical campus gate + tree allée ----------
+   The med school reads as a campus, not just buildings on a lawn: a gate
+   arch + low wall stubs mark the quad's south entry, and a young-tree
+   allée lines the ceremonial walk to the hall's front steps. */
+function buildCampusGate(scene) {
+  const cx = -480, gz = -505;
+  if (!isFree(cx, gz, 8)) return;
+  const g = new THREE.Group();
+  // gate arch across the S approach path: stone pillars + lintel + sign
+  for (const s of [-1, 1])
+    g.add(box(1.4, 5.6, 1.4, STONE(), cx + s * 3.4, Y, gz));
+  g.add(box(9.2, .85, 1.5, TRIM(), cx, Y + 5.7, gz));
+  const gs = texPanel('HAVENBROOK UNIVERSITY', 7.4, 1.1,
+    { bg: '#20313d', fg: '#e8d9a8', font: 'bold 52px Georgia', h: 128 });
+  gs.position.set(cx, Y + 4.35, gz + .55); g.add(gs);
+  const gs2 = gs.clone(); gs2.rotation.y = Math.PI; gs2.position.z = gz - .55; g.add(gs2);
+  // low boundary-wall stubs hinting the campus edge
+  for (const s of [-1, 1])
+    g.add(box(7.5, .95, .85, STONE(), cx + s * 8.6, Y + .48, gz));
+  // young-tree allée flanking the N ceremonial walk (path x ±1.8 → trees ±4.5)
+  const ap = [];
+  for (const tz of [-544, -550, -556, -562])
+    for (const tx of [cx - 4.5, cx + 4.5]) {
+      ap.push({ geo: new THREE.CylinderGeometry(.16, .22, 2.8, 6), color: '#6b4a32', x: tx, y: Y + 1.4, z: tz });
+      ap.push({ geo: new THREE.SphereGeometry(1.85, 8, 6), color: '#4d7a3f', x: tx, y: Y + 3.9, z: tz });
+      ap.push({ geo: new THREE.SphereGeometry(1.2, 7, 5), color: '#5d8a48', x: tx + .9, y: Y + 3.3, z: tz + .5 });
+    }
+  const am = new THREE.Mesh(colored(ap), VCOL());
+  am.castShadow = am.receiveShadow = true; g.add(am);
+  scene.add(g);
+  occupyRect(cx, gz, 26, 4, 1);
+  heroLeaf('campus-gate', null, g.children.length, [cx, gz]);
 }
 
 /* ---------- A5 — Willow Creek bandshell pavilion ----------
@@ -353,12 +388,93 @@ function buildWaterTower(scene) {
   }, err => console.error('watertower.glb parse failed:', err));
 }
 
+/* ---------- A6 — Preserve Commons Apartments ----------
+   Landmark mid-rise housing anchor in Residential West: twin 5-storey slabs
+   around a paved resident courtyard with an entry sign reading THE PRESERVE.
+   Makes the (free, required) housing development read as a real district
+   landmark instead of anonymous houses. */
+function buildPreserveCommons(scene) {
+  // mid-block green inside the Residential West family block — the corridor
+  // between its two house rows is the only footprint big enough (z 214-246)
+  const cx = -530, cz = 230;
+  if (!isFree(cx, cz, 30)) return;
+  const g = new THREE.Group();
+  const spec = (x) => ({ type: 'apartment', x, z: cz - 6, w: 26, d: 14, h: 16, rot: Math.PI });
+  const a = makeBuilding(spec(cx - 22)), b = makeBuilding(spec(cx + 22));
+  g.add(a); g.add(b);
+  // paved courtyard between the slabs, opening south
+  const court = new THREE.Mesh(new THREE.CircleGeometry(15, 28), PAVEH);
+  court.rotation.x = -Math.PI / 2; court.position.set(cx, Y + .07, cz + 14);
+  court.receiveShadow = true; g.add(court);
+  // entry sign pylon — reads toward the neighborhood street
+  const pyl = texPanel('THE PRESERVE\nAPARTMENT LIVING', 9, 2.6,
+    { bg: '#3d5a44', fg: '#efe8d4', font: 'bold 54px Georgia', h: 160 });
+  pyl.position.set(cx, Y + 4.2, cz + 28); g.add(pyl);
+  g.add(box(9.6, .5, .8, TRIM(), cx, Y + 5.7, cz + 28));
+  g.add(box(.9, 5.6, .9, STONE(), cx - 4.6, Y, cz + 28));
+  g.add(box(.9, 5.6, .9, STONE(), cx + 4.6, Y, cz + 28));
+  // courtyard benches + young trees (all static → merge)
+  const parts = [];
+  for (const a of [.6, 2.1, 4.2, 5.7]) {
+    const bx = cx + Math.cos(a) * 10, bz = cz + 14 + Math.sin(a) * 10;
+    parts.push({ geo: new THREE.BoxGeometry(2.4, .14, .6), color: '#7a5c3e', x: bx, y: Y + .62, z: bz, ry: -a });
+    for (const lx of [-1, 1])
+      parts.push({ geo: new THREE.BoxGeometry(.16, .5, .5), color: '#3a3f43',
+        x: bx + lx * Math.cos(a), y: Y + .3, z: bz + lx * Math.sin(a), ry: -a });
+  }
+  for (const a of [1.2, 3.0, 5.0]) {
+    const tx = cx + Math.cos(a) * 13.5, tz = cz + 14 + Math.sin(a) * 13.5;
+    parts.push({ geo: new THREE.CylinderGeometry(.14, .2, 2.6, 6), color: '#6b4a32', x: tx, y: Y, z: tz });
+    parts.push({ geo: new THREE.SphereGeometry(1.7, 8, 6), color: '#4d7a3f', x: tx, y: Y + 3.4, z: tz });
+    parts.push({ geo: new THREE.SphereGeometry(1.15, 7, 5), color: '#5d8a48', x: tx + .9, y: Y + 2.9, z: tz + .5 });
+  }
+  // amenity build-out: raised pool + umbrellas in the courtyard, a small
+  // playground west of it, and a hedge enclosing the court's open edges —
+  // reads as a lived-in apartment complex, not just two slabs
+  const POOLW = () => new M({ color: '#46a0c4', roughness: .18 });
+  g.add(box(10, .34, 6, TRIM(), cx + 2, Y + .18, cz + 15));        // coping slab
+  g.add(box(9, .4, 5, POOLW(), cx + 2, Y + .38, cz + 15));         // water inset
+  for (const [ux, uz] of [[cx - 1, cz + 21], [cx + 5, cz + 21]]) {
+    parts.push({ geo: new THREE.CylinderGeometry(.05, .07, 3, 6), color: '#8d949a', x: ux, y: Y + 1.5, z: uz });
+    parts.push({ geo: new THREE.ConeGeometry(1.15, .7, 8), color: '#c96f4a', x: ux, y: Y + 3.28, z: uz });
+  }
+  // swing set + slide (playground sits at the court's west lip)
+  const px = cx - 15, pz = cz + 18;
+  for (const lx of [-1.9, 1.9])
+    parts.push({ geo: new THREE.CylinderGeometry(.06, .08, 2.7, 6), color: '#3a6b4f', x: px + lx, y: Y + 1.35, z: pz });
+  parts.push({ geo: new THREE.BoxGeometry(4.3, .12, .12), color: '#3a6b4f', x: px, y: Y + 2.7, z: pz });
+  for (const sx of [-.9, .9]) {
+    for (const lx of [-.18, .18])
+      parts.push({ geo: new THREE.CylinderGeometry(.016, .016, 1.9, 4), color: '#b9c0c5', x: px + sx + lx, y: Y + 1.74, z: pz });
+    parts.push({ geo: new THREE.BoxGeometry(.5, .09, .3), color: '#7a5c3e', x: px + sx, y: Y + .78, z: pz });
+  }
+  const slide = box(.9, .12, 3.8, mat('#d4ac0d'), px - 3.4, Y + 1.3, pz + 1);
+  slide.rotation.x = -.62; g.add(slide);
+  g.add(box(.9, 2.4, .14, mat('#d4ac0d'), px - 3.4, Y + 1.2, pz + 2.6));
+  // hedge enclosing the open sides — gap south-center where the pylon meets the court
+  for (let hx = cx - 30; hx <= cx + 28; hx += 4) {
+    if (Math.abs(hx - cx) < 5) continue;
+    parts.push({ geo: new THREE.BoxGeometry(3.4, .95, .8), color: '#3f6b35', x: hx, y: Y + .48, z: cz + 28 });
+  }
+  for (const hz of [cz + 17, cz + 21, cz + 25]) {
+    for (const hx of [cx - 29, cx + 27])
+      parts.push({ geo: new THREE.BoxGeometry(.8, .95, 3.4), color: '#3f6b35', x: hx, y: Y + .48, z: hz });
+  }
+  const cm = new THREE.Mesh(colored(parts), VCOL());
+  cm.castShadow = cm.receiveShadow = true; g.add(cm);
+  scene.add(g);
+  occupyRect(cx, cz + 8, 74, 52, 2);
+  heroLeaf('preserve-commons', null, g.children.length, [cx, cz]);
+}
+
 export function buildHero(scene) {
   buildPylon(scene);
   buildCityHall(scene);
   buildWaterTower(scene);
   buildConservatory(scene);
   buildQuad(scene);
+  buildCampusGate(scene);
   buildPavilion(scene);
   buildWayfinding(scene);
+  buildPreserveCommons(scene);
 }
