@@ -206,7 +206,7 @@ export function installUI() {
     { b: 'silveroaks', t: 'Silver Oaks Senior Living ($750k)', c: 'Senior care sits east, quiet and leafy, between the hospice and the park — a full ageing-in-place loop.' },
     { b: 'park',     t: 'Willow Creek Park ($200k)', c: 'Community green space with ponds, sports fields and the bandshell — the town\'s social heart.' },
     { b: 'mall',     t: 'Havenbrook Commons Mall ($1.0M)', c: 'Commerce Blvd concentrates retail south of downtown — walkable, on the same corridor as the pharmacy and grocery.' },
-    { b: 'housing',  t: 'The Preserve (free housing)', c: 'The donated housing development fills Residential West — cottage rows, duplexes, orchards, all inside a 5-minute walk of school and park.' },
+    { b: 'preservecommons', t: 'The Preserve (free housing)', c: 'The donated housing development fills Residential West — Preserve Commons anchors it: twin mid-rise slabs around a resident courtyard.' },
     { b: 'school',   t: 'Havenbrook Unified School District ($300k)', c: 'School district on Schoolhouse Rd with its own athletic park — buses staged on the frontage.' },
   ];
   const tourBar = $('#uiTourBar');
