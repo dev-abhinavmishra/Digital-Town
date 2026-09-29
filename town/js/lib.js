@@ -1,6 +1,6 @@
 // lib.js — seeded RNG, canvas textures, geometry helpers, merging & instancing
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /* ================= RNG ================= */
 export function mulberry32(seed) {
@@ -1079,7 +1079,11 @@ export function colored(parts) {
     }
     geos.push(g);
   }
-  const merged = mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g), false);
+  /* index everything so the merge stays indexed — de-indexing triples
+     vertex memory for zero visual gain; mergeVertices welds identical
+     verts on the rare non-indexed custom buffer instead */
+  const merged = mergeGeometries(
+    geos.map(g => g.index ? g : mergeVertices(g)), false);
   geos.forEach(g => g.dispose());
   return merged;
 }
@@ -1140,7 +1144,7 @@ export function mergeStatic(root) {
       if (!g.attributes.normal) g.computeVertexNormals();
       let b = buckets.get(mat);
       if (!b) { b = { geos: [], cast: false, recv: false }; buckets.set(mat, b); }
-      b.geos.push(g.index ? g.toNonIndexed() : g);
+      b.geos.push(g);
       b.cast = b.cast || o.castShadow; b.recv = b.recv || o.receiveShadow;
     }
     doomed.push(o);
@@ -1149,7 +1153,9 @@ export function mergeStatic(root) {
   const out = new THREE.Group();
   out.name = 'merged';
   for (const [material, b] of buckets) {
-    const merged = mergeGeometries(b.geos, false);
+    // indexed merge — weld the rare non-indexed parts (see colored())
+    const merged = mergeGeometries(
+      b.geos.map(g => g.index ? g : mergeVertices(g)), false);
     const mesh = new THREE.Mesh(merged, material);
     mesh.castShadow = b.cast; mesh.receiveShadow = b.recv;
     mesh.matrixAutoUpdate = false;

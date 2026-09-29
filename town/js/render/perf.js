@@ -6,6 +6,7 @@
    ?q=high|med|low forces a tier (eval + manual override). */
 
 const CRASH_KEY = 'dt_ctxlost';
+const TIER_KEY = 'dt_q';            // user-saved tier pref (ui settings popover)
 const WINDOW_MS = 15 * 60 * 1000;   // strikes older than this age out and retry
 const MAX_STRIKES = 8;
 
@@ -47,21 +48,40 @@ function gpuName() {
   } catch { return ''; }
 }
 
+/* user override saved by the settings popover (AUTO = key absent) */
+export function savedTier() {
+  try {
+    const v = localStorage.getItem(TIER_KEY);
+    return v === 'high' || v === 'med' || v === 'low' ? v : null;
+  } catch { return null; }
+}
+export function setTierPref(v) {
+  try {
+    if (v) localStorage.setItem(TIER_KEY, v);
+    else localStorage.removeItem(TIER_KEY);
+  } catch {}
+}
+
 export function pickTier(params) {
   const q = (params.get('q') || params.get('quality') || '').toLowerCase();
   if (q === 'high' || q === 'med' || q === 'medium' || q === 'low')
     return q === 'medium' ? 'med' : q;
 
+  const saved = savedTier();
+  if (saved) return saved;
+
   const n = crashes();
   if (n >= 2) return 'low';
   if (n >= 1) return 'med';
 
-  const mem = navigator.deviceMemory || 8;
+  const mem = navigator.deviceMemory || 8;   // powers of two, capped at 8
   const cores = navigator.hardwareConcurrency || 8;
   const weak = /swiftshader|llvmpipe|softpipe|software|basic render|mali-[g4]?[0-9]{1,2}\b|powervr|adreno [1-4][0-9]{2}|intel.*(hd|uhd|gma)/i
     .test(gpuName());
-  if (mem <= 4 && weak) return 'low';
-  if (mem <= 4 || cores <= 4 || weak) return 'med';
+  /* <=4GB RAM is the binding constraint regardless of GPU — the JS heap +
+     geometry buffers alone can OOM the tab */
+  if (mem <= 4) return 'low';
+  if (cores <= 4 || weak) return 'med';
   return 'high';
 }
 

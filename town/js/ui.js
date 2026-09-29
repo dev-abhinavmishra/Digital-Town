@@ -31,7 +31,22 @@ const css = `
 #uiBudget .sub .k { color:#cdd7dd; }
 #uiBtns { display:flex; gap:7px; }
 #uiTier { font-size:9px; letter-spacing:1.4px; color:rgba(255,255,255,.38);
-  text-align:right; padding:3px 2px 0; user-select:none; }
+  text-align:right; padding:3px 2px 0; user-select:none; cursor:pointer; }
+#uiTier:hover { color:rgba(255,255,255,.7); }
+#uiTierMenu { position:fixed; right:14px; top:150px; z-index:48; width:190px;
+  background:rgba(11,15,19,.95); border:1px solid rgba(255,255,255,.14);
+  border-radius:12px; padding:8px; color:#e8ecef; backdrop-filter:blur(10px);
+  display:none; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+#uiTierMenu.open { display:block; }
+#uiTierMenu h5 { margin:2px 6px 6px; font-size:9.5px; letter-spacing:1.4px;
+  color:#7d929e; font-weight:600; }
+#uiTierMenu .t { display:flex; justify-content:space-between; align-items:baseline;
+  gap:8px; padding:7px 8px; border-radius:8px; cursor:pointer; font-size:11.5px;
+  font-weight:700; letter-spacing:.8px; }
+#uiTierMenu .t span { font-size:9.5px; font-weight:400; color:#8fa1ab; letter-spacing:0; }
+#uiTierMenu .t:hover { background:rgba(255,255,255,.07); }
+#uiTierMenu .t.on { background:rgba(110,160,220,.16); }
+#uiTierMenu .t.on::after { content:'\\2713'; color:#9ec3ec; font-size:10px; }
 #uiTour { position:fixed; left:14px; bottom:14px; z-index:41; }
 #uiDrawer { position:fixed; top:64px; right:-340px; width:320px; height:calc(100% - 64px); z-index:45;
   background:rgba(11,15,19,.94); border-left:1px solid rgba(255,255,255,.12);
@@ -125,7 +140,8 @@ export function installUI() {
         <div class="btn" id="uiBtnTour">&#9654; TOUR</div>
         <div class="btn" id="uiBtnRubric">&#10003; PROJECT BRIEF</div>
       </div>
-      <div id="uiTier" title="Active render-quality tier — ?q=high|med|low overrides"></div>
+      <div id="uiTier" title="Active render-quality tier — click to change"></div>
+      <div id="uiTierMenu"><h5>RENDER QUALITY</h5></div>
     </div>
     <div id="uiDrawer"><h2>${TOWN.name} — FACILITY DIRECTORY
       <span id="uiDrawerX" style="float:right;cursor:pointer;color:#8a99a3">&times;</span></h2></div>
@@ -143,6 +159,34 @@ export function installUI() {
   const $ = s => root.querySelector(s);
   const budget = $('#uiBudget');
   budget.addEventListener('click', () => budget.classList.toggle('open'));
+
+  /* ---------------- quality tier settings ---------------- */
+  const tierChip = $('#uiTier'), tierMenu = $('#uiTierMenu');
+  const TIERS = [['auto', 'adapts to this device'], ['high', 'full fidelity'],
+    ['med', 'lighter shadows & effects'], ['low', 'fastest — weak GPUs / low RAM']];
+  for (const [q, hint] of TIERS) {
+    const d = document.createElement('div');
+    d.className = 't'; d.dataset.q = q;
+    d.innerHTML = `${q.toUpperCase()}<span>${hint}</span>`;
+    d.addEventListener('click', () => {
+      try { q === 'auto' ? localStorage.removeItem('dt_q')
+                         : localStorage.setItem('dt_q', q); } catch {}
+      location.reload();
+    });
+    tierMenu.appendChild(d);
+  }
+  tierChip.addEventListener('click', e => {
+    e.stopPropagation();
+    let saved = 'auto';
+    try { saved = localStorage.getItem('dt_q') || 'auto'; } catch {}
+    tierMenu.querySelectorAll('.t').forEach(t =>
+      t.classList.toggle('on', t.dataset.q === saved));
+    tierMenu.classList.toggle('open');
+  });
+  addEventListener('mousedown', e => {
+    if (tierMenu.classList.contains('open') && !tierMenu.contains(e.target) && e.target !== tierChip)
+      tierMenu.classList.remove('open');
+  });
 
   /* ---------------- facility directory ---------------- */
   const drawer = $('#uiDrawer');
