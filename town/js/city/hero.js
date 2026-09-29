@@ -134,6 +134,40 @@ function buildQuad(scene) {
   heroLeaf('quad', null, n, [cx, cz]);
 }
 
+/* ---------- A2b — medical campus gate + tree allée ----------
+   The med school reads as a campus, not just buildings on a lawn: a gate
+   arch + low wall stubs mark the quad's south entry, and a young-tree
+   allée lines the ceremonial walk to the hall's front steps. */
+function buildCampusGate(scene) {
+  const cx = -480, gz = -505;
+  if (!isFree(cx, gz, 8)) return;
+  const g = new THREE.Group();
+  // gate arch across the S approach path: stone pillars + lintel + sign
+  for (const s of [-1, 1])
+    g.add(box(1.4, 5.6, 1.4, STONE(), cx + s * 3.4, Y, gz));
+  g.add(box(9.2, .85, 1.5, TRIM(), cx, Y + 5.7, gz));
+  const gs = texPanel('HAVENBROOK UNIVERSITY', 7.4, 1.1,
+    { bg: '#20313d', fg: '#e8d9a8', font: 'bold 52px Georgia', h: 128 });
+  gs.position.set(cx, Y + 4.35, gz + .55); g.add(gs);
+  const gs2 = gs.clone(); gs2.rotation.y = Math.PI; gs2.position.z = gz - .55; g.add(gs2);
+  // low boundary-wall stubs hinting the campus edge
+  for (const s of [-1, 1])
+    g.add(box(7.5, .95, .85, STONE(), cx + s * 8.6, Y + .48, gz));
+  // young-tree allée flanking the N ceremonial walk (path x ±1.8 → trees ±4.5)
+  const ap = [];
+  for (const tz of [-544, -550, -556, -562])
+    for (const tx of [cx - 4.5, cx + 4.5]) {
+      ap.push({ geo: new THREE.CylinderGeometry(.16, .22, 2.8, 6), color: '#6b4a32', x: tx, y: Y + 1.4, z: tz });
+      ap.push({ geo: new THREE.SphereGeometry(1.85, 8, 6), color: '#4d7a3f', x: tx, y: Y + 3.9, z: tz });
+      ap.push({ geo: new THREE.SphereGeometry(1.2, 7, 5), color: '#5d8a48', x: tx + .9, y: Y + 3.3, z: tz + .5 });
+    }
+  const am = new THREE.Mesh(colored(ap), VCOL());
+  am.castShadow = am.receiveShadow = true; g.add(am);
+  scene.add(g);
+  occupyRect(cx, gz, 26, 4, 1);
+  heroLeaf('campus-gate', null, g.children.length, [cx, gz]);
+}
+
 /* ---------- A5 — Willow Creek bandshell pavilion ----------
    Signature open-air bandshell east of the main pond: paved plaza, raised
    stage platform, half-shell backdrop, cantilevered canopy. Faces west toward
@@ -439,6 +473,7 @@ export function buildHero(scene) {
   buildWaterTower(scene);
   buildConservatory(scene);
   buildQuad(scene);
+  buildCampusGate(scene);
   buildPavilion(scene);
   buildWayfinding(scene);
   buildPreserveCommons(scene);
