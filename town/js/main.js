@@ -235,8 +235,9 @@ if (TIME === 'golden' || TIME === 'dusk' || TIME === 'night')
   lampIM.material.emissiveIntensity = TIME === 'night' ? 1.9 : 1.4;
 buildTrees(scene);
 buildCars(scene);
-buildTraffic(scene);
-buildPeople(scene);
+/* MIN: no moving traffic or pedestrians — parked cars remain as static
+   set-dressing (merged cells), tickWorld null-guards the absent systems */
+if (!MIN) { buildTraffic(scene); buildPeople(scene); }
 buildFences(scene);
 buildCountryside(scene);
 buildMountains(scene);
@@ -310,7 +311,7 @@ if (MIN) {
 /* presentation layer — budget tracker, facility directory, info cards, tour
    (independent of ?labels: the directory/cards work either way) */
 installUI();
-document.getElementById('uiTier').textContent = TIER.toUpperCase();
+document.getElementById('uiTier').textContent = 'PERF ' + TIER.toUpperCase();
 (window.__prof ||= []).push(['mergeStatic', Math.round(performance.now() - _tm)]);
 
 /* lit windows + material-upgrade pass on the shared cached materials:
