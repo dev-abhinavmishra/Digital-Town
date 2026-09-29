@@ -97,6 +97,7 @@ export const TIER_CFG = {
   med:  { maxRatio: 1.5, msaa: 2, ao: false, bloom: true, smaa: true,  shadow: 2048, detail: 1 },
   low:  { maxRatio: 1,   msaa: 0, ao: false, bloom: false, smaa: true,  shadow: 1024, detail: 1 },
   /* thinned scene for devices that cannot rasterize the full town —
-     ~22% of scattered instanced content, no shadow pass, .6x pixels */
-  min:  { maxRatio: .6,  msaa: 0, ao: false, bloom: false, smaa: false, shadow: 0,    detail: .22 },
+     ~12% of scattered instanced content + 320m-chunk distance culling in
+     main.js, no shadow pass, .6x pixels */
+  min:  { maxRatio: .6,  msaa: 0, ao: false, bloom: false, smaa: false, shadow: 0,    detail: .12 },
 };

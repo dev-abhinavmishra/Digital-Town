@@ -16,7 +16,7 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildRain,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
-import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
+import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic, splitInstanced,
          groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX, RUNENV,
          DETAIL } from './lib.js';
 import { M_GRASS, pbr, texReport } from './mats.js';
@@ -284,9 +284,28 @@ for (const a of [.62, -.62]) {
 scene.add(plane(190, 6, qp, -480, .33, -532, -Math.PI / 2, 3));
 scene.add(cyl(4, 4.4, .9, mat('#9aa0a3'), -480, .3, -532, 20));
 
-/* collapse all static geometry into one mesh per material */
+/* collapse all static geometry into one mesh per material per cell —
+   street views frustum-cull far cells, and MIN distance-culls whole cells.
+   MIN uses 160m cells (finer radius granularity); other tiers use 320m. */
 const _tm = performance.now();
-mergeStatic(scene);
+const CHUNK = MIN ? 160 : 320;
+const MERGED = mergeStatic(scene, { chunk: CHUNK });
+/* every chunk-cullable object: merged cells on all tiers; on MIN the big
+   static instanced scatter (trees/grass/litter/furniture) is also rebucketed
+   into cells so it drops out with distance like the merged geometry */
+const CHUNKS = [...MERGED.children];
+if (MIN) {
+  const tagged = [];
+  scene.traverse(o => { if (o.isInstancedMesh && o.userData.staticInst) tagged.push(o); });
+  for (const im of tagged) {
+    const grp = splitInstanced(im, CHUNK);
+    grp.position.copy(im.position); grp.quaternion.copy(im.quaternion);
+    grp.scale.copy(im.scale); grp.matrixAutoUpdate = im.matrixAutoUpdate;
+    im.parent.add(grp); im.parent.remove(im);
+    CHUNKS.push(...grp.children);
+  }
+  (window.__prof ||= []).push(['minSplit', tagged.length]);
+}
 
 /* presentation layer — budget tracker, facility directory, info cards, tour
    (independent of ?labels: the directory/cards work either way) */
@@ -734,6 +753,17 @@ function tick() {
   const inside = !!(interior && interior.on);
   if (!inside) tickWorld(t, dt);
   if (occluderCull && !inside) occluderCull.tick(activeCam);
+  /* MIN tier: distance-cull whole 320m merge cells. Radius grows with
+     altitude so the aerial keeps the town intact while a street camera
+     drops ~80% of the static world. */
+  if (MIN && (frames % 10) === 0) {
+    const r = Math.max(300, activeCam.position.y * 3.0), r2 = r * r;
+    const px = activeCam.position.x, pz = activeCam.position.z;
+    for (const m of CHUNKS) {
+      const dx = m.userData.ccx - px, dz = m.userData.ccz - pz;
+      m.visible = dx * dx + dz * dz < r2;
+    }
+  }
   if (composer) {
     if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
       composer.passes[0].camera = activeCam;
