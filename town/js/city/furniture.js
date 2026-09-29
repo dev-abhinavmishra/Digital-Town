@@ -8,7 +8,7 @@
 // junction pieces exempt the two crossing roads (same convention as lamps).
 import * as THREE from 'three';
 import { ROADS, PLAZA, PARK_ZONE } from '../layout.js';
-import { colored, VCOL, instances, R, rr, pick } from '../lib.js';
+import { colored, VCOL, instances, R, rr, pick, thin } from '../lib.js';
 import { isFree, streetBand } from './occ.js';
 import { intersections } from './streetscape.js';
 import { CITY } from './stats.js';
@@ -285,7 +285,7 @@ export function buildFurniture(scene) {
 
   /* ---- emit: one InstancedMesh per family, VCOL material ---- */
   const put = (geo, list, shadow) =>
-    list.length && scene.add(instances(geo, VCOL(), list, { shadow }));
+    list.length && scene.add(instances(geo, VCOL(), thin(list), { shadow }));
   put(benchGeo(), benches, true);
   put(planterGeo(), planters, false);
   put(hydrantGeo(), hydrants, false);

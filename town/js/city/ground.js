@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ROADS, LOTS, BUILDINGS, APARTMENTS, GREENS, PARK_ZONE,
          GREEN_BELT, SE_GREEN, HOUSE_BLOCKS, PLAZA } from '../layout.js';
-import { makeCanvas, canvasTex, instances, R, rr, pick } from '../lib.js';
+import { makeCanvas, canvasTex, instances, R, rr, pick, thin } from '../lib.js';
 import { GeoBin } from './geo.js';
 import { isFree, streetBand } from './occ.js';
 import { intersections } from './streetscape.js';
@@ -297,7 +297,7 @@ export function buildGroundDetail(scene) {
           color: pick(['#ffffff', '#f0e6d0']) });
     }
   }
-  const litIM = instances(litGeo, litM, litter, { shadow: false });
+  const litIM = instances(litGeo, litM, thin(litter), { shadow: false });
   litIM.frustumCulled = false;
   scene.add(litIM);
   G.litter = litter.length;
@@ -352,7 +352,7 @@ export function buildGroundDetail(scene) {
     G.mulch++;
     pebbleRing(l.x, l.z, 2.1, 7);
   }
-  const pebIM = instances(pebGeo, pebM, pebbles, { shadow: false });
+  const pebIM = instances(pebGeo, pebM, thin(pebbles), { shadow: false });
   pebIM.frustumCulled = false;
   scene.add(pebIM);
 
@@ -376,7 +376,7 @@ export function buildGroundDetail(scene) {
   sow(PARK_ZONE.x0 + 8, PARK_ZONE.x1 - 8, PARK_ZONE.z0 + 8, PARK_ZONE.z1 - 8, 170);
   sow(SE_GREEN.x0 + 4, SE_GREEN.x1 - 4, SE_GREEN.z0 + 4, SE_GREEN.z1 - 4, 140);
   sow(-800, -744, -700, 690, 90);
-  const flIM = instances(flGeo, flM, flowers, { shadow: false });
+  const flIM = instances(flGeo, flM, thin(flowers), { shadow: false });
   flIM.frustumCulled = false;
   scene.add(flIM);
   G.flowers = flowers.length;
@@ -496,7 +496,7 @@ export function buildGroundDetail(scene) {
   // district lawns the two aerial views land on — med campus + senior side
   sowGrass(-700, -330, -720, -390, 4200, .02);   // med campus lawn body
   sowGrass(340, 800, -700, -350, 4600, .02);     // senior district lawn
-  const grassIM = instances(bladeGeo, bladeM, tufts, { shadow: false });
+  const grassIM = instances(bladeGeo, bladeM, thin(tufts), { shadow: false });
   grassIM.frustumCulled = false;
   scene.add(grassIM);
   G.grass = tufts.length;

@@ -163,7 +163,8 @@ export function installUI() {
   /* ---------------- quality tier settings ---------------- */
   const tierChip = $('#uiTier'), tierMenu = $('#uiTierMenu');
   const TIERS = [['auto', 'adapts to this device'], ['high', 'full fidelity'],
-    ['med', 'lighter shadows & effects'], ['low', 'fastest — weak GPUs / low RAM']];
+    ['med', 'lighter shadows & effects'], ['low', 'no post-fx — weak GPUs / low RAM'],
+    ['min', 'minimal scene — very weak devices']];
   for (const [q, hint] of TIERS) {
     const d = document.createElement('div');
     d.className = 't'; d.dataset.q = q;

@@ -13,6 +13,15 @@ export function mulberry32(seed) {
   };
 }
 export const R = mulberry32(20260924);          // global deterministic stream
+
+/* MIN-tier scene density knob — builders thin scattered instanced content
+   (trees, cars, people, sprigs, furniture) by this factor. Shared mutable so
+   pickTier can set it before any builder runs; 1 = full scene. */
+export const DETAIL = { f: 1 };
+/* keep a deterministic, evenly-spread subset of a collected placement list —
+   preserves species/order mix (drop every Kth slot) */
+export const thin = arr => DETAIL.f >= 1 ? arr
+  : arr.filter((_, i) => i % Math.max(1, Math.round(1 / DETAIL.f)) === 0);
 export const rr = (a, b) => a + R() * (b - a);
 export const ri = (a, b) => Math.floor(rr(a, b + 1));
 export const pick = (arr) => arr[Math.floor(R() * arr.length) % arr.length];

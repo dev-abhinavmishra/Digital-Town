@@ -17,7 +17,8 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic,
-         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX, RUNENV } from './lib.js';
+         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX, RUNENV,
+         DETAIL } from './lib.js';
 import { M_GRASS, pbr, texReport } from './mats.js';
 import { buildFurniture } from './city/furniture.js';
 import { buildGroundDetail } from './city/ground.js';
@@ -46,6 +47,10 @@ const CAM_BOUND = 1200;   // fly-cam stays inside the mountain ring
 /* ---------- quality tier (render/perf.js) ---------- */
 const TIER = pickTier(params);            // auto HIGH on capable GPUs — full fidelity
 const TC = TIER_CFG[TIER];
+/* MIN tier thins scattered instanced content via the shared knob (lib.js) —
+   must be set before any builder runs below */
+DETAIL.f = TC.detail ?? 1;
+const MIN = TIER === 'min';
 
 /* ---------- renderer ---------- */
 const renderer = new THREE.WebGLRenderer({ antialias: false,
@@ -57,7 +62,7 @@ renderer.setSize(innerWidth, innerHeight);
 const MAX_RATIO = Math.min(devicePixelRatio, TC.maxRatio);
 let pixelRatio = MAX_RATIO;
 renderer.setPixelRatio(pixelRatio);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = TC.shadow > 0;   // MIN: no shadow pass at all
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = TIME === 'golden' ? 1.05 : TIME === 'day' ? 1.06 : 1.0;
@@ -112,7 +117,7 @@ const sun = new THREE.DirectionalLight(RAIN ? 0xc8d4de : TIME === 'golden' ? 0xf
   (TIME === 'golden' ? 3.4 : TIME === 'dusk' ? 1.8 : TIME === 'night' ? .55 : 3.15) * (RAIN ? .38 : 1));
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
-sun.shadow.mapSize.set(TC.shadow, TC.shadow);
+if (TC.shadow) sun.shadow.mapSize.set(TC.shadow, TC.shadow);
 sun.shadow.camera.left = -700; sun.shadow.camera.right = 700;
 sun.shadow.camera.top = 700; sun.shadow.camera.bottom = -700;
 sun.shadow.camera.near = 200; sun.shadow.camera.far = 3600;
@@ -165,8 +170,9 @@ buildWater(scene);
 buildPark(scene);
 buildFerrisWheel(scene);
 buildWindmill(scene);
-buildCrane(scene); buildTennisCourts(scene); buildBalloons(scene);
-if (TIME === 'night') buildFireflies(scene);
+buildCrane(scene); buildTennisCourts(scene);
+if (!MIN) buildBalloons(scene);             // sky decor — dropped on MIN
+if (TIME === 'night' && !MIN) buildFireflies(scene);
 buildAthleticPark(scene);
 buildPlaza(scene, PLAZA);
 buildProps(scene);
@@ -540,7 +546,7 @@ let aoShed = false, bloomShed = false;   // latched fps fallbacks (see tick)
 /* LOW tier renders straight to screen — skips the composer's full-res
    render targets and every fullscreen pass; the cheapest possible path
    for devices where the tab's RAM/GPU budget is the constraint */
-const POST = !NOFX && TIER !== 'low';
+const POST = !NOFX && TIER !== 'low' && TIER !== 'min';
 if (POST) {
   pipe = createPipeline(renderer, scene, activeCam,
     { time: TIME, ao: !NOAO && TC.ao, pixelRatio, msaa: msaaSamples,

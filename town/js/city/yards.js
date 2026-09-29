@@ -13,7 +13,7 @@ import { isFree, occupyRect } from './occ.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
 import { yardLots } from './yardsData.js';
-import { colored, mat, instances, R, rr, pick, VCOL } from '../lib.js';
+import { colored, mat, instances, R, rr, pick, VCOL, thin } from '../lib.js';
 
 const Y = .28;
 const WOOD = '#8a7350', WOOD2 = '#7a6444';      // weathered cedar fence
@@ -188,7 +188,7 @@ function benchAt(parts, x, z, ry) {
 export function buildYards(scene) {
   const bin = new GeoBin();
   const parts = [];
-  const trees = [];
+  let trees = [];
 
   for (const lot of yardLots()) {
     if (lot.kind === 'commons') { commons(lot, bin, parts, trees); continue; }
@@ -240,8 +240,10 @@ export function buildYards(scene) {
 
   // yard trees instanced with the same two-tone scheme as buildTrees
   if (trees.length) {
+    trees = thin(trees);
     const trunkG = new THREE.CylinderGeometry(.22, .4, 3.6, 6); trunkG.translate(0, 1.8, 0);
     scene.add(instances(trunkG, mat('#4a3527'), trees.map(t => ({ x: t.x, z: t.z, s: t.s }))));
+    stats.yardTrees = trees.length;
     const folG = new THREE.IcosahedronGeometry(2.1, 0); folG.scale(1, .85, 1); folG.translate(0, 4.6, 0);
     const folG2 = new THREE.IcosahedronGeometry(1.4, 0); folG2.translate(.9, 5.9, .4);
     const fol = new THREE.InstancedMesh(

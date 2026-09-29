@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { BUILDINGS, FILLER, APARTMENTS, LOTS, HOUSE_BLOCKS,
          PLAZA, PARK_ZONE, GREEN_BELT, SE_GREEN } from '../layout.js';
 import { colored, instances, mat, canvasTex, makeCanvas, VCOL,
-         R, rr, pick } from '../lib.js';
+         R, rr, pick, thin } from '../lib.js';
 import { GeoBin } from './geo.js';
 import { occupied, occupyRect, streetBand } from './occ.js';
 
@@ -680,6 +680,7 @@ export function buildBacklots(scene) {
   const vcol = VCOL();
   const put = (geo, material, list, shadow = true) => {
     if (!list.length) return 0;
+    list = thin(list);
     scene.add(instances(geo, material, list, { shadow }));
     return Math.round((geo.index ? geo.index.count
       : geo.attributes.position.count) / 3) * list.length;

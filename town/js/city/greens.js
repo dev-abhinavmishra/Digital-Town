@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GREENS, PLAZA } from '../layout.js';
 import { plane, mat, colored, VCOL, instances, waterMaterial, signTexture,
-         makeCanvas, canvasTex, R, rr, pick, mulberry32 } from '../lib.js';
+         makeCanvas, canvasTex, R, rr, pick, mulberry32, thin } from '../lib.js';
 import { pbr } from '../mats.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
@@ -256,8 +256,8 @@ export function buildGreens(scene) {
     const folG = new THREE.IcosahedronGeometry(2.3, 0); folG.translate(0, 5.6, 0);
     const conG = new THREE.ConeGeometry(1.9, 7.4, 7); conG.translate(0, 4.6, 0);
     const folM = new M({ color: '#fff', roughness: .95, flatShading: true });
-    const oaks = out.trees.filter(t => t.t !== 'p' && t.t !== 'c');
-    const cons = out.trees.filter(t => t.t === 'p' || t.t === 'c');
+    const oaks = thin(out.trees.filter(t => t.t !== 'p' && t.t !== 'c'));
+    const cons = thin(out.trees.filter(t => t.t === 'p' || t.t === 'c'));
     if (oaks.length) scene.add(instances(trunkG, trunkM, oaks));
     if (oaks.length) {
       const im = new THREE.InstancedMesh(folG, folM, oaks.length);
@@ -285,7 +285,7 @@ export function buildGreens(scene) {
   }
   if (out.flowers.length) {
     const flG = new THREE.IcosahedronGeometry(.24, 0); flG.translate(0, .4, 0);
-    scene.add(instances(flG, new M({ color: '#fff', roughness: .85 }), out.flowers, { shadow: false }));
+    scene.add(instances(flG, new M({ color: '#fff', roughness: .85 }), thin(out.flowers), { shadow: false }));
   }
   if (parts.length) {
     const pm = new THREE.Mesh(colored(parts), VCOL());
