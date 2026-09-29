@@ -62,27 +62,33 @@ export function setTierPref(v) {
   } catch {}
 }
 
+const TIER_ORD = { low: 0, med: 1, high: 2 };
+const lower = (a, b) => TIER_ORD[a] <= TIER_ORD[b] ? a : b;
+
 export function pickTier(params) {
   const q = (params.get('q') || params.get('quality') || '').toLowerCase();
   if (q === 'high' || q === 'med' || q === 'medium' || q === 'low')
     return q === 'medium' ? 'med' : q;
 
-  const saved = savedTier();
-  if (saved) return saved;
-
+  let pick = savedTier();
+  if (!pick) {
+    const mem = navigator.deviceMemory || 8;   // powers of two, capped at 8
+    const cores = navigator.hardwareConcurrency || 8;
+    const weak = /swiftshader|llvmpipe|softpipe|software|basic render|mali-[g4]?[0-9]{1,2}\b|powervr|adreno [1-4][0-9]{2}|intel.*(hd|uhd|gma)/i
+      .test(gpuName());
+    /* <=4GB RAM is the binding constraint regardless of GPU — the JS heap +
+       geometry buffers alone can OOM the tab */
+    if (mem <= 4) pick = 'low';
+    else if (cores <= 4 || weak) pick = 'med';
+    else pick = 'high';
+  }
+  /* crash strikes act as a ceiling over BOTH a saved pref and auto-detect —
+     a device that keeps losing its WebGL context must not keep reloading the
+     tier that crashes it (only an explicit ?q= URL beats this) */
   const n = crashes();
-  if (n >= 2) return 'low';
-  if (n >= 1) return 'med';
-
-  const mem = navigator.deviceMemory || 8;   // powers of two, capped at 8
-  const cores = navigator.hardwareConcurrency || 8;
-  const weak = /swiftshader|llvmpipe|softpipe|software|basic render|mali-[g4]?[0-9]{1,2}\b|powervr|adreno [1-4][0-9]{2}|intel.*(hd|uhd|gma)/i
-    .test(gpuName());
-  /* <=4GB RAM is the binding constraint regardless of GPU — the JS heap +
-     geometry buffers alone can OOM the tab */
-  if (mem <= 4) return 'low';
-  if (cores <= 4 || weak) return 'med';
-  return 'high';
+  if (n >= 2) return lower(pick, 'low');
+  if (n >= 1) return lower(pick, 'med');
+  return pick;
 }
 
 /* per-tier budget. HIGH reproduces the previous pipeline verbatim. */

@@ -17,7 +17,8 @@ await page.waitForFunction('window.__ready === true', null, { timeout: 900000 })
 
 const r = await page.evaluate(() => {
   let verts = 0, idx = 0, meshes = 0, indexed = 0, geos = 0;
-  const attrs = {};
+  const seen = new Set();            // geometry objects — instanced/shared geos count once
+  let uniqBytes = 0;
   window.__scene.traverse(o => {
     if (!o.isMesh) return;
     const g = o.geometry; if (!g || !g.attributes.position) return;
@@ -25,21 +26,19 @@ const r = await page.evaluate(() => {
     const v = g.attributes.position.count;
     verts += v; geos++;
     if (g.index) { idx += g.index.count; indexed++; }
-    for (const name in g.attributes) attrs[name] = (attrs[name] || 0) + g.attributes[name].array.byteLength;
+    if (!seen.has(g)) {
+      seen.add(g);
+      for (const name in g.attributes) uniqBytes += g.attributes[name].array.byteLength;
+      if (g.index) uniqBytes += g.index.array.byteLength;
+    }
   });
   const mem = performance.memory ? {
     heapMB: +(performance.memory.usedJSHeapSize / 1048576).toFixed(1),
     totalMB: +(performance.memory.totalJSHeapSize / 1048576).toFixed(1),
     limitMB: +(performance.memory.jsHeapSizeLimit / 1048576).toFixed(0),
   } : null;
-  // GPU-side estimate: verts*attrs + index bytes
-  let geoBytes = 0;
-  for (const k in attrs) geoBytes += attrs[k];
-  window.__scene.traverse(o => {
-    if (o.isMesh && o.geometry && o.geometry.index) geoBytes += o.geometry.index.array.byteLength;
-  });
   return { tier: window.__fx && window.__fx.tier, mem, meshes, geos, verts, indexed, idxTris: Math.round(idx / 3),
-    attrMB: +(geoBytes / 1048576).toFixed(1), calls: window.__renderer.info.render.calls,
+    attrMB: +(uniqBytes / 1048576).toFixed(1), calls: window.__renderer.info.render.calls,
     tris: window.__renderer.info.render.triangles };
 });
 console.log(JSON.stringify(r, null, 1));

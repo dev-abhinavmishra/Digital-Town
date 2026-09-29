@@ -171,7 +171,11 @@ export function installUI() {
     d.addEventListener('click', () => {
       try { q === 'auto' ? localStorage.removeItem('dt_q')
                          : localStorage.setItem('dt_q', q); } catch {}
-      location.reload();
+      /* a ?q=/?quality= in the URL would beat the saved pref after reload —
+         strip the overrides (keep ?time, ?view, etc.) so the pick applies */
+      const u = new URL(location.href);
+      u.searchParams.delete('q'); u.searchParams.delete('quality');
+      location.href = u.toString();
     });
     tierMenu.appendChild(d);
   }
