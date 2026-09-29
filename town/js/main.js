@@ -537,7 +537,11 @@ if (!TC.bloom) skipSet.add('bloom');
 if (!TC.smaa) skipSet.add('smaa');
 let composer = null, pipe = null;
 let aoShed = false, bloomShed = false;   // latched fps fallbacks (see tick)
-if (!NOFX) {
+/* LOW tier renders straight to screen — skips the composer's full-res
+   render targets and every fullscreen pass; the cheapest possible path
+   for devices where the tab's RAM/GPU budget is the constraint */
+const POST = !NOFX && TIER !== 'low';
+if (POST) {
   pipe = createPipeline(renderer, scene, activeCam,
     { time: TIME, ao: !NOAO && TC.ao, pixelRatio, msaa: msaaSamples,
       skip: skipSet.size ? skipSet : null });
@@ -550,9 +554,9 @@ const __fx = {
   get ao() { return !!(pipe && pipe.gtao && pipe.gtao.enabled); },
   aoPresent: !!(pipe && pipe.gtao),     // pass exists in chain even if map-view disables it
   get aoState() { return pipe && pipe.gtao ? (pipe.gtao.enabled ? pipe.gtao._state : 'map-off') : 'off'; },
-  msaa: NOFX ? 0 : msaaSamples,
+  msaa: POST ? msaaSamples : 0,
   shadowType: 'PCFSoftShadowMap', shadowMapSize: sun.shadow.mapSize.x,
-  bloom: pipe ? { threshold: pipe.bloom.threshold, strength: pipe.bloom.strength,
+  bloom: pipe && pipe.bloom ? { threshold: pipe.bloom.threshold, strength: pipe.bloom.strength,
                   radius: pipe.bloom.radius } : null,
   envType: envInfo.envType, envSrc: envInfo.envSrc, envIntensity: envInfo.envIntensity,
   atmo: {
