@@ -1,0 +1,24 @@
+{
+  "branch": "devin/1790469015-building-interiors",
+  "feature": "click-to-enter building interiors (PR #43)",
+  "page": "http://127.0.0.1:8778/?view=aerial&still=1&interior=hospital",
+  "console_errors": 0,
+  "results": {
+    "deep_link_enter": "PASS — ?interior=hospital lands in 'medical' interior at spawn (-10.2,-178.38,8.32); panel '#3 Havenbrook General Hospital / Healthcare / Cost $1.50M — 15.0% of the $10.00M budget / Interior: Clinic floor · footprint 104m × 74m × 52m tall · lower-fidelity set for presentation'",
+    "hud_elements": "PASS — panel bottom-left, 'INTERIOR — drag to look · WASD to walk · ESC to exit' top-center, '✕ EXIT BUILDING' top-right",
+    "drag_look": "PASS — quaternion changed on drag (camera looks around)",
+    "wasd_clamp": "PASS — W walk stops exactly at z=12.45 (=d/2-0.55 wall limit), y pinned -178.38; cannot leave room",
+    "no_town_ghosts": "PASS — all scene children hidden except stage group; interiors render sealed",
+    "esc_exit_first_entry": "PASS — deep-link entry exits to exact aerial pose (540,620,660 + identical quaternion), HUD hidden",
+    "click_to_enter": "PASS with caveat — short click enters (delivered 53ms gap); clicks whose delivered down→up gap exceeds 450ms are silently rejected (SwiftShader input lag produced 1008ms) — fragile on software GL",
+    "exit_button": "PASS — EXIT BUILDING click exits, HUD hidden",
+    "pose_restore_reentry": "FAIL — BUG: enter() sets I.on=true immediately but captures I.saved.p/q 190ms later; interior.tick (still holding previous I.spec — never cleared on exit) clamps the aerial camera into old room bounds during the gap, so saved pose = stage coords (16.4,-178.4,-12.4); exit restores that → fly ground-clamp snaps y → camera lands at random street point (16.4,2.2,-12.4). Reproduced 3x. First-ever entry per page is unaffected (I.spec null → tick no-ops).",
+    "drawer_step_inside": "PASS — FACILITIES → coffee → card shows green '🚪 step inside' → enters 'cafe'; nit: drawer remains open over the interior",
+    "archetypes": "PASS — hospital→medical ward, coffee→cafe Dining room, medhall→hall Great hall, mall→mall Atrium; panels show correct #/name/category/cost-%",
+    "park_click": "DEVIATION — Willow Creek Park has no w/d (ZONE_RECT.park=null) so pickBuildingAt returns null → click does NOTHING; spec expected info card. parkzone→card path is unreachable for the big park",
+    "ground_road_click": "PASS — junction (-140,-40) and countryside (-900,-750) clicks: no interior, no card",
+    "enter_while_inside": "PASS — __enterInterior is a no-op while I.on (guarded)"
+  },
+  "perf_street_level": { "calls": 375, "triangles": 3243847, "fps": 20 },
+  "recording": "C:\\Users\\Administrator\\screencasts\\rec-3c35abfe-7392-48d6-9176-90a69d181325\\rec-3c35abfe-7392-48d6-9176-90a69d181325-edited.mp4"
+}
