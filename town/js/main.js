@@ -24,6 +24,7 @@ import { buildFurniture } from './city/furniture.js';
 import { buildGroundDetail } from './city/ground.js';
 import { buildBacklots } from './city/backlots.js';
 import { installUI } from './ui.js';
+import { installInterior } from './interior.js';
 
 const params = new URLSearchParams(location.search);
 const VIEW = params.get('view') || 'aerial';
@@ -425,6 +426,14 @@ function tweenCam(now) {
   if (k >= 1) { camTween.on = false; syncAnglesFromCam(); }
 }
 window.__flyDone = () => !camTween.on;
+
+/* click-to-enter building interiors — interior.js owns picking, the
+   underground stage rooms, walk controls and the info HUD */
+const interior = installInterior({ scene, camera, renderer, fly,
+  getOrtho: () => orthoCam,
+  setActiveCam: c => { activeCam = c; },
+  syncAnglesFromCam, camTween });
+if (params.get('interior')) interior.byId(params.get('interior'));   // eval/deep-link
 if (CAMP && !orthoCam) {
   const v = CAMP.split(',').map(Number);
   if (v.length === 6 && v.every(Number.isFinite)) setCam(...v);
@@ -485,7 +494,14 @@ if (LABELS) {
   document.getElementById('compass').style.display = 'block';
 }
 const v3 = new THREE.Vector3();
+let _lblOff = false;
 function updateLabels() {
+  // interiors render no labels — hide them once and skip the whole pass
+  if (interior && interior.on) {
+    if (!_lblOff) { for (const it of labelDivs) it.d.style.display = 'none'; _lblOff = true; }
+    return;
+  }
+  _lblOff = false;
   const items = [];
   for (const it of labelDivs) {
     const { d, p } = it;
@@ -495,11 +511,9 @@ function updateLabels() {
     if (behind || x < -100 || x > innerWidth + 100 || y < -60 || y > innerHeight + 60) {
       d.style.display = 'none'; continue;
     }
-    // measure once per frame — w/h are position-independent; the old code
-    // re-read live rects inside the relax loop, so pass 0 saw *last frame's*
-    // displaced boxes and symmetric overlaps alternated between two states
-    const r = d.getBoundingClientRect();
-    it.w = r.width; it.h = r.height;
+    // label text never changes — measure each rect lazily once instead of
+    // forcing a getBoundingClientRect layout read for every label every frame
+    if (!it.w) { const r = d.getBoundingClientRect(); it.w = r.width; it.h = r.height; }
     it.x = x; it.y = y; it.dy = 0;
     d.style.display = 'flex';
     items.push(it);
@@ -608,6 +622,8 @@ let _lastHalf = 0;
 renderer.shadowMap.autoUpdate = false;   // refresh on movement or periodically
 renderer.shadowMap.needsUpdate = true;   // first frame must bake
 function updateShadow() {
+  // interiors: only the sealed stage renders — the 4096 sun map is pure waste
+  if (interior && interior.on) return;
   if (++_shFrame % 12 === 0) renderer.shadowMap.needsUpdate = true;  // moving props ~2Hz
   if (orthoCam) return;
   camera.getWorldDirection(_fwd); _fwd.y = 0;
@@ -674,7 +690,9 @@ function tick() {
   renderer.info.reset();
   const dt = Math.min(clock.getDelta(), .05);
   const t = clock.elapsedTime;
-  if (!orthoCam) {
+  if (interior && interior.on) {
+    interior.tick(dt);
+  } else if (!orthoCam) {
     if (fly.auto) {
       const v = P[VIEW] || P.aerial;
       const a = t * .05;
@@ -712,8 +730,10 @@ function tick() {
     }
   }
   updateShadow();
-  tickWorld(t, dt);
-  if (occluderCull) occluderCull.tick(activeCam);
+  // interiors: the town is hidden — skip its animation + culling work entirely
+  const inside = !!(interior && interior.on);
+  if (!inside) tickWorld(t, dt);
+  if (occluderCull && !inside) occluderCull.tick(activeCam);
   if (composer) {
     if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
       composer.passes[0].camera = activeCam;
@@ -723,7 +743,7 @@ function tick() {
     // GTAO assumes a perspective projection anyway; aoShed is a persistent
     // low-fps fallback — once shed it stays off (re-enabling would re-add
     // the pass on exactly the GPU that couldn't afford it)
-    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam && !aoShed;
+    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam && !aoShed && !inside;
     if (composer._grade) composer._grade.uniforms.uTime.value = t;
     composer.render();
   } else {

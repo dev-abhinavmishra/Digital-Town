@@ -28,6 +28,13 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 - `#uiBtnTour` starts 8-stop tour in `#uiTourBar` (`.cap b` caption, `.step` "n / 8", auto-advance every 9s); `#uiTourNext` advances (its mousedown is stopPropagation'd so it must NOT end the tour); Esc or a canvas mousedown ends it and tweens the camera back to aerial (540,620,660).
 - `#uiBtnRubric` opens `#uiRubric.open` (9 ✓ rows); `#uiRubricX` or backdrop click closes.
 
+## Building interiors (town/js/interior.js)
+- Probes: `__interior{.on,.kind,.b.id,.spec,.saved.p/q}`, `__enterInterior(id)`/`I.byId(id)`, `__exitInterior()`. Deep link: `?interior=hospital|coffee|medhall|preservecommons`. Rooms render on layer 2 at STAGE=(0,-180,0); EYE=1.62; archetypes from BY_ID/BY_TYPE (medical ward, cafe dining room, hall great hall, mall atrium, home, shop).
+- Interior HUD = anonymous `body>div` with `style.zIndex==='72'` (panel/hint/exitBtn; display:'block' while inside). Read panel text via `[...document.querySelectorAll('body>div')].filter(d=>d.style.zIndex==='72'&&d.style.display==='block')`.
+- Click-to-enter is guarded by delivered pointerdown→pointerup <450ms AND <6px move. Under SwiftShader input delivery lags — an 80ms playwright down→up can arrive ~1s apart and get REJECTED. Use `page.mouse.click()` (no delay) — observed delivered gap ~50ms. Diagnose with elementFromPoint + an in-page `pickBuildingAt` raycast (import './js/interior.js' + './node_modules/three/build/three.module.js' in evaluate).
+- Camera pose check: on enter, `I.saved.p/q` must equal the pre-enter aerial pose; on exit, `__cam.position`/`quaternion` must equal it exactly. Regression signature (seen on devin/1790469015-building-interiors): on re-entry the saved pose captured stage coords (~(16.4,-178.4,-12.4) for a w34×d26 room) because I.on flips 190ms before the save and interior.tick clamps to the stale I.spec — exit then lands at a random street point. First entry per page is immune (I.spec null → tick no-ops).
+- Park zone ('park') has no w/d and ZONE_RECT.park=null → unpickable; clicking the park does nothing (no card). Road/ground clicks are inert by design.
+
 ## Good camera spots for close-ups
 - Street blades: pole at each of the first 8 `intersections()` (all on University Ave x=-140) → SW corner offset (−wv/2−1.4, +wh/2+1.4); e.g. Univ×Main pole ≈(−150.4,−30.6), cam (−138,4.5,−18)→(−150.4,3.1,−30.6). (Verified on Linux: renders blades + crosswalks + pedestrians.)
 - Parking meters: rows z=−62 / z=−18 (x −38..180) along Main St; look along the row, e.g. (−30,2.6,−52)→(40,1,−62).

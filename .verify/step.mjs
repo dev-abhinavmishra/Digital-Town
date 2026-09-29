@@ -48,6 +48,20 @@ try {
     const [x, y] = arg.split(',').map(Number);
     await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up();
     console.log('MOUSEDOWN', x, y);
+  } else if (cmd === 'clickxy') {
+    const [x, y] = arg.split(',').map(Number);
+    await page.mouse.click(x, y);
+    console.log('CLICKXY', x, y);
+  } else if (cmd === 'drag') {
+    const [x1, y1, x2, y2, steps] = arg.split(',').map(Number);
+    await page.mouse.move(x1, y1); await page.mouse.down();
+    await page.mouse.move(x2, y2, { steps: steps || 12 }); await page.waitForTimeout(120);
+    await page.mouse.up();
+    console.log('DRAGGED', x1, y1, '->', x2, y2);
+  } else if (cmd === 'keyhold') {
+    const [k, ms] = arg.split(',');
+    await page.keyboard.down(k); await page.waitForTimeout(+ms); await page.keyboard.up(k);
+    console.log('KEYHOLD', k, ms);
   } else if (cmd === 'key') {
     await page.keyboard.press(arg);
     console.log('KEY', arg);
