@@ -43,7 +43,7 @@ const FREEZEQ = params.has('freeze');        // B-side determinism pin
 const DEBUG = params.get('debug') === '1';
 const FPSDBG = params.get('fps') === '1';
 const CAMP = params.get('cam');   // ?cam=px,py,pz,tx,ty,tz — deterministic eval camera
-const CAM_BOUND = 1200;   // fly-cam stays inside the mountain ring
+const CAM_BOUND = 760;    // fly-cam stays inside the mountain ring (world-scaled)
 
 /* ---------- quality tier (render/perf.js) ---------- */
 const TIER = pickTier(params);            // auto HIGH on capable GPUs — full fidelity
@@ -56,7 +56,7 @@ const ULTRA = TIER === 'ultra';
 /* chunked map loading: min/low/med distance-cull whole cells;
    high + ultra always keep every chunk */
 const CULL = TIER === 'min' || TIER === 'low' || TIER === 'med';
-const CULL_BASE = { min: 300, low: 360, med: 520 };   // street-level radii
+const CULL_BASE = { min: 190, low: 230, med: 330 };   // street-level radii (world-scaled)
 
 /* ---------- renderer ---------- */
 const renderer = new THREE.WebGLRenderer({ antialias: false,
@@ -112,10 +112,12 @@ loadEnvironment(renderer, { mode: TIME, skyTex }).then(e => {
 // per-time env gain applied to materials post-build (r160 has no
 // scene.environmentIntensity — multiply envMapIntensity instead)
 const envScale = (TIME === 'night' ? .22 : TIME === 'dusk' ? .5 : TIME === 'golden' ? 1.15 : 1.0) * (RAIN ? .5 : 1);
+/* fog density scaled up with the world-scale-down (horizon is ~38% closer
+   now) so the aerial haze reads the same relative to the town */
 scene.fog = new THREE.FogExp2(
   TIME === 'golden' ? 0xd8b490 : TIME === 'dusk' ? 0x4a4258
     : TIME === 'night' ? 0x0b111c : 0xd4e2ec,
-  TIME === 'dusk' ? 0.00032 : TIME === 'night' ? 0.00022 : 0.00017);
+  TIME === 'dusk' ? 0.00052 : TIME === 'night' ? 0.00035 : 0.00027);
 
 /* ---------- sun + fill ---------- */
 const sun = new THREE.DirectionalLight(RAIN ? 0xc8d4de : TIME === 'golden' ? 0xffb268 : TIME === 'dusk' ? 0xff9a6a
@@ -124,8 +126,8 @@ const sun = new THREE.DirectionalLight(RAIN ? 0xc8d4de : TIME === 'golden' ? 0xf
 sun.position.copy(sunDir).multiplyScalar(1800);
 sun.castShadow = true;
 if (TC.shadow) sun.shadow.mapSize.set(TC.shadow, TC.shadow);
-sun.shadow.camera.left = -700; sun.shadow.camera.right = 700;
-sun.shadow.camera.top = 700; sun.shadow.camera.bottom = -700;
+sun.shadow.camera.left = -580; sun.shadow.camera.right = 580;
+sun.shadow.camera.top = 580; sun.shadow.camera.bottom = -580;
 sun.shadow.camera.near = 200; sun.shadow.camera.far = 3600;
 sun.shadow.bias = -0.00018; sun.shadow.normalBias = .35;
 scene.add(sun); scene.add(sun.target);
@@ -134,6 +136,16 @@ scene.add(new THREE.HemisphereLight(
   TIME === 'golden' ? 0xd8b088 : TIME === 'night' ? 0x18243a : 0xbdd6e8,
   TIME === 'golden' ? 0x7a6848 : TIME === 'night' ? 0x05070a : 0x5d7050,
   TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .40));
+
+/* ---------- world scale — every town object lives under `world` ----------
+   The town is authored in layout coords (±840m), then uniformly scaled down
+   by WS so the whole footprint shrinks on every tier. Cameras, labels, cull
+   radii and the shadow box scale to match. Interiors stage under `scene`
+   directly and stay full-size. */
+const WS = .62;
+const world = new THREE.Group();
+world.name = 'world';
+scene.add(world);
 
 /* ---------- ground ---------- */
 const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');
@@ -159,34 +171,34 @@ groundM.onBeforeCompile = sh => {
       diffuseColor.rgb *= texture2D(uDetail, vWXZ / 28.0).rgb;`);
 };
 attachDriftShadow(groundM, .0015, .0009, .30);  // ~660m cloud shadow field
-scene.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
+world.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
 // large-scale blotch overlay so the lawn never reads as flat tiling
 const ovM = new THREE.MeshStandardMaterial({ map: groundOverlayTexture(), transparent: true,
   roughness: 1, depthWrite: false });
 const ov = plane(3400, 3400, ovM, 0, .14, 0, -Math.PI / 2, 0);
 ov.userData.noMerge = true;
-scene.add(ov);
+world.add(ov);
 
 /* ---------- occupancy then build ---------- */
 const _tb = performance.now();
 registerOccupancy();
-buildRoads(scene);
-buildLots(scene);
-buildWater(scene);
-buildPark(scene);
-buildFerrisWheel(scene);
-buildWindmill(scene);
-buildCrane(scene); buildTennisCourts(scene);
-if (!MIN) buildBalloons(scene);             // sky decor — dropped on MIN
-if (TIME === 'night' && !MIN) buildFireflies(scene);
-buildAthleticPark(scene);
-buildPlaza(scene, PLAZA);
-buildProps(scene);
-buildContactShadows(scene);
+buildRoads(world);
+buildLots(world);
+buildWater(world);
+buildPark(world);
+buildFerrisWheel(world);
+buildWindmill(world);
+buildCrane(world); buildTennisCourts(world);
+if (!MIN) buildBalloons(world);             // sky decor — dropped on MIN
+if (TIME === 'night' && !MIN) buildFireflies(world);
+buildAthleticPark(world);
+buildPlaza(world, PLAZA);
+buildProps(world);
+buildContactShadows(world);
 
-for (const b of BUILDINGS) if (b.w) scene.add(makeBuilding(b));
-for (const f of FILLER) { scene.add(makeBuilding({ name: '', ...f })); occupyRect(f.x, f.z, f.w, f.d, 4); }
-for (const a of APARTMENTS) scene.add(makeBuilding({ ...a, type: 'apartment' }));
+for (const b of BUILDINGS) if (b.w) world.add(makeBuilding(b));
+for (const f of FILLER) { world.add(makeBuilding({ name: '', ...f })); occupyRect(f.x, f.z, f.w, f.d, 4); }
+for (const a of APARTMENTS) world.add(makeBuilding({ ...a, type: 'apartment' }));
 
 for (const blk of HOUSE_BLOCKS) {
   const W = blk.x1 - blk.x0, D = blk.z1 - blk.z0;
@@ -202,7 +214,7 @@ for (const blk of HOUSE_BLOCKS) {
     for (let i = 0; i < blk.count; i++) {
       const z = blk.z0 + (i + .5) * D / blk.count;
       const spec = { type: typeFor(), x: blk.x1 - 12, z, rot: Math.PI / 2 };
-      scene.add(makeBuilding(spec));
+      world.add(makeBuilding(spec));
       // rot π/2: front & driveway face +x, garage wing extends -z
       if (spec.type === 'ranch') occupyRect(spec.x + 3.5, z - 4, 20, 28, 2);
       else occupyRect(spec.x + 3.5, z - 2.5, 20, 20, 2);
@@ -218,7 +230,7 @@ for (const blk of HOUSE_BLOCKS) {
         const x = blk.x0 + 14 + i * (W - 28) / Math.max(1, n - 1);
         if (!isFree(x, z, 8)) continue;
         const t = typeFor();
-        scene.add(makeBuilding({ type: t, x, z, rot }));
+        world.add(makeBuilding({ type: t, x, z, rot }));
         occupy(t, x, z, sgn);
       }
     }
@@ -229,38 +241,38 @@ for (const row of COTTAGE_ROWS) {
   const sgn = row.face === 'n' ? -1 : 1;
   for (let i = 0; i < row.count; i++) {
     const x = row.x0 + 12 + i * (W - 24) / Math.max(1, row.count - 1);
-    scene.add(makeBuilding({ type: 'cottage', x, z: row.z, rot: row.face === 'n' ? Math.PI : 0 }));
+    world.add(makeBuilding({ type: 'cottage', x, z: row.z, rot: row.face === 'n' ? Math.PI : 0 }));
     occupyRect(x + sgn * 2, row.z + sgn * 3, 22, 20, 2);
   }
 }
 
-const lampIM = buildLights(scene);
+const lampIM = buildLights(world);
 if (TIME === 'golden' || TIME === 'dusk' || TIME === 'night')
   lampIM.material.emissive = new THREE.Color('#ffdf9e'),
   lampIM.material.emissiveIntensity = TIME === 'night' ? 1.9 : 1.4;
-buildTrees(scene);
-buildCars(scene);
+buildTrees(world);
+buildCars(world);
 /* MIN: no moving traffic or pedestrians — parked cars remain as static
    set-dressing (merged cells), tickWorld null-guards the absent systems */
-if (!MIN) { buildTraffic(scene); buildPeople(scene); }
-buildFences(scene);
-buildCountryside(scene);
-buildMountains(scene);
+if (!MIN) { buildTraffic(world); buildPeople(world); }
+buildFences(world);
+buildCountryside(world);
+buildMountains(world);
 // subagent passes: street furniture + ground cover run last so isFree()
 // sees the full occupancy map
-buildFurniture(scene);
-buildGroundDetail(scene);
-buildBacklots(scene);
-if (VIEW !== 'map') { buildClouds(scene); buildBirds(scene); }
-if (VIEW !== 'map' && RAIN) buildRain(scene);   // ?weather=rain
+buildFurniture(world);
+buildGroundDetail(world);
+buildBacklots(world);
+if (VIEW !== 'map') { buildClouds(world); buildBirds(world); }
+if (VIEW !== 'map' && RAIN) buildRain(world);   // ?weather=rain
 // sprint-02 atmo module: cumulus billboards, height-haze + aerial fog patch,
 // dusk lamp pools/halos — all render-side over B's objects (js/render/atmo.js)
 let atmoInfo = null;
 if (VIEW !== 'map' && !NOATMO)
-  atmoInfo = installAtmo(scene, { lampIM, TIME, fogPatch: !NOFOG });
+  atmoInfo = installAtmo(world, { lampIM, TIME, fogPatch: !NOFOG });
 // ?noatmo fallback — sprint-01 behaviour: tint the unlit orb sprites into the
 // sky palette (kept for evaluator A/B pairs)
-else if (VIEW !== 'map' && TIME !== 'day') scene.traverse(o => {
+else if (VIEW !== 'map' && TIME !== 'day') world.traverse(o => {
   if (!o.isSprite) return;
   o.material.color.set(TIME === 'golden' ? '#d8a37e' : TIME === 'night' ? '#2a3444' : '#6e5a74');
   o.material.opacity *= TIME === 'golden' ? .78 : TIME === 'night' ? .5 : .65;
@@ -280,22 +292,22 @@ scene.traverse(o => {
 
 /* campus quad — sized to sit clear of the med hall & the campus lot */
 const quadM = pbr('grass_ground'); quadM.color = new THREE.Color('#93b377');
-scene.add(plane(190, 84, quadM, -480, .31, -530, -Math.PI / 2, 10));
+world.add(plane(190, 84, quadM, -480, .31, -530, -Math.PI / 2, 10));
 const qp = pbr('precast_stone_paving'); qp.color = new THREE.Color('#c4b49a');
 for (const a of [.62, -.62]) {
   const g = new THREE.PlaneGeometry(6, 170); g.rotateX(-Math.PI / 2); g.rotateY(a);
   const p = new THREE.Mesh(g, qp); p.position.set(-480, .33, -532); p.receiveShadow = true;
-  scene.add(p);
+  world.add(p);
 }
-scene.add(plane(190, 6, qp, -480, .33, -532, -Math.PI / 2, 3));
-scene.add(cyl(4, 4.4, .9, mat('#9aa0a3'), -480, .3, -532, 20));
+world.add(plane(190, 6, qp, -480, .33, -532, -Math.PI / 2, 3));
+world.add(cyl(4, 4.4, .9, mat('#9aa0a3'), -480, .3, -532, 20));
 
 /* collapse all static geometry into one mesh per material per cell —
    street views frustum-cull far cells, and MIN distance-culls whole cells.
    MIN uses 160m cells (finer radius granularity); other tiers use 320m. */
 const _tm = performance.now();
 const CHUNK = MIN ? 160 : 320;
-const MERGED = mergeStatic(scene, { chunk: CHUNK });
+const MERGED = mergeStatic(world, { chunk: CHUNK });
 /* every chunk-cullable object: merged cells on all tiers; on MIN the big
    static instanced scatter (trees/grass/litter/furniture) is also rebucketed
    into cells so it drops out with distance like the merged geometry */
@@ -311,6 +323,15 @@ if (CULL) {
     CHUNKS.push(...grp.children);
   }
   (window.__prof ||= []).push(['chunkSplit', tagged.length]);
+}
+
+/* shrink the whole town — world.scale applies to every child uniformly.
+   Cull bounds (userData.cb) were baked in layout coords during merge /
+   splitInstanced, so rescale them into world space for the culler. */
+world.scale.setScalar(WS);
+for (const m of CHUNKS) {
+  const b = m.userData.cb;
+  if (b) { b.x0 *= WS; b.x1 *= WS; b.z0 *= WS; b.z1 *= WS; }
 }
 
 /* presentation layer — budget tracker, facility directory, info cards, tour
@@ -347,8 +368,15 @@ const matStats = { withNormal: 0, withRough: 0 };
       // count by actual material state — v2 upgrade AND natively-mapped PBR
       if (m.normalMap) matStats.withNormal++;
       if (m.roughnessMap) matStats.withRough++;
-      if (m.isMeshStandardMaterial)
-        m.envMapIntensity = (v2 && v2.glass ? 1.7 : (m.envMapIntensity || 1)) * envScale;
+      if (m.isMeshStandardMaterial) {
+        const envI = (v2 && v2.glass ? 1.7 : (m.envMapIntensity || 1)) * envScale;
+        /* matte surfaces (lawns, asphalt, roofs — roughness ≥ .8) picked up a
+           strong sky reflection at grazing view angles: the ground visibly
+           shifted tint by camera tilt. Cap their env gain so they keep their
+           baked color from every degree; glass keeps the boosted reflection. */
+        m.envMapIntensity = !(v2 && v2.glass) && m.roughness >= .8
+          ? Math.min(envI, .5) : envI;
+      }
     }
   });
 }
@@ -373,6 +401,9 @@ const P = {
   hospital:   { p: [240, 90, -300],   t: [70, 30, -500] },
   dusk:       { p: [820, 200, 260],   t: [-350, 60, 120] },
 };
+/* camera presets are authored in layout coords — scale with the world so
+   every view keeps the same relative framing on the smaller town */
+for (const k in P) { P[k].p = P[k].p.map(n => n * WS); P[k].t = P[k].t.map(n => n * WS); }
 let orthoCam = null;
 if (VIEW === 'map') {
   orthoCam = new THREE.OrthographicCamera(-890, 890, 800, -800, 1, 6000);
@@ -475,7 +506,7 @@ if (LABELS) {
       (num ? `<span class="num">${num}</span>` : '') + `<span>${txt}</span>`;
     if (num) { d.style.pointerEvents = 'auto'; d.style.cursor = 'pointer'; }
     holder.appendChild(d);
-    labelDivs.push({ d, p: new THREE.Vector3(x, y, z) });
+    labelDivs.push({ d, p: new THREE.Vector3(x * WS, y * WS, z * WS) });
   };
   for (const b of BUILDINGS) {
     if (b.type === 'zone' || b.type === 'parkzone') { mk(b.name, b.x, 4, b.z, b.cat, b.num); continue; }
@@ -494,7 +525,7 @@ if (LABELS) {
       const d = document.createElement('div');
       d.className = 'lbl dist'; d.textContent = t;
       document.getElementById('labels').appendChild(d);
-      labelDivs.push({ d, p: new THREE.Vector3(x, 2, z), norelax: true });
+      labelDivs.push({ d, p: new THREE.Vector3(x * WS, 2 * WS, z * WS), norelax: true });
     }
     for (const r of ROADS) {
       const d = document.createElement('div');
@@ -503,7 +534,7 @@ if (LABELS) {
       document.getElementById('labels').appendChild(d);
       const mx = r.axis === 'v' ? r.c : (r.a0 + r.a1) / 2;
       const mz = r.axis === 'v' ? (r.a0 + r.a1) / 2 : r.c;
-      labelDivs.push({ d, p: new THREE.Vector3(mx, 2, mz), norelax: true });
+      labelDivs.push({ d, p: new THREE.Vector3(mx * WS, 2 * WS, mz * WS), norelax: true });
     }
   }
   const lg = document.getElementById('legend');
@@ -839,3 +870,4 @@ addEventListener('resize', () => {
   resync();
 });
 window.__cam = camera; window.__scene = scene; window.__renderer = renderer;
+window.__ws = WS;   // ui.js: layout coords → world coords for fly targets

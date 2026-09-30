@@ -15,10 +15,14 @@ await page.waitForFunction('window.__ready === true', null, { timeout: 420000 })
 await page.waitForTimeout(1500);
 
 const st = {};
-// 1. budget open
-await page.click('#uiBudget'); await page.waitForTimeout(400);
-st.budgetOpen = await page.$eval('#uiBudget', el => el.classList.contains('open'));
-await page.screenshot({ path: `${OUT}/ui-budget.png` });
+// 1. top row fits — all controls in a single line, no budget chip
+st.topRow = await page.$eval('#uiTopRight', el => {
+  const kids = [...el.querySelectorAll('.btn, #uiTier')];
+  const tops = new Set(kids.map(k => Math.round(k.getBoundingClientRect().top)));
+  return { singleRow: tops.size === 1, controls: kids.length,
+           noBudget: !document.getElementById('uiBudget') };
+});
+await page.screenshot({ path: `${OUT}/ui-toprow.png` });
 // 2. drawer + facility click → card + flight
 await page.click('#uiBtnDir'); await page.waitForTimeout(400);
 st.drawerOpen = await page.$eval('#uiDrawer', el => el.classList.contains('open'));
