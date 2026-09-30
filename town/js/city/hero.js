@@ -81,7 +81,7 @@ function buildPylon(scene) {
    Focal obelisk monument on a paved medallion at the quad center, 3 static
    flag poles, 4 radial paving paths to medhall / south lot / both halls. */
 function buildQuad(scene) {
-  const cx = -480, cz = -532;
+  const cx = 40, cz = -200;
   if (!isFree(cx, cz, 10)) return;
   const g = new THREE.Group();
   let n = 0;
@@ -91,10 +91,10 @@ function buildQuad(scene) {
   med.rotation.x = -Math.PI / 2; med.position.set(cx, Y + .07, cz); med.receiveShadow = true;
   add(med);
   const paths = [
-    plane(3.6, 34, PAVEH, cx, Y + .06, -550),          // N → medhall steps
-    plane(3.6, 30, PAVEH, cx, Y + .06, -502),          // S → quad lot
-    plane(84, 3.6, PAVEH, -430, Y + .06, cz),          // E → clinical sciences
-    plane(84, 3.6, PAVEH, -530, Y + .06, cz),          // W → anatomy hall
+    plane(3.6, 34, PAVEH, cx, Y + .06, -218),          // N → medhall steps
+    plane(3.6, 30, PAVEH, cx, Y + .06, -170),          // S → quad lot
+    plane(84, 3.6, PAVEH, 90, Y + .06, cz),            // E → clinical sciences
+    plane(84, 3.6, PAVEH, -10, Y + .06, cz),           // W → anatomy hall
   ];
   paths.forEach(add);
   // 3-step base + obelisk + pyramid cap + brass plaque
@@ -123,7 +123,7 @@ function buildQuad(scene) {
   add(bm);
   // 3 flag poles — contract-declared STATIC flags (rigid cloth, no animator)
   const flagCols = ['#2e5b8a', '#8a2e2e', '#e8e2d4'];
-  [[-493, -531], [-467, -531], [-480, -546]].forEach(([fx, fz], i) => {
+  [[27, -199], [53, -199], [40, -214]].forEach(([fx, fz], i) => {
     add(cyl(.07, .1, 9.6, STEEL(), fx, Y, fz, 8));
     const fl = box(1.9, 1.0, .07, mat(flagCols[i]), fx + 1.0, Y + 8.3, fz);
     fl.rotation.z = .1; add(fl);
@@ -139,7 +139,7 @@ function buildQuad(scene) {
    arch + low wall stubs mark the quad's south entry, and a young-tree
    allée lines the ceremonial walk to the hall's front steps. */
 function buildCampusGate(scene) {
-  const cx = -480, gz = -505;
+  const cx = 40, gz = -173;
   if (!isFree(cx, gz, 8)) return;
   const g = new THREE.Group();
   // gate arch across the S approach path: stone pillars + lintel + sign
@@ -155,7 +155,7 @@ function buildCampusGate(scene) {
     g.add(box(7.5, .95, .85, STONE(), cx + s * 8.6, Y + .48, gz));
   // young-tree allée flanking the N ceremonial walk (path x ±1.8 → trees ±4.5)
   const ap = [];
-  for (const tz of [-544, -550, -556, -562])
+  for (const tz of [-214, -220, -226, -232])
     for (const tx of [cx - 4.5, cx + 4.5]) {
       ap.push({ geo: new THREE.CylinderGeometry(.16, .22, 2.8, 6), color: '#6b4a32', x: tx, y: Y + 1.4, z: tz });
       ap.push({ geo: new THREE.SphereGeometry(1.85, 8, 6), color: '#4d7a3f', x: tx, y: Y + 3.9, z: tz });
@@ -283,18 +283,18 @@ function buildWayfinding(scene) {
   finger(104, -350.5, .3, [['HOSPITAL  \u2191', 0, 0], ['ER ENTRANCE  \u2191', 0, 0], ['EMS STN  \u2190', 0, -.5]],
     [rd('Mercy Dr'), rd('Wellness Way')]);
   finger(-150, -625, 2.9, [['MED SCHOOL  \u2192', 0, 0], ['THE QUAD  \u2192', 0, 0], ['CLINIC  \u2190', 0, .6]],
-    [rd('University Ave'), rd('Campus Dr')]);
-  finger(-448, -171, .1, [['MIDTOWN  \u2192', 0, 0], ['SCHOLAR CT  \u2193', 0, Math.PI / 2], ['DOWNTOWN  \u2190', 0, 0]],
+    [rd('University Ave'), rd('Old Town Rd')]);
+  finger(-448, -171, .1, [['MIDTOWN  \u2192', 0, 0], ['SCHOLAR CT  \u2193', 0, Math.PI / 2], ['DOWNTOWN  \u2191', 0, 0]],
     [rd('Scholar Ln'), rd('Midtown Ave')]);
-  finger(-121, -57, -.2, [['DOWNTOWN  \u2192', 0, Math.PI / 2], ['MAIN ST SHOPS  \u2193', 0, 0], ['CAMPUS  \u2190', 0, Math.PI / 2]],
+  finger(-121, -57, -.2, [['OLD TOWN  \u2190', 0, Math.PI / 2], ['MAIN ST SHOPS  \u2193', 0, 0], ['CAMPUS  \u2191', 0, Math.PI / 2]],
     [rd('University Ave'), rd('Main St')]);
   finger(-157, 303, .2, [['COMMONS MALL  \u2192', 0, Math.PI / 2], ['WILLOW PARK  \u2192', 0, Math.PI / 2], ['SCHOOL  \u2190', 0, 0]],
     [rd('University Ave'), rd('Commerce Blvd')]);
   board(390, 428, .35, 'HAVENBROOK COMMONS', ['FOOD COURT  \u2192', 'NORTH ENTRY  \u2192', 'PARKING  \u2190']);
-  board(52, -203, 0, 'CIVIC PLAZA', ['MUSEUM  \u2192', 'POST OFFICE  \u2190', 'HEALTH DEPT  \u2191']);
+  board(-455, -488, 0, 'OLD TOWN SQUARE', ['UNIVERSITY  \u2192', 'PARKING  \u2193']);
   finger(95, 302, -.15, [['GROVE ST  \u2193', 0, Math.PI / 2], ['SCHOOLHOUSE  \u2192', 0, Math.PI / 2], ['COMMERCE  \u2193', 0, 0]],
     [rd('Grove St'), rd('Commerce Blvd')]);
-  finger(-157, -376, .2, [['UNIVERSITY  \u2193', 0, Math.PI / 2], ['MEDICAL DIST  \u2192', 0, Math.PI / 2], ['EMS  \u2190', 0, Math.PI / 2]],
+  finger(-157, -376, .2, [['UNIVERSITY  \u2192', 0, Math.PI / 2], ['MEDICAL DIST  \u2192', 0, Math.PI / 2], ['EMS  \u2190', 0, Math.PI / 2]],
     [rd('University Ave'), rd('Wellness Way')]);
 }
 
@@ -304,7 +304,7 @@ function buildWayfinding(scene) {
    in async and picks up the same env/lit gains via RUNENV (the one-shot
    material pass in main.js has already run by then). */
 function buildCityHall(scene) {
-  const CX = 118, CZ = -205;
+  const CX = -422, CZ = -520;
   occupyRect(CX, CZ, 40, 38, 1);
   const add = g => {
     const hall = g.scene;

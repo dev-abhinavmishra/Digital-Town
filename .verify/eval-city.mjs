@@ -15,7 +15,7 @@ const VIEWS = [
   ['jxn-elm-cedar', `${BASE}/?view=mainstreet&still=1&cam=-602,12,182,-640,1,140`, {}],
   ['jxn-commerce-cedar', `${BASE}/?view=mainstreet&still=1&cam=-600,14,274,-640,1,320`, {}],
   ['commerce-closeup', `${BASE}/?view=mainstreet&still=1&cam=0,3.4,338,-140,3,328`, {}],
-  ['campus-elms',   `${BASE}/?view=mainstreet&still=1&cam=-480,9,-430,-480,3,-560`, {}],
+  ['campus-elms',   `${BASE}/?view=mainstreet&still=1&cam=40,9,-60,40,3,-240`, {}],
   ['dusk-main',     `${BASE}/?view=mainstreet&time=dusk&still=1`, {}],
 ];
 

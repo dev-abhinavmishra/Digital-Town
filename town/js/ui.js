@@ -179,7 +179,7 @@ export function installUI() {
       <span class="close" id="uiRubricX">&times;</span>
       <h2>${TOWN.name} — Project Brief</h2>
       <div class="tagline">A digital town planned around care: a medical university anchors the
-      north-west campus; healthcare radiates along Wellness Way; community life fills the south.</div>
+      town centre; healthcare radiates along Wellness Way; community life fills the south.</div>
       <table id="uiRubricTbl"></table>
     </div></div>
   `);
@@ -294,7 +294,7 @@ export function installUI() {
 
   /* ---------------- guided tour ---------------- */
   const TOUR = [
-    { b: 'medhall',  t: 'Anchored free: the University School of Medicine', c: 'The town is planned around a medical university — donated land, quadrangle, and research halls on Campus Dr.' },
+    { b: 'medhall',  t: 'Anchored free: the University School of Medicine', c: 'The town is planned around a medical university — donated land, quadrangle, and research halls at the centre of town.' },
     { b: 'hospital', t: 'Havenbrook General Hospital ($1.5M)', c: 'The largest single spend sits on Wellness Way, one block from the EMS station — the care spine of the town.' },
     { b: 'ems',      t: 'RapidResponse EMS ($400k)', c: 'Placed at the Midtown/Main junction so ambulances reach every district along arterials in minutes.' },
     { b: 'silveroaks', t: 'Silver Oaks Senior Living ($750k)', c: 'Senior care sits east, quiet and leafy, between the hospice and the park — a full ageing-in-place loop.' },
@@ -350,7 +350,7 @@ export function installUI() {
     ['≥7 healthcare facilities', `${nHealth} numbered sites — hospital, EMS, health dept, lab, rehab, behavioral, student clinic, dental, optical, family medicine, home health, senior living, hospice`, '&#10003;'],
     ['≥3 community locations', `${nComm} numbered sites — Target, mall, pharmacy, museum, school, restaurant, park, post office, grocery, coffeehouse, diner`, '&#10003;'],
     ['Every facility uniquely named', 'Every building carries a proper name — click any label or the Facilities drawer for its card', '&#10003;'],
-    ['Realistic layout', '18 named streets on a legible grid, zoned districts (campus NW, medical N, senior E, downtown centre, residential W, school S), signalized junctions, parking, curbside life', '&#10003;'],
+    ['Realistic layout', '18 named streets on a legible grid, zoned districts (medical campus centre, hospital N, senior E, downtown NW, residential W, school S), signalized junctions, parking, curbside life', '&#10003;'],
     ['Budget ≤ $10M', `${money(spent)} spent of ${money(BUDGET)} — the tracker top-right breaks it down`, '&#10003;'],
     ['Placement explained', 'Take the guided tour (&#9654;) — each stop narrates why it sits where it does', '&#10003;'],
   ].map(r => r[0] === 'REQUIREMENT'

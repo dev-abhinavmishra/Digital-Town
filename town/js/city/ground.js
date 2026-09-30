@@ -214,7 +214,8 @@ export function buildGroundDetail(scene) {
   decalRegion(GREEN_BELT.x0, GREEN_BELT.z0, GREEN_BELT.x1, GREEN_BELT.z1, 40, ovlHumus, Y_OVL_RAW, 1.1);
   // broad mottle under the big district lawns — buildings, roads, lawns and
   // walks all occlude it, so a huge sheet costs nothing and kills flatness
-  decalRegion(-700, -715, -330, -395, 44, ovlMeadow, Y_OVL_RAW, .7);   // med campus lawns
+  decalRegion(-150, -345, 230, -65, 44, ovlMeadow, Y_OVL_RAW, .7);    // med campus lawns
+  decalRegion(-660, -655, -300, -390, 44, ovlHumus, Y_OVL_RAW, .5);     // old-town ground (downtown moved NW)
   decalRegion(340, -700, 800, -350, 44, ovlHumus, Y_OVL_RAW, 2.0);     // senior district
   decalRegion(-130, -30, 310, 310, 40, ovlLawn, Y_OVL_RAW, 1.4);       // grove district
   decalRegion(-660, 370, -100, 750, 44, ovlLawn, Y_OVL_RAW, .2);       // school side
@@ -493,8 +494,9 @@ export function buildGroundDetail(scene) {
            GREEN_BELT.z1 - 4, Math.floor(
     (GREEN_BELT.x1 - GREEN_BELT.x0) * (GREEN_BELT.z1 - GREEN_BELT.z0) / 46),
     .02);
-  // district lawns the two aerial views land on — med campus + senior side
-  sowGrass(-700, -330, -720, -390, 4200, .02);   // med campus lawn body
+  // district lawns the aerial views land on — med campus + old town + senior side
+  sowGrass(-150, 230, -345, -65, 3600, .02);   // med campus lawn body
+  sowGrass(-660, -300, -650, -390, 1400, .02); // old-town verge grass
   sowGrass(340, 800, -700, -350, 4600, .02);     // senior district lawn
   const grassIM = instances(bladeGeo, bladeM, thin(tufts), { shadow: false });
   grassIM.frustumCulled = false;
