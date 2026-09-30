@@ -30,7 +30,7 @@ try {
 
   if (cmd === 'goto') {
     const t0 = Date.now();
-    await page.goto(arg, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.goto(arg, { waitUntil: 'commit', timeout: 120000 });
     let ready = false;
     try { await page.waitForFunction('window.__ready === true', null, { timeout: 420000 }); ready = true; }
     catch { ready = await page.evaluate('window.__ready === true').catch(() => false); }

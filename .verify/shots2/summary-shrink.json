@@ -1,0 +1,49 @@
+{
+  "branch": "devin/1790731595-shrink-perf",
+  "pr": 45,
+  "worldScale": { "__ws": 0.62, "worldGroupScaleX": 0.62, "aerialPresetCam": [334.8, 384.4, 409.2], "aerialPresetExpected": "0.62x(540,620,660) = (334.8,384.4,409.2)", "result": "PASS" },
+  "labels": { "count": 31, "sample": ["Havenbrook General Hospital", "CampusCare Student Health Clinic", "Willow Creek Park"], "anchoredToBuildings": true, "result": "PASS" },
+  "tierBudgets": {
+    "note": "getPixelRatio unverifiable (adaptive governor floor 0.42 under SwiftShader); __fx config used instead",
+    "min":  { "uiTier": "PERF MIN",  "ratio": 0.42, "tris": 359674,  "calls": 306, "expectTris": "~360k", "result": "PASS" },
+    "med":  { "uiTier": "PERF MED",  "ratio": 0.42, "msaa": 0, "ao": false, "tris": 1108037, "calls": 581, "result": "PASS" },
+    "high": { "uiTier": "PERF HIGH", "msaa": 2, "ao": true, "shadowMapSize": 4096, "bloom": true, "tris": 2866346, "callsAvg": 853, "result": "PASS" },
+    "ultra":{ "uiTier": "PERF ULTRA","msaa": 4, "ao": true, "shadowMapSize": 8192, "bloom": true, "tris": 5099310, "callsAvg": 893, "result": "PASS" }
+  },
+  "cullAuditMIN": { "r": 190, "cells": 3437, "visible": 710, "violations": 0, "result": "PASS" },
+  "angleTint": {
+    "visual": "PASS - graze shot: asphalt/sidewalk/grass natural color, no sky-blue fresnel",
+    "auditRough08NonGlass": 519, "overCap": 7,
+    "overCapMeshes": ["Cube_1","Cube_2","Cube_5","Cube_2","Sphere007_1","Sphere007_2","Sphere007_7"],
+    "overCapEnvI": 1.0, "expectedMaxEnvI": 0.5,
+    "cause": "GLB-imported meshes (Scene<world chain) added after the material-upgrade pass; cap not applied",
+    "glassMaterialsCorrectlyExempt": 15,
+    "result": "PASS with coverage gap (7/519 escaped cap)"
+  },
+  "hud": {
+    "topRow": ["uiBtns", "uiTier"], "buttons": ["uiBtnDir","uiBtnTour","uiBtnRubric","uiBtnGuide"],
+    "controls": 5, "uiBudgetPresent": false, "buildBudgetInDom": false,
+    "guide": "6 tier rows; chunked loading on med/low/min; ULTRA 4xMSAA/2.5px; RUNNING NOW badge on LOW",
+    "brief": "budget figures intact: $9.95M/$10.00M + 6.25M/3.70M categories",
+    "result": "PASS"
+  },
+  "interiors": {
+    "deepLink": { "url": "?interior=campuscare", "on": true, "kind": "medical", "bid": "campuscare", "spec": [34,22.4,3.3], "unscaled": true, "panel": "#9 CampusCare Student Health Clinic / Healthcare / $0.20M 2.0%", "exitBtn": true, "result": "PASS" },
+    "escFirstEntry": { "restoredTo": [334.8,384.4,409.2], "exact": true, "result": "PASS" },
+    "escReEntry": { "note": "old #43 bug scenario: hospital re-entry -> ESC", "restoredTo": [334.8,384.4,409.2], "exact": true, "specCleared": true, "result": "PASS - fixed" },
+    "clickPick": { "clicked": "hospital facade at world (49.6,16.1,-313.1)", "got": "healthdept (office)", "expected": "hospital (medical)", "cause": "pickBuildingAt(hit.point) uses world-scaled coords vs layout-coord rects; scaled point lands in healthdept rect [12..64,-327..-297]", "result": "FAIL - wrong building entered" }
+  },
+  "facilitiesFlyTo": { "clicked": "hospital", "landed": [-4.3,66.5,-426.7], "expectedScaled": [-4.3,66.5,-426.7], "exact": true, "result": "PASS" },
+  "consoleErrors": 0,
+  "loads": [
+    {"url": "?view=aerial&still=1", "ready": "162s(after watchdog period)", "errors": 0},
+    {"url": "?view=aerial&still=1&labels=1", "ready": "~488s", "errors": 0},
+    {"url": "?q=min&view=mainstreet&still=1", "ready": "~469s", "errors": 0},
+    {"url": "?q=med&view=mainstreet&still=1", "ready": "~517s", "errors": 0},
+    {"url": "?q=high&view=mainstreet&still=1", "ready": "~513s", "errors": 0},
+    {"url": "?interior=campuscare&still=1", "ready": "~428s", "errors": 0},
+    {"url": "?q=ultra&view=mainstreet&still=1", "ready": "~512s", "errors": 0}
+  ],
+  "loadTimeNote": "first load ~162s; subsequent ~430-520s under SwiftShader (shader-compile bound post-merge; buildWorld only ~16-20s)",
+  "screenshots": ["s1-aerial","s1b-labels","s2-min-street","s3-med-street","s4-graze","s5-steep","s6-high-street","s7-flyto","s8-guide","s9-brief","s10-interior-campuscare","s11-back-aerial","s12-wrong-building","s13-ultra-street"]
+}
