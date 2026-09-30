@@ -317,7 +317,10 @@ function buildCityHall(scene) {
           m.emissiveIntensity = RUNENV.litI;
           m.userData.lit = true;
         }
-        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+        if (m.isMeshStandardMaterial) {
+          const envI = m.envMapIntensity * RUNENV.envScale;
+          m.envMapIntensity = m.name !== 'glass_lit' && m.roughness >= .8 ? Math.min(envI, .5) : envI;
+        }
       }
     });
     hall.position.set(CX, Y - .02, CZ);   // base sits on the plaza paving
@@ -353,7 +356,10 @@ function buildConservatory(scene) {
           m.emissiveIntensity = RUNENV.litI;
           m.userData.lit = true;
         }
-        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+        if (m.isMeshStandardMaterial) {
+          const envI = m.envMapIntensity * RUNENV.envScale;
+          m.envMapIntensity = m.name !== 'glass_lit' && m.roughness >= .8 ? Math.min(envI, .5) : envI;
+        }
       }
     });
     con.position.set(x, Y, z);
@@ -379,7 +385,10 @@ function buildWaterTower(scene) {
       if (!o.isMesh) return;
       o.castShadow = o.receiveShadow = true;
       for (const m of Array.isArray(o.material) ? o.material : [o.material])
-        if (m.isMeshStandardMaterial) m.envMapIntensity *= RUNENV.envScale;
+        if (m.isMeshStandardMaterial) {
+          const envI = m.envMapIntensity * RUNENV.envScale;
+          m.envMapIntensity = m.name !== 'glass_lit' && m.roughness >= .8 ? Math.min(envI, .5) : envI;
+        }
     });
     wt.position.set(x, Y, z);
     wt.rotation.y = .6;                    // face the diagonal, town-wards

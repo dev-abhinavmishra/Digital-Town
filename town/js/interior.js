@@ -768,7 +768,8 @@ export function installInterior({ scene, camera, getOrtho, renderer, fly, syncAn
     ray.far = 4000;
     const hit = ray.intersectObjects(scene.children, true)[0];
     if (!hit) return;
-    const b = pickBuildingAt(hit.point.x, hit.point.z);
+    const w = window.__ws || 1;
+    const b = pickBuildingAt(hit.point.x / w, hit.point.z / w);
     if (b) enter(b);
   });
   addEventListener('keydown', e => { if (e.key === 'Escape') exit(); });

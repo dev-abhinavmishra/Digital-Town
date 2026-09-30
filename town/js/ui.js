@@ -167,7 +167,7 @@ export function installUI() {
     ['high', 'Full fidelity — 4K soft shadows, ambient occlusion, bloom, SMAA, 1.5x pixels, 85% scene detail.'],
     ['med',  'Balanced — 2K shadows, bloom + SMAA, no ambient occlusion, 70% scene detail, chunked map loading.'],
     ['low',  'Performance — 1K shadows, SMAA only (no AO / bloom), 45% scene detail, chunked map loading. For weak GPUs / low RAM.'],
-    ['min',  'Minimal — no shadows or post-fx, no moving traffic or pedestrians, 12% scene detail with chunked map culling (~280k tris at street level). For very weak devices.'],
+    ['min',  'Minimal — no shadows or post-fx, no moving traffic or pedestrians, 12% scene detail with chunked map culling (~360k tris at street level). For very weak devices.'],
   ];
   let savedPref = 'auto';
   try { savedPref = localStorage.getItem('dt_q') || 'auto'; } catch {}
