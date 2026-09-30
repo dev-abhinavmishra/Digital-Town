@@ -35,6 +35,16 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 - Camera pose check: on enter, `I.saved.p/q` must equal the pre-enter aerial pose; on exit, `__cam.position`/`quaternion` must equal it exactly. Regression signature (seen on devin/1790469015-building-interiors): on re-entry the saved pose captured stage coords (~(16.4,-178.4,-12.4) for a w34×d26 room) because I.on flips 190ms before the save and interior.tick clamps to the stale I.spec — exit then lands at a random street point. First entry per page is immune (I.spec null → tick no-ops).
 - Park zone ('park') has no w/d and ZONE_RECT.park=null → unpickable; clicking the park does nothing (no card). Road/ground clicks are inert by design.
 
+## Map view + district/street labels (PR46+)
+- `?view=map` is the HEAVIEST view under SwiftShader (~14-16min to __ready; CDP connects time out repeatedly mid-build — keep retrying, the page is alive; verify via `/json` target list). Add `&labels=1` or NOTHING renders: the whole label block (facility labels + district labels + street-name map labels) is inside `if (LABELS)` — district `.lbl.dist` divs only spawn when `VIEW==='map'` AND `LABELS`.
+- District label positions (DOM divs in `#labels`): UNIVERSITY DISTRICT (40,-360), MEDICAL DISTRICT (200,-555), SENIOR (585,-620), DOWNTOWN (-480,-445), COMMERCIAL CORRIDOR (160,555), RESIDENTIAL WEST (-460,40), SCHOOL (-510,705). Map north = screen-up.
+- `Failed to load resource: net::ERR_CONNECTION_RESET` can appear transiently on the heaviest loads — static-server socket drops under the fetch burst, not an app error; pages still render fully. Don't count these as app console errors but DO report them honestly.
+
+## Wayfinding/fingerpost verification
+- `finger(x,z,ry,blades)` (city/hero.js ~251): blades = texPanel meshes in a group rotated `ry`; each blade's TWO faces carry the same arrow texture so each face's arrow points opposite world dirs. Arrow glyph maps to the face's local axes: '→'=+xText, '←'=-xText, '↑'=-faceNormal (ahead past sign), '↓'=+faceNormal (behind). World arrow dir per face = rotateY(ry+byaw) applied. Validate convention via a known-good sign first, then flag blades whose best-face direction is >60deg off the bearing to the named destination.
+- Sign text IS legible in close-ups: position cam ~10-15m from the pole at blade height (y~3) facing the pole.
+- Pre-shrink branch (pre-PR45-merge): layout coords ARE world coords — `__ws` and the `world` group are absent; `pickBuildingAt(hit.point)` gets matching coords so click-pick works (the PR45 ws mis-pick does not apply).
+
 ## MIN-tier chunked merge + distance culler
 - `?q=min|low|med|high` forces a tier; `#uiTier` element shows the active tier ('MIN'/'HIGH'). `window.__prof` build entries: `['buildWorld',ms]`, `['mergeStatic',ms]`, `['minSplit',n]` (MIN only — n static InstancedMeshes rebucketed into cells).
 - Chunk cells: merged-mesh + split-instanced children carry `userData.ccx/ccz` (cell centre). Collect via `__scene.traverse(o=>o.userData&&o.userData.ccx!==undefined)`. Cell spacing: 160m on MIN, 320m on all other tiers.
