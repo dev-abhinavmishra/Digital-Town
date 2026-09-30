@@ -52,6 +52,11 @@ const TC = TIER_CFG[TIER];
    must be set before any builder runs below */
 DETAIL.f = TC.detail ?? 1;
 const MIN = TIER === 'min';
+const ULTRA = TIER === 'ultra';
+/* chunked map loading: min/low/med distance-cull whole cells;
+   high + ultra always keep every chunk */
+const CULL = TIER === 'min' || TIER === 'low' || TIER === 'med';
+const CULL_BASE = { min: 300, low: 360, med: 520 };   // street-level radii
 
 /* ---------- renderer ---------- */
 const renderer = new THREE.WebGLRenderer({ antialias: false,
@@ -295,7 +300,7 @@ const MERGED = mergeStatic(scene, { chunk: CHUNK });
    static instanced scatter (trees/grass/litter/furniture) is also rebucketed
    into cells so it drops out with distance like the merged geometry */
 const CHUNKS = [...MERGED.children];
-if (MIN) {
+if (CULL) {
   const tagged = [];
   scene.traverse(o => { if (o.isInstancedMesh && o.userData.staticInst) tagged.push(o); });
   for (const im of tagged) {
@@ -305,7 +310,7 @@ if (MIN) {
     im.parent.add(grp); im.parent.remove(im);
     CHUNKS.push(...grp.children);
   }
-  (window.__prof ||= []).push(['minSplit', tagged.length]);
+  (window.__prof ||= []).push(['chunkSplit', tagged.length]);
 }
 
 /* presentation layer — budget tracker, facility directory, info cards, tour
@@ -584,7 +589,7 @@ const POST = !NOFX && TIER !== 'low' && TIER !== 'min';
 if (POST) {
   pipe = createPipeline(renderer, scene, activeCam,
     { time: TIME, ao: !NOAO && TC.ao, pixelRatio, msaa: msaaSamples,
-      skip: skipSet.size ? skipSet : null });
+      aoHi: ULTRA, skip: skipSet.size ? skipSet : null });
   composer = pipe.composer;
 }
 
@@ -754,11 +759,11 @@ function tick() {
   const inside = !!(interior && interior.on);
   if (!inside) tickWorld(t, dt);
   if (occluderCull && !inside) occluderCull.tick(activeCam);
-  /* MIN tier: distance-cull whole 320m merge cells. Radius grows with
-     altitude so the aerial keeps the town intact while a street camera
-     drops ~80% of the static world. */
-  if (MIN && (frames % 10) === 0) {
-    const r = Math.max(300, activeCam.position.y * 3.0), r2 = r * r;
+  /* min/low/med: distance-cull whole merge cells by their baked bounds.
+     Radius grows with altitude so the aerial keeps the town intact while
+     a street camera drops most of the static world; high/ultra keep all. */
+  if (CULL && (frames % 10) === 0) {
+    const r = Math.max(CULL_BASE[TIER] || 300, activeCam.position.y * 3.0), r2 = r * r;
     const px = activeCam.position.x, pz = activeCam.position.z;
     /* bounds-overlap test: each chunk is hidden only when its real baked
        bounds clear the radius — town-spanning geometry never drops out
