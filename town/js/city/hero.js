@@ -280,21 +280,21 @@ function buildWayfinding(scene) {
     wayItem('board', [x, z]);
   };
 
-  finger(104, -350.5, .3, [['HOSPITAL  \u2191', 0, 0], ['ER ENTRANCE  \u2191', 0, 0], ['EMS STN  \u2190', 0, -.5]],
+  finger(104, -350.5, .3, [['HOSPITAL  \u2191', 0, 0], ['ER ENTRANCE  \u2191', 0, 0], ['EMS STN  \u2192', 0, -.1]],
     [rd('Mercy Dr'), rd('Wellness Way')]);
-  finger(-150, -625, 2.9, [['MED SCHOOL  \u2192', 0, 0], ['THE QUAD  \u2192', 0, 0], ['CLINIC  \u2190', 0, .6]],
+  finger(-150, -625, 2.9, [['MED SCHOOL  \u2192', 0, -.85], ['THE QUAD  \u2192', 0, -.85], ['CLINIC  \u2191', 0, .6]],
     [rd('University Ave'), rd('Old Town Rd')]);
-  finger(-448, -171, .1, [['MIDTOWN  \u2192', 0, 0], ['SCHOLAR CT  \u2193', 0, Math.PI / 2], ['DOWNTOWN  \u2191', 0, 0]],
+  finger(-448, -171, .1, [['MIDTOWN  \u2192', 0, 0], ['SCHOLAR CT  \u2192', 0, -.6], ['DOWNTOWN  \u2191', 0, 0]],
     [rd('Scholar Ln'), rd('Midtown Ave')]);
-  finger(-121, -57, -.2, [['OLD TOWN  \u2190', 0, Math.PI / 2], ['MAIN ST SHOPS  \u2193', 0, 0], ['CAMPUS  \u2191', 0, Math.PI / 2]],
+  finger(-121, -57, -.2, [['OLD TOWN  \u2190', 0, 2.43], ['MAIN ST SHOPS  \u2190', 0, .2], ['CAMPUS  \u2192', 0, 4.06]],
     [rd('University Ave'), rd('Main St')]);
-  finger(-157, 303, .2, [['COMMONS MALL  \u2192', 0, Math.PI / 2], ['WILLOW PARK  \u2192', 0, Math.PI / 2], ['SCHOOL  \u2190', 0, 0]],
+  finger(-157, 303, .2, [['COMMONS MALL  \u2192', 0, 2.67], ['WILLOW PARK  \u2192', 0, 3.16], ['SCHOOL  \u2192', 0, .43]],
     [rd('University Ave'), rd('Commerce Blvd')]);
   board(390, 428, .35, 'HAVENBROOK COMMONS', ['FOOD COURT  \u2192', 'NORTH ENTRY  \u2192', 'PARKING  \u2190']);
   board(-455, -488, 0, 'OLD TOWN SQUARE', ['UNIVERSITY  \u2192', 'PARKING  \u2193']);
-  finger(95, 302, -.15, [['GROVE ST  \u2193', 0, Math.PI / 2], ['SCHOOLHOUSE  \u2192', 0, Math.PI / 2], ['COMMERCE  \u2193', 0, 0]],
+  finger(95, 302, -.15, [['GROVE ST  \u2191', 0, -1.42], ['SCHOOLHOUSE  \u2192', 0, .73], ['COMMERCE  \u2193', 0, 0]],
     [rd('Grove St'), rd('Commerce Blvd')]);
-  finger(-157, -376, .2, [['UNIVERSITY  \u2192', 0, Math.PI / 2], ['MEDICAL DIST  \u2192', 0, Math.PI / 2], ['EMS  \u2190', 0, Math.PI / 2]],
+  finger(-157, -376, .2, [['UNIVERSITY  \u2192', 0, 2.45], ['MEDICAL DIST  \u2192', 0, 3.44], ['EMS  \u2190', 0, -.74]],
     [rd('University Ave'), rd('Wellness Way')]);
 }
 
