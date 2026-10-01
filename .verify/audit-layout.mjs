@@ -22,16 +22,26 @@ for (const g of L.GREENS)   items.push({ id: `green:${g.name || g.use}`, x0: g.x
 items.push({ id: 'quadgrass', x0: -55, x1: 135, z0: -242, z1: -158 });
 items.push({ id: 'cityhall', x0: -442, x1: -402, z0: -539, z1: -501 });
 
-let bad = 0;
-for (const it of items) {
+/* overlaps that are part of the design, reported as NOTE not FAIL:
+   the ER apron lot sits at the dead end of Mercy Dr (the apron IS the road's
+   end), and city hall anchors the plaza's east edge — both predate the audit. */
+const KNOWN = [['lot@66,-458', 'Mercy Dr'], ['PLAZA', 'cityhall']];
+const known = (a, b) => KNOWN.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
+
+let bad = 0, noted = 0;
+const flag = (a, b, area, kind) => {
+  if (known(a, b)) { console.log(`NOTE  ${kind} ${a} x ${b} (${area.toFixed(0)}m^2) — intended`); noted++; return; }
+  console.log(`${kind}  ${a} overlaps ${b} by ${area.toFixed(0)}m^2`); bad++;
+};
+for (const it of items)
   for (const rd of ROADB) {
     const a = ovl(it, rd);
-    if (a > MARGIN) { console.log(`ROAD  ${it.id} overlaps ${rd.name} by ${a.toFixed(0)}m^2`); bad++; }
+    if (a > MARGIN) flag(it.id, rd.name, a, 'ROAD');
   }
-}
 for (let i = 0; i < items.length; i++)
   for (let j = i + 1; j < items.length; j++) {
     const a = ovl(items[i], items[j]);
-    if (a > MARGIN) { console.log(`PAIR  ${items[i].id} x ${items[j].id} overlap ${a.toFixed(0)}m^2`); bad++; }
+    if (a > MARGIN) flag(items[i].id, items[j].id, a, 'PAIR');
   }
-console.log(bad ? `FAIL ${bad} overlaps` : `OK ${items.length} rects, 0 overlaps`);
+console.log(bad ? `FAIL ${bad} overlaps` : `OK ${items.length} rects, ${bad} overlaps (${noted} intended)`);
+process.exitCode = bad ? 1 : 0;
