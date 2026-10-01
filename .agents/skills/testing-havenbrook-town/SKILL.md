@@ -12,7 +12,11 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 ## Chrome / WebGL — Linux box (devin-remote Chrome)
 - The desktop Chrome devin-remote drives (CDP :29229, binary /opt/.devin/chrome/chrome/linux-*/chrome-linux64/chrome) already renders WebGL2 via SwiftShader (`--use-angle=swiftshader-webgl --disable-gpu`); probe `canvas.getContext('webgl2')` to confirm — no relaunch needed. webgl1 is absent; three@0.160 only needs webgl2.
 - `browser_console` eval can be spuriously blocked with "the page has a JavaScript dialog open" when NO dialog exists (phantom state across reloads; `Page.handleJavaScriptDialog` returns "No dialog is showing"). Don't trust that error — drive JS via `chromium.connectOverCDP('http://127.0.0.1:29229')` from playwright-core (.verify/node_modules); find the page by `p.url().includes(':PORT')`.
-- Display is 1600x1200; the window fills it. First `window.__ready` ≈ 4min at that size (poll via CDP; fpsEMA in __fx is inflated because dt clamps at .05). In-page watchdog reloads at 30s×3 (sessionStorage `hbBoot`) — the 4th load stays and renders to completion, so budget ~90s + render time.
+- Display is 1600x1200 CSS px (physical 3200x2400, dpr=2; PNG screenshots are 2x CSS coords — multiply projected px by devicePixelRatio before sampling pixels). First `window.__ready` ≈ 4min at that size (poll via CDP; fpsEMA in __fx is inflated because dt clamps at .05). In-page watchdog reloads at 30s×3 (sessionStorage `hbBoot`) — the 4th load stays and renders to completion, so budget ~90s + render time. Observed ready 162-207s for a re-load of an already-built tier.
+- `.verify/step-linux.mjs` (tracked helper) = one-shot CDP driver: `goto <url>` / `eval <js>` / `shot <name>` / `clickxy x,y` / `probe` / `setcam px,py,pz,tx,ty,tz` / `fly ...` / `wait ms` → shots land in `.verify/shots-linux/`.
+- `.verify/hudflow.mjs` (if present, untracked) = full HUD sweep: budget text+open, drawer group counts, facility card + fly-to cam check, rubric/guide modals, tier chip, tour start→NEXT→Esc→camera-home, hint/label styles; prints `RESULT` JSON.
+- `.verify/sample.mjs` (if present) = world→screen projection (`THREE.Vector3.project(__cam)` via dynamic `import('./vendor/three/build/three.module.js')` in evaluate — importmap covers bare 'three' too) + PNG pixel sampling by feeding the screenshot back as a `data:` URL into an in-page canvas `getImageData`. Use for "did this surface flicker to the wrong colour at this camera" checks.
+- Auto quality tier on this box resolves LOW → tier chip reads 'PERF LOW', guide LOW row badges 'RUNNING NOW' and AUTO badges 'SAVED'.
 
 ## Chrome / WebGL — Windows box
 - Chrome for Testing 137 at `C:/devin/chrome/chrome-win64/chrome.exe`; no real GPU. Hand-launched Chrome needs `--enable-unsafe-swiftshader` or WebGL2 context creation FAILS → 30s boot watchdog reloads forever (`window.__ready` never fires). Playwright `chromium.launch` adds the flag itself; `.verify/shots.mjs`/`ui-probe.mjs` already do it.
@@ -20,13 +24,18 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 - Resize to innerWidth/innerHeight exactly 1280x720 (outer ≈1296x920) via PowerShell MoveWindow; first `__ready` ~2-4min per load (observed 143-196s); waitForFunction 420s; screenshot timeout 120s. Minimize the env's own Chrome (`ShowWindow hwnd 6`) or SetWindowPos TOPMOST so it doesn't cover the test window in recordings.
 
 ## Page probes (window.*)
-`__ready` (bool; flips after veil fades + 2 presented frames), `__flyTo(px,py,pz,tx,ty,tz,durSec)`, `__flyDone()`, `__setCam(px,py,pz,tx,ty,tz)`, `__cam`, `__scene`, `__renderer.info.render.{calls,triangles}`, `__fx.{fps,calls,callsAvg,tris,atmo,...}`. URL params: `?view=aerial|mainstreet|park|downtown|campus|medical|senior|commercial|school|housing|map`, `?time=day|dusk|golden`, `&still=1` (no auto-orbit), `&labels=1`, `&cam=...`, `&nofx|noao|noatmo|nofog|freeze|debug|fps=1`.
+`__ready` (bool; flips after veil fades + 2 presented frames), `__flyTo(px,py,pz,tx,ty,tz,durSec)`, `__flyDone()`, `__setCam(px,py,pz,tx,ty,tz)`, `__cam`, `__scene`, `__renderer.info.render.{calls,triangles}`, `__fx.{fps,calls,callsAvg,tris,atmo,tier,...}`. URL params: `?view=aerial|mainstreet|park|downtown|campus|medical|senior|commercial|school|housing|map`, `?time=day|dusk|golden`, `&still=1` (no auto-orbit), `&labels=1` (REQUIRED for .lbl map labels + #legend — without it the labels layer stays empty), `&cam=...`, `&nofx|noao|noatmo|nofog|freeze|debug|fps=1`.
 
 ## HUD (town/js/ui.js) — expected values
-- `#uiBudget` chip reads exactly `$9.95M / $10.00M` (spent = 9,950,000); click toggles `.open` → breakdown rows.
-- `#uiBtnDir` toggles `#uiDrawer.open` (3 groups: free×2, health×13, community×11); clicking `.fi[data-id]` shows `#uiCard.show` and calls `__flyTo` — verify `__cam.position` ≈ flyToBuilding formula: dist=max(w,d)*1.7+26, ang=atan2(b.x,b.z)+.6, px=b.x+sin(ang)*dist, pz=b.z+cos(ang)*dist, py=max(30,h*1.6+24).
-- `#uiBtnTour` starts 8-stop tour in `#uiTourBar` (`.cap b` caption, `.step` "n / 8", auto-advance every 9s); `#uiTourNext` advances (its mousedown is stopPropagation'd so it must NOT end the tour); Esc or a canvas mousedown ends it and tweens the camera back to aerial (540,620,660).
-- `#uiBtnRubric` opens `#uiRubric.open` (9 ✓ rows); `#uiRubricX` or backdrop click closes.
+- `#uiBudget` chip `.row1 span` reads exactly `$9.95M / $10.00M` (spent = 9,950,000); click toggles `.open` → `.sub` shows 4 breakdown lines (health $6.25M, community $3.70M, free×2 sites, headroom $0.05M).
+- `#uiBtnDir` toggles `#uiDrawer.open` (3 `.grp` groups: 'Provided by the town (2)', 'Healthcare facilities (13)', 'Community locations (11)'; 26 `.fi` rows); clicking `.fi[data-id]` shows `#uiCard.show` and calls `__flyTo` — verify `__cam.position` ≈ flyToBuilding formula: dist=max(w,d)*1.7+26, ang=atan2(b.x,b.z)+.6, px=b.x+sin(ang)*dist, pz=b.z+cos(ang)*dist, py=max(30,h*1.6+24).
+- `#uiBtnTour` starts 8-stop tour in `#uiTourBar` (`.cap b` caption, `.step` "n / 8", auto-advance every 9s); `#uiTourNext` advances (its mousedown is stopPropagation'd so it must NOT end the tour — regression check: after clicking NEXT, `.step` must show '2 / 8' and tourBar still `.show`); Esc or a canvas mousedown ends it and tweens the camera back to aerial (540,620,660 → -30,0,-40); verify `__cam.position` ≈ that ±40 after ~3s.
+- `#uiBtnRubric` opens `#uiRubric.open` (9 `td.ok` ✓ rows); `#uiRubricX` or backdrop click closes.
+- `#uiBtnGuide` opens `#uiGuide.open` (6 `.tr` tier rows AUTO/ULTRA/HIGH/MED/LOW/MIN; `.bdg` text 'SAVED' on saved pref, 'RUNNING NOW' on live tier); `#uiGuideX`/backdrop closes.
+- `#uiTier` chip textContent = 'PERF ' + tier.toUpperCase() (set in main.js).
+- `__uiShowCard(id)` probe opens the card without flying. Map labels `.lbl` (only exist with `?labels=1`) carry a `.num` badge; clicking one calls `showCard(b,false)` — card opens but camera stays.
+- Known cosmetic quirk (pre-existing, translateY(140px) closed state): a closed `#uiCard` leaves ~40-70px of its top edge visible above the viewport bottom — shows as a card sliver in screenshots, NOT a stuck-open card. Check `.classList.contains('show')` for truth.
+- Card 'step inside' link `[data-act="in"]` → `__enterInterior(b.id)`; `__interior.on` flips true, Esc exits. Interior HUD (interior.js anonymous panel, zIndex 72) is a separate dark-ish component — not part of the ui.js theme.
 
 ## Building interiors (town/js/interior.js)
 - Probes: `__interior{.on,.kind,.b.id,.spec,.saved.p/q}`, `__enterInterior(id)`/`I.byId(id)`, `__exitInterior()`. Deep link: `?interior=hospital|coffee|medhall|preservecommons`. Rooms render on layer 2 at STAGE=(0,-180,0); EYE=1.62; archetypes from BY_ID/BY_TYPE (medical ward, cafe dining room, hall great hall, mall atrium, home, shop).
@@ -43,8 +52,10 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 
 ## Good camera spots for close-ups
 - Street blades: pole at each of the first 8 `intersections()` (all on University Ave x=-140) → SW corner offset (−wv/2−1.4, +wh/2+1.4); e.g. Univ×Main pole ≈(−150.4,−30.6), cam (−138,4.5,−18)→(−150.4,3.1,−30.6). (Verified on Linux: renders blades + crosswalks + pedestrians.)
+- Junction pad pixel check (z-fight): junction centre Univ×Main = (−140,0,−40); project to screen each pose and sample — should stay asphalt-grey (r≈g≈b ~100-175) at every angle, never grass-green.
 - Parking meters: rows z=−62 / z=−18 (x −38..180) along Main St; look along the row, e.g. (−30,2.6,−52)→(40,1,−62).
 - Pedestrian cluster (idlers): plaza (60,−205)±35, cam (35,5,−168)→(62,1.2,−205).
+- Lawn overlays (3 stripe/mottle variants): school field cam (−450,16,470)→(−512,0,545) shows mottle; quad (−430,22,−485)→(−480,0,−560).
 - Dusk headlight glows: any moving/parked car on Main St, e.g. (55,4,−24)→(95,1.2,−48).
 
 ## Devin secrets needed
