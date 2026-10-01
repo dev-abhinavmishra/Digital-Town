@@ -46,7 +46,9 @@ export function buildLots(scene) {
   const bin = new GeoBin();
   const parts = [];
   const white = lift(mat('#dfe3e6'), 5);
-  const bump = lift(mat('#d4b23a'), 6);
+  /* clone so the rank doesn't ride the shared mat() instance — helipad +
+     dock rings (buildings.js) use the same colour as 3D tori */
+  const bump = lift(mat('#d4b23a').clone(), 6);
   /* per-lot asphalt tint - real pads weather at different rates; the shared
      ASPH instance stays on the roads, each lot gets its own keyed pbr() */
   const LOT_TINTS = ['#8e949a', '#a0a6ab', '#878e94', '#989ea4',
