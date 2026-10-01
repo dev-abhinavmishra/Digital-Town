@@ -5,3 +5,4 @@ town-*/.git
 Thumbs.db
 .DS_Store
 .verify/shots/
+.verify/shots-linux/

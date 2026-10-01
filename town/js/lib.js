@@ -301,6 +301,20 @@ export function attachDriftShadow(mat0, scale = .0015, speed = .004, strength = 
   mat0.needsUpdate = true;
 }
 
+/* deterministic z-order for the stacked surface kit — roads, pads, gutters,
+   markings, aprons sit millimetres apart on the ground plane, far inside
+   depth-buffer epsilon at aerial range, so they z-fight into angle-dependent
+   colour flicker. A per-material polygonOffset rank makes the physically
+   higher layer always win; rank mirrors the Y offsets (higher = closer). */
+export function lift(m, rank = 1) {
+  if (!m || m.userData.__lift === rank) return m;
+  m.polygonOffset = true;
+  m.polygonOffsetFactor = -rank;
+  m.polygonOffsetUnits = -rank;
+  m.userData.__lift = rank;
+  return m;
+}
+
 /* ============== facades ============== */
 const texCache = new Map();
 function cachedTex(key, maker) {

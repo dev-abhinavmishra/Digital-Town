@@ -12,7 +12,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CITYHALL_B64 } from '../../assets/cityhall.js';
 import { WATERTOWER_B64 } from '../../assets/watertower.js';
 import { CONSERVATORY_B64 } from '../../assets/conservatory.js';
-import { box, cyl, plane, mat, signTexture, colored, VCOL, R, rr, pick, RUNENV } from '../lib.js';
+import { box, cyl, plane, mat, signTexture, colored, VCOL, lift, R, rr, pick, RUNENV } from '../lib.js';
 import { pbr } from '../mats.js';
 import { ROADS } from '../layout.js';
 import { occupyRect, isFree } from './occ.js';
@@ -22,7 +22,9 @@ import { heroLeaf, wayItem } from './stats.js';
 const M = THREE.MeshStandardMaterial;
 const Y = 0.28;   // surface lift — matches details.js
 
-const PAVEH = pbr('precast_stone_paving'); PAVEH.color = new THREE.Color('#a39c90');
+// keyed color → own cache instance (shared pbr() instances mutated post-hoc
+// all ended up wearing the last writer's tint); lift ranks it over quad/path
+const PAVEH = lift(pbr('precast_stone_paving', { color: '#a39c90' }), 6);
 const STONE = () => mat('#8d949a');
 const TRIM = () => mat('#e8e2d4');
 const STEEL = () => mat('#7d868c');

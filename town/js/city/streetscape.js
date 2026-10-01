@@ -6,7 +6,7 @@
 // storm drains. Everything static funnels through GeoBin — few draw calls.
 import * as THREE from 'three';
 import { ROADS, LOTS, HOUSE_BLOCKS } from '../layout.js';
-import { plane, mat, canvasTex, makeCanvas, attachDriftShadow, R, rr } from '../lib.js';
+import { plane, mat, canvasTex, makeCanvas, attachDriftShadow, lift, R, rr } from '../lib.js';
 import { pbr, WET_SURFACES } from '../mats.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
@@ -79,7 +79,7 @@ function arrowMat(dir) {
   }
   const t = canvasTex(c);
   const m = new M({ map: t, transparent: true, roughness: .9,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    polygonOffset: true, polygonOffsetFactor: -7, polygonOffsetUnits: -7 });
   arrowCache.set(dir, m);
   return m;
 }
@@ -94,7 +94,8 @@ function tactileMat() {
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
     x.beginPath(); x.arc(9 + i * 15 + (j % 2) * 7, 9 + j * 15, 3.2, 0, 7); x.fill();
   }
-  _tactile = new M({ map: canvasTex(c), roughness: .95 });
+  _tactile = new M({ map: canvasTex(c), roughness: .95,
+    polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
   return _tactile;
 }
 
@@ -111,17 +112,26 @@ export function buildStreetscape(scene) {
   // albedo averages ~rgb(90); near-black tint crushed it to a void ribbon —
   // lift toward worn-asphalt gray so markings + wheel polish read
   asph.color = new THREE.Color('#9aa0a6'); asph.roughness = .97;
-  const gutterM = pbr('asphalt_02', { repeat: [4, 4], color: '#373b41' });
+  lift(asph, 1);
+  // junction pads share the asphalt look but must order above both crossing
+  // ribbons — a keyed variant splits it off the shared cache instance
+  const padM = pbr('asphalt_02', { color: '#9aa0a6', roughScale: .97 });
+  padM.roughness = .97;
+  attachDriftShadow(padM, .0015, .0009, .25);
+  WET_SURFACES.push(padM);
+  lift(padM, 2);
+  const gutterM = lift(pbr('asphalt_02', { repeat: [4, 4], color: '#373b41' }), 4);
   WET_SURFACES.push(gutterM);
   const curbM = pbr('concrete', { repeat: [6, 1], color: '#b6b2a8' });
-  const walkM = pbr('precast_stone_paving', { repeat: [4, 4], color: '#b2ac9f' });
-  const apronM = pbr('concrete', { repeat: [5, 5], color: '#9d998e' });
-  const vergeM = pbr('grass_ground', { repeat: [3, 3], color: '#8fae74' });
+  const walkM = lift(pbr('precast_stone_paving', { repeat: [4, 4], color: '#b2ac9f' }), 3);
+  const apronM = lift(pbr('concrete', { repeat: [5, 5], color: '#9d998e' }), 8);
+  const vergeM = lift(pbr('grass_ground', { repeat: [3, 3], color: '#8fae74' }), 3);
   // one continuous world-space cloud-shadow field across every flat surface
   // (default asphalt is shared with details.js ASPH — already drifted there)
   for (const m of [gutterM, walkM, apronM, vergeM])
-    attachDriftShadow(m, .0015, .0009, m === vergeM ? .30 : .34);
-  const white = mat('#e8e6df'), yellow = mat('#d9b23a'), drainM = mat('#26292c');
+    attachDriftShadow(m, .0015, .0009, m === vergeM ? .20 : .24);
+  const white = lift(mat('#e8e6df'), 6), yellow = lift(mat('#d9b23a'), 6),
+        drainM = lift(mat('#26292c'), 7);
   const ix = intersections();
   const bin = new GeoBin();
   const cw = 3.2, bars = 6;
@@ -168,7 +178,7 @@ export function buildStreetscape(scene) {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true,
       depthWrite: false, polygonOffset: true,
-      polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      polygonOffsetFactor: -3, polygonOffsetUnits: -3,
       ...(_night ? { color: '#3a4048' } : {}) });
     _wearM.set(key, m);
     return m;
@@ -406,7 +416,7 @@ export function buildStreetscape(scene) {
 
   /* junction pads + crosswalks + stop bars + lane arrows */
   for (const i of ix) {
-    scene.add(plane(i.wv + 2, i.wh + 2, asph, i.x, Y + .002, i.z, -Math.PI / 2, 6));
+    scene.add(plane(i.wv + 2, i.wh + 2, padM, i.x, Y + .002, i.z, -Math.PI / 2, 6));
     const legOk = [
       i.v.a0 < i.z - i.wh / 2 - 4.9, i.v.a1 > i.z + i.wh / 2 + 4.9,
       i.h.a0 < i.x - i.wv / 2 - 4.9, i.h.a1 > i.x + i.wv / 2 + 4.9,

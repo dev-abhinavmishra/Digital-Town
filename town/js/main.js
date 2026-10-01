@@ -17,7 +17,7 @@ import { registerOccupancy, buildRoads, buildLots, buildTrees, buildCars,
          buildCountryside, buildFences, buildClouds, buildBirds, buildMountains,
          buildContactShadows, tickWorld } from './details.js';
 import { grassTexture, mat, plane, cyl, R, rr, pick, skyTexture, mergeStatic, splitInstanced,
-         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, uTime, WATERFX, RUNENV,
+         groundOverlayTexture, detailNoiseTexture, attachDriftShadow, lift, uTime, WATERFX, RUNENV,
          DETAIL } from './lib.js';
 import { M_GRASS, pbr, texReport } from './mats.js';
 import { buildFurniture } from './city/furniture.js';
@@ -136,11 +136,13 @@ scene.add(new THREE.HemisphereLight(
   TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .40));
 
 /* ---------- ground ---------- */
-const groundM = pbr('grass_ground'); groundM.color = new THREE.Color('#9db27e');
+/* keyed color → own pbr() cache instance; shared instances mutated post-hoc
+   all ended up wearing the last writer's tint (every lawn read identical) */
+const groundM = pbr('grass_ground', { color: '#9db27e' });
 /* micro-detail multiply — the vendored grass tex repeats every 60m, so at eye
    level it reads flat; a luminance noise layer on a fixed 28m world tile
    restores close-range texture without adding a draw call */
-groundM.onBeforeCompile = sh => {
+const grassDetail = sh => {
   sh.uniforms.uDetail = { value: detailNoiseTexture() };
   /* sample the detail texture in WORLD xz (one tile = 28 m) so every
      grass_ground surface gets the same texel density — UV-based sampling let
@@ -158,7 +160,8 @@ groundM.onBeforeCompile = sh => {
     .replace('#include <map_fragment>', `#include <map_fragment>
       diffuseColor.rgb *= texture2D(uDetail, vWXZ / 28.0).rgb;`);
 };
-attachDriftShadow(groundM, .0015, .0009, .30);  // ~660m cloud shadow field
+groundM.onBeforeCompile = grassDetail;
+attachDriftShadow(groundM, .0015, .0009, .22);  // ~660m cloud shadow field
 scene.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
 // large-scale blotch overlay so the lawn never reads as flat tiling
 const ovM = new THREE.MeshStandardMaterial({ map: groundOverlayTexture(), transparent: true,
@@ -279,9 +282,12 @@ scene.traverse(o => {
 (window.__prof ||= []).push(['buildWorld', Math.round(performance.now() - _tb)]);
 
 /* campus quad — sized to sit clear of the med hall & the campus lot */
-const quadM = pbr('grass_ground'); quadM.color = new THREE.Color('#93b377');
+const quadM = pbr('grass_ground', { color: '#93b377' });
+quadM.onBeforeCompile = grassDetail;               // same world-noise detail
+attachDriftShadow(quadM, .0015, .0009, .22);        // and the same cloud field
+lift(quadM, 1);
 scene.add(plane(190, 84, quadM, -480, .31, -530, -Math.PI / 2, 10));
-const qp = pbr('precast_stone_paving'); qp.color = new THREE.Color('#c4b49a');
+const qp = lift(pbr('precast_stone_paving', { color: '#c4b49a' }), 5);
 for (const a of [.62, -.62]) {
   const g = new THREE.PlaneGeometry(6, 170); g.rotateX(-Math.PI / 2); g.rotateY(a);
   const p = new THREE.Mesh(g, qp); p.position.set(-480, .33, -532); p.receiveShadow = true;
