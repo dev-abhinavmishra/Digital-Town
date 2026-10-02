@@ -7,7 +7,7 @@ import { ROADS, LOTS, WATER, PARK_ZONE, BUILDINGS, APARTMENTS,
 import { box, cyl, plane, mat, signTexture, fieldTexture, cropTexture, colored, VCOL,
          instances, waterMaterial, cloudSpriteTexture, uTime,
          makeCanvas, canvasTex, blobShadowTexture, warmGlowTexture,
-         attachDriftShadow, R, rr, pick, mulberry32, RUNENV, DETAIL, thin } from './lib.js';
+         attachDriftShadow, lift, R, rr, pick, mulberry32, RUNENV, DETAIL, thin } from './lib.js';
 import { pbr, M_BARK, WET_SURFACES } from './mats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { occupied, occupyRect, isFree, registerOccupancy, streetBand } from './city/occ.js';
@@ -22,8 +22,10 @@ export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
 const ASPH = pbr('asphalt_02');          // tile via plane(..., tile)
 ASPH.color = new THREE.Color('#9aa0a6'); ASPH.roughness = .97;  // lifted in streetscape.js too (shared instance)
-attachDriftShadow(ASPH, .0015, .0009, .34);   // same cloud field over pavement
-const PAVE = pbr('precast_stone_paving'); PAVE.color = new THREE.Color('#a8a499');
+attachDriftShadow(ASPH, .0015, .0009, .24);   // same cloud field over pavement
+// keyed color → own cache instance; shared pbr() instances mutated post-hoc
+// all ended up wearing the last writer's tint
+const PAVE = lift(pbr('precast_stone_paving', { color: '#a8a499' }), 4);
 const GRVL = pbr('gravel');
 
 const M = THREE.MeshStandardMaterial;
@@ -43,8 +45,10 @@ export function buildRoads(scene) {
 export function buildLots(scene) {
   const bin = new GeoBin();
   const parts = [];
-  const white = mat('#dfe3e6');
-  const bump = mat('#d4b23a');
+  const white = lift(mat('#dfe3e6'), 5);
+  /* clone so the rank doesn't ride the shared mat() instance — helipad +
+     dock rings (buildings.js) use the same colour as 3D tori */
+  const bump = lift(mat('#d4b23a').clone(), 6);
   /* per-lot asphalt tint - real pads weather at different rates; the shared
      ASPH instance stays on the roads, each lot gets its own keyed pbr() */
   const LOT_TINTS = ['#8e949a', '#a0a6ab', '#878e94', '#989ea4',
@@ -54,7 +58,7 @@ export function buildLots(scene) {
     const lotM = pbr('asphalt_02', { color: LOT_TINTS[lotIdx++ % LOT_TINTS.length] });
     lotM.roughness = .97;
     WET_SURFACES.push(lotM);
-    attachDriftShadow(lotM, .0015, .0009, .34);
+    attachDriftShadow(lotM, .0015, .0009, .24);
     scene.add(plane(l.w, l.d, lotM, l.x, Y - .015, l.z, -Math.PI / 2, 6));
     if (l.plain) continue;   // apron/pad: bare asphalt, no stalls
     const n = Math.floor(l.w / 3.4);
@@ -70,7 +74,7 @@ export function buildLots(scene) {
     }
     // disabled stalls painted blue
     if (l.w > 60) {
-      bin.plane(3.4, 5.5, mat('#2e6b9a'), l.x - l.w / 2 + 4, Y + .004, l.z - l.d / 2 + 3.2);
+      bin.plane(3.4, 5.5, lift(mat('#2e6b9a'), 4), l.x - l.w / 2 + 4, Y + .004, l.z - l.d / 2 + 3.2);
     }
     // raised planter islands down the middle of the bigger slabs — curb ring,
     // soil, shrub + small crown; breaks the uninterrupted asphalt read
@@ -80,7 +84,7 @@ export function buildLots(scene) {
         const ix = l.x - l.w / 2 + (i + .5) * l.w / nI;
         const iw = Math.min(16, l.w / nI - 12);
         if (iw < 5) continue;
-        bin.plane(iw, 4.6, soilMat(), ix, Y + .02, l.z);
+        bin.plane(iw, 4.6, soilMat(), ix, Y + .022, l.z);
         parts.push({ geo: new THREE.BoxGeometry(iw + .6, .3, 5.2), color: '#9a9488',
           x: ix, y: .1, z: l.z });
         parts.push({ geo: new THREE.CylinderGeometry(.2, .3, 2.6, 6), color: '#4a3527',
@@ -100,7 +104,9 @@ export function buildLots(scene) {
   }
 }
 let _soilM = null;
-function soilMat() { return _soilM ||= mat('#5a4632', { roughness: 1 }); }
+function soilMat() { return _soilM ||= lift(mat('#5a4632', { roughness: 1 }), 8); }
+let _sandM = null;
+function sandM() { return _sandM ||= lift(mat('#d4b98a'), 5); }
 
 /* ---------------- trees (instanced) ---------------- */
 /* district palettes - corridors/districts read differently by canopy */
@@ -978,13 +984,13 @@ export function buildWater(scene) {
 export function buildPark(scene) {
   buildGreens(scene);      // programmed green parcels (city/greens.js)
   const P = PARK_ZONE;
-  const lawnM = pbr('grass_ground'); lawnM.color = new THREE.Color('#a8c088');
+  const lawnM = pbr('grass_ground', { color: '#a8c088' });
   const lawn = plane(P.x1 - P.x0, P.z1 - P.z0,
     lawnM, (P.x0 + P.x1) / 2, Y - .03, (P.z0 + P.z1) / 2, -Math.PI / 2, 9);
   scene.add(lawn);
 
   // winding path
-  const pathM = GRVL; pathM.color = new THREE.Color('#c9b898');
+  const pathM = lift(pbr('gravel', { color: '#c9b898' }), 6);  // keyed: mutating shared GRVL retinted every gravel surface
   const pathGeos = [];
   for (let t = 0; t <= 1; t += .006) {
     const x = P.x0 + 20 + t * (P.x1 - P.x0 - 40);
@@ -1072,7 +1078,7 @@ export function buildPark(scene) {
 
   // playground
   const pg = new THREE.Group();
-  pg.add(plane(34, 24, mat('#d4b98a'), 0, Y + .005, 0));
+  pg.add(plane(34, 24, sandM(), 0, Y + .005, 0));
   pg.add(box(8, .18, .18, mat('#3d6b8a'), 0, 3.4, -6));
   pg.add(box(.18, 3.4, .18, mat('#3d6b8a'), -4, 0, -6)); pg.add(box(.18, 3.4, .18, mat('#3d6b8a'), 4, 0, -6));
   for (const sx of [-2, .5]) {
@@ -1096,7 +1102,7 @@ export function buildPark(scene) {
 
   // ball field
   const bf = new THREE.Group();
-  const dia = new THREE.Mesh(new THREE.CircleGeometry(26, 4), mat('#b99b6e'));
+  const dia = new THREE.Mesh(new THREE.CircleGeometry(26, 4), lift(mat('#b99b6e'), 4));
   dia.rotation.x = -Math.PI / 2; dia.rotation.z = Math.PI / 4; dia.position.y = Y + .004; dia.receiveShadow = true;
   bf.add(dia);
   const grass = new THREE.Mesh(new THREE.CircleGeometry(34, 32), mat('#5f8c4e'));
@@ -1160,7 +1166,7 @@ export function buildPark(scene) {
 /* ---------------- downtown plaza ---------------- */
 let fountain = null, pondJet = null, balloons = null;
 export function buildPlaza(scene, spec) {
-  const pz = pbr('precast_stone_paving'); pz.color = new THREE.Color('#c9bfae');
+  const pz = lift(pbr('precast_stone_paving', { color: '#c9bfae' }), 1);
   scene.add(plane(spec.w, spec.d, pz, spec.x, Y - .02, spec.z, -Math.PI / 2, 3.2));
   // fountain
   const f = new THREE.Group();
@@ -1250,7 +1256,7 @@ export function buildAthleticPark(scene) {
   const bin = new GeoBin();
   const field = (cx, cz, w, d) => {
     occupyRect(cx, cz, w + 8, d + 8, 2);
-    const fm = pbr('grass_ground'); fm.color = new THREE.Color('#9ab578');
+    const fm = lift(pbr('grass_ground', { color: '#9ab578' }), 2);
     scene.add(plane(w, d, fm, cx, Y + .002, cz, -Math.PI / 2, 9));
     const line = (ww, dd, x, z) => bin.plane(ww, dd, ln, cx + x, Y + .008, cz + z);
     line(w, .35, 0, -d / 2 + .4); line(w, .35, 0, d / 2 - .4);
@@ -1282,9 +1288,9 @@ export function buildAthleticPark(scene) {
   bin.build(scene);
   // baseball diamond
   const bd = new THREE.Group();
-  const gr = new THREE.Mesh(new THREE.CircleGeometry(36, 28), mat('#5f8c4e'));
+  const gr = new THREE.Mesh(new THREE.CircleGeometry(36, 28), lift(mat('#5f8c4e'), 2));
   gr.rotation.x = -Math.PI / 2; gr.position.y = Y + .002; gr.receiveShadow = true; bd.add(gr);
-  const dia = new THREE.Mesh(new THREE.CircleGeometry(17, 4), mat('#b99b6e'));
+  const dia = new THREE.Mesh(new THREE.CircleGeometry(17, 4), lift(mat('#b99b6e'), 4));
   dia.rotation.x = -Math.PI / 2; dia.rotation.z = Math.PI / 4; dia.position.y = Y + .01; bd.add(dia);
   const mound = new THREE.Mesh(new THREE.CircleGeometry(3, 14), mat('#a88a60'));
   mound.rotation.x = -Math.PI / 2; mound.position.y = Y + .012; bd.add(mound);
@@ -1303,7 +1309,7 @@ export function buildAthleticPark(scene) {
   occupyRect(262, 655, 84, 62, 4);
   // small playground near lot
   const pg = new THREE.Group();
-  pg.add(plane(26, 20, mat('#d4b98a'), 0, Y + .005, 0));
+  pg.add(plane(26, 20, sandM(), 0, Y + .005, 0));
   pg.add(box(7, .18, .18, mat('#3d6b8a'), -4, 3.2, -4));
   pg.add(box(.18, 3.2, .18, mat('#3d6b8a'), -7.5, 0, -4)); pg.add(box(.18, 3.2, .18, mat('#3d6b8a'), -.5, 0, -4));
   const sl = box(1.1, .15, 5, mat('#d4ac0d'), 6, 1.3, 0); sl.rotation.x = -.5; pg.add(sl);
@@ -1766,7 +1772,7 @@ export function buildProps(scene) {
 
   // school playground + soccer field + track (from before)
   const sc = new THREE.Group();
-  sc.add(plane(40, 26, mat('#d4b98a'), 0, Y + .004, 0));
+  sc.add(plane(40, 26, sandM(), 0, Y + .004, 0));
   sc.add(box(10, .18, .18, mat('#3d6b8a'), -8, 3.4, 0));
   sc.add(box(.18, 3.4, .18, mat('#3d6b8a'), -13, 0, 0)); sc.add(box(.18, 3.4, .18, mat('#3d6b8a'), -3, 0, 0));
   const sl = box(1.2, .15, 6, mat('#c0392b'), 8, 1.6, 0); sl.rotation.x = -.5; sc.add(sl);
@@ -1775,9 +1781,9 @@ export function buildProps(scene) {
   occupyRect(-560, 645, 44, 30, 3);
   // track + soccer field west of Cedar Ave at the woods edge â€”
   // clear of every road (Cedar -645..-635, Maple -425..-415)
-  const sfm = pbr('grass_ground'); sfm.color = new THREE.Color('#8fae6f');
+  const sfm = lift(pbr('grass_ground', { color: '#8fae6f' }), 2);
   scene.add(plane(90, 55, sfm, -730, Y + .002, 590, -Math.PI / 2, 9));
-  const trk = new THREE.Mesh(new THREE.RingGeometry(30, 36, 40), mat('#b06a4a'));
+  const trk = new THREE.Mesh(new THREE.RingGeometry(30, 36, 40), lift(mat('#b06a4a'), 5));
   trk.rotation.x = -Math.PI / 2; trk.position.set(-730, Y + .006, 590); trk.scale.set(1.9, 1.35, 1);
   trk.receiveShadow = true; scene.add(trk);
   occupyRect(-730, 590, 142, 102, 3);

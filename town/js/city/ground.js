@@ -87,7 +87,9 @@ function litterCanvas() {
   }
   return c;
 }
-/* wildflower specks: sparse grass flecks + a few 5-petal dots per tile */
+/* wildflower specks: sparse grass flecks + a few 5-petal dots per tile.
+   Palette stays white/straw/warm — saturated pink/violet reads as confetti
+   noise once the cards alias to single pixels at aerial range */
 function speckCanvas() {
   const [c, x] = makeCanvas(64, 64);
   x.clearRect(0, 0, 64, 64);
@@ -95,7 +97,7 @@ function speckCanvas() {
     x.fillStyle = `rgba(${R() < .5 ? '110,140,80' : '86,116,60'},.6)`;
     x.fillRect(R() * 64, R() * 64, 1.5, 2 + R() * 2);
   }
-  const cols = ['240,238,220', '236,208,110', '214,140,160', '178,150,216', '230,120,90'];
+  const cols = ['242,240,226', '238,216,132', '226,188,122', '210,198,150', '232,168,102'];
   for (let i = 0; i < 9; i++) {
     const fx = 6 + R() * 52, fy = 6 + R() * 52, col = pick(cols);
     x.fillStyle = `rgba(${col},.95)`;
@@ -169,7 +171,13 @@ export function buildGroundDetail(scene) {
      alpha planes lying just over each lawn — dry patches, clover zones, mow
      stripes on the maintained turf. They sit *under* every built surface, so
      spanning a whole parcel or district can never paint over hardscape. */
-  const ovlLawn = decalMat({ map: canvasTex(mottleCanvas({ dry: .3, stripe: 32 })) });
+  /* stripe + mottle variants — one shared texture tiled the same stripes
+     over every lawn and read as uniform corduroy; picking per region
+     restores parcel-by-parcel variety for the cost of two materials */
+  const ovlLawnA = decalMat({ map: canvasTex(mottleCanvas({ dry: .3, stripe: 32 })) });
+  const ovlLawnB = decalMat({ map: canvasTex(mottleCanvas({ dry: .34, stripe: 46 })) });
+  const ovlLawnC = decalMat({ map: canvasTex(mottleCanvas({ dry: .3, stripe: 0 })) });
+  const lawnOvl = () => pick([ovlLawnA, ovlLawnB, ovlLawnC]);
   const ovlMeadow = decalMat({ map: canvasTex(mottleCanvas({ dry: .62 })) });
   const ovlHumus = decalMat({ map: canvasTex(mottleCanvas({ dry: .15 })) });
   const decal = (w, d, tile, m, x, y, z, ry = 0) => {
@@ -207,20 +215,20 @@ export function buildGroundDetail(scene) {
       decal(a1 - a0, b1 - b0, tile, m, (a0 + a1) / 2, y, (b0 + b1) / 2, ry));
   for (const g of GREENS)
     decalRegion(g.x0, g.z0, g.x1, g.z1, rr(20, 30),
-      g.use === 'meadow' ? ovlMeadow : g.use === 'grove' || g.use === 'orchard' ? ovlHumus : ovlLawn,
+      g.use === 'meadow' ? ovlMeadow : g.use === 'grove' || g.use === 'orchard' ? ovlHumus : lawnOvl(),
       Y_OVL_LAWN, rr(0, 6.28));
-  decalRegion(PARK_ZONE.x0, PARK_ZONE.z0, PARK_ZONE.x1, PARK_ZONE.z1, 34, ovlLawn, Y_OVL_PARK);
+  decalRegion(PARK_ZONE.x0, PARK_ZONE.z0, PARK_ZONE.x1, PARK_ZONE.z1, 34, lawnOvl(), Y_OVL_PARK);
   decalRegion(SE_GREEN.x0, SE_GREEN.z0, SE_GREEN.x1, SE_GREEN.z1, 46, ovlMeadow, Y_OVL_RAW, .3);
   decalRegion(GREEN_BELT.x0, GREEN_BELT.z0, GREEN_BELT.x1, GREEN_BELT.z1, 40, ovlHumus, Y_OVL_RAW, 1.1);
   // broad mottle under the big district lawns — buildings, roads, lawns and
   // walks all occlude it, so a huge sheet costs nothing and kills flatness
   decalRegion(-700, -715, -330, -395, 44, ovlMeadow, Y_OVL_RAW, .7);   // med campus lawns
   decalRegion(340, -700, 800, -350, 44, ovlHumus, Y_OVL_RAW, 2.0);     // senior district
-  decalRegion(-130, -30, 310, 310, 40, ovlLawn, Y_OVL_RAW, 1.4);       // grove district
-  decalRegion(-660, 370, -100, 750, 44, ovlLawn, Y_OVL_RAW, .2);       // school side
+  decalRegion(-130, -30, 310, 310, 40, lawnOvl(), Y_OVL_RAW, 1.4);    // grove district
+  decalRegion(-660, 370, -100, 750, 44, lawnOvl(), Y_OVL_RAW, .2);     // school side
   // mowing stripes on residential block lawns
   for (const b of HOUSE_BLOCKS)
-    decalRegion(b.x0, b.z0, b.x1, b.z1, 26, ovlLawn, Y_OVL_RAW, pick([0, Math.PI / 2]));
+    decalRegion(b.x0, b.z0, b.x1, b.z1, 26, lawnOvl(), Y_OVL_RAW, pick([0, Math.PI / 2]));
 
   /* ---- 2. dirt desire paths ----
      chained squashed dirt smudges; discs self-align to the line's heading.
@@ -274,8 +282,8 @@ export function buildGroundDetail(scene) {
     for (let i = 0; i < n; i++) {
       const x = rr(x0, x1), z = rr(z0, z1);
       if (!isFree(x, z, r, skip)) continue;
-      litter.push({ x, z, ry: rr(0, 6.28), s: rr(.7, 1.6),
-        color: pick(['#ffffff', '#f0e6d0', '#e2d4b8']) });
+      litter.push({ x, z, ry: rr(0, 6.28), s: rr(.6, 1.35),
+        color: pick(['#e4d6b4', '#d6c69e', '#c8b68e']) });
     }
   };
   scatterLit(PARK_ZONE.x0 + 6, PARK_ZONE.x1 - 6, PARK_ZONE.z0 + 6, PARK_ZONE.z1 - 6, 460, 1.4);
@@ -293,8 +301,8 @@ export function buildGroundDetail(scene) {
       const x = r.axis === 'v' ? r.c + tl * s : a,
             z = r.axis === 'v' ? a : r.c + tl * s;
       if (isFree(x, z, 1) && R() < .55)
-        litter.push({ x, z, ry: rr(0, 6.28), s: rr(.6, 1.2),
-          color: pick(['#ffffff', '#f0e6d0']) });
+        litter.push({ x, z, ry: rr(0, 6.28), s: rr(.55, 1.05),
+          color: pick(['#dccfb0', '#cdbd96']) });
     }
   }
   const litIM = instances(litGeo, litM, thin(litter), { shadow: false });
@@ -367,15 +375,15 @@ export function buildGroundDetail(scene) {
     for (let i = 0; i < n; i++) {
       const x = rr(x0, x1), z = rr(z0, z1);
       if (!isFree(x, z, .8, skip)) continue;
-      flowers.push({ x, z, ry: rr(0, 6.28), s: rr(.6, 1.4) });
+      flowers.push({ x, z, ry: rr(0, 6.28), s: rr(.55, 1.1) });
     }
   };
   for (const g of GREENS) if (g.use === 'meadow')
     sow(g.x0 + 2, g.x1 - 2, g.z0 + 2, g.z1 - 2,
-      Math.floor((g.x1 - g.x0) * (g.z1 - g.z0) / 120), 'green');
-  sow(PARK_ZONE.x0 + 8, PARK_ZONE.x1 - 8, PARK_ZONE.z0 + 8, PARK_ZONE.z1 - 8, 170);
-  sow(SE_GREEN.x0 + 4, SE_GREEN.x1 - 4, SE_GREEN.z0 + 4, SE_GREEN.z1 - 4, 140);
-  sow(-800, -744, -700, 690, 90);
+      Math.floor((g.x1 - g.x0) * (g.z1 - g.z0) / 160), 'green');
+  sow(PARK_ZONE.x0 + 8, PARK_ZONE.x1 - 8, PARK_ZONE.z0 + 8, PARK_ZONE.z1 - 8, 130);
+  sow(SE_GREEN.x0 + 4, SE_GREEN.x1 - 4, SE_GREEN.z0 + 4, SE_GREEN.z1 - 4, 110);
+  sow(-800, -744, -700, 690, 70);
   const flIM = instances(flGeo, flM, thin(flowers), { shadow: false });
   flIM.frustumCulled = false;
   scene.add(flIM);
