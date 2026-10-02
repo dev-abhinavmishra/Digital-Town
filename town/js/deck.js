@@ -99,7 +99,9 @@ export function installDeck() {
   const stat = (v, l) => `<div class="st"><b>${v}</b><span>${l}</span></div>`;
   const find = id => BUILDINGS.find(b => b.id === id);
 
-  /* cam: [px,py,pz → tx,ty,tz], dur = seconds of flight (the glide IS the shot) */
+  /* cam: [px,py,pz → tx,ty,tz], dur = seconds of flight (the glide IS the shot).
+     Coords are authored in layout space — scale to world space via __ws. */
+  const W = () => window.__ws || 1;
   const SLIDES = [
     { cam: [620, 520, 690, -60, 0, -70], dur: 12, cover: true,
       kick: 'HST project · a digital town', title: '<em>HAVENBROOK</em>',
@@ -156,7 +158,8 @@ export function installDeck() {
   function show(idx) {
     i = idx;
     const s = SLIDES[i];
-    window.__flyTo(...s.cam, Math.max(1.8, s.dur * .72));
+    const w = W();
+    window.__flyTo(...s.cam.map(v => v * w), Math.max(1.8, s.dur * .72));
     cap.classList.remove('in'); cap.classList.add('out');
     clearTimeout(capTimer);
     capTimer = setTimeout(() => {
@@ -195,7 +198,8 @@ export function installDeck() {
     HUD_CHROME.forEach(id => { const el = document.getElementById(id);
       if (el) el.style.display = hudStash[id] ?? ''; });
     document.getElementById('uiBtnDeck')?.classList.remove('on');
-    window.__flyTo(540, 620, 660, -30, 0, -40, 2.2);   // home aerial
+    const w = W();
+    window.__flyTo(540 * w, 620 * w, 660 * w, -30 * w, 0, -40 * w, 2.2);   // home aerial
   }
 
   const step = d => { if (on) { const n = i + d;

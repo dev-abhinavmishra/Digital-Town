@@ -21,22 +21,9 @@ const css = `
   0 8px 22px -10px rgba(12,40,56,.22); transition:background .15s, transform .15s; }
 #hudUI .btn:hover { background:rgba(255,255,255,.92); transform:translateY(-1px); }
 #hudUI .btn.on { background:#17556e; border-color:#17556e; color:#f4f9fb; }
-#uiTopRight { position:fixed; top:14px; right:14px; display:flex; flex-direction:column;
-  gap:8px; align-items:flex-end; z-index:50; }
+#uiTopRight { position:fixed; top:14px; right:14px; display:flex;
+  gap:7px; align-items:center; z-index:50; }
 #uiTopRight .btn { pointer-events:auto; }
-#uiBudget { background:rgba(252,253,252,.78); border:1px solid rgba(13,48,64,.11);
-  border-radius:13px; padding:10px 14px; color:#16323e; min-width:250px;
-  backdrop-filter:blur(16px) saturate(1.4); cursor:pointer;
-  box-shadow:0 1px 2px rgba(12,40,56,.05), 0 14px 34px -14px rgba(12,40,56,.30); }
-#uiBudget .row1 { display:flex; justify-content:space-between; font-size:10px;
-  letter-spacing:1px; color:#7c929c; margin-bottom:7px; text-transform:uppercase; }
-#uiBudget .row1 b { color:#16323e; font-size:12.5px; letter-spacing:.3px; font-weight:700; }
-#uiBudget .bar { height:5px; border-radius:3px; overflow:hidden; display:flex;
-  background:rgba(13,48,64,.09); }
-#uiBudget .bar i { display:block; height:100%; }
-#uiBudget .sub { font-size:10.5px; color:#5d7380; margin-top:8px; display:none; line-height:1.7; }
-#uiBudget.open .sub { display:block; }
-#uiBudget .sub .k { color:#22414e; font-weight:600; }
 #uiBtns { display:flex; gap:7px; }
 #uiTier { font-size:9.5px; letter-spacing:1.1px; color:#5d7380; text-align:right;
   padding:4px 9px; user-select:none; cursor:pointer; background:rgba(252,253,252,.66);
@@ -133,7 +120,8 @@ const css = `
 #uiRubric .close { float:right; cursor:pointer; color:#8ba0aa; font-size:18px; line-height:1;
   padding:4px 6px; border-radius:8px; }
 #uiRubric .close:hover { color:#16323e; background:rgba(13,48,64,.07); }
-@media (max-width:700px) { #uiBudget{min-width:200px} #uiDrawer{width:86vw;right:-86vw} #uiDrawer.open{right:0} }
+@media (max-width:700px) { #uiDrawer{width:86vw;right:-86vw} #uiDrawer.open{right:0}
+  #uiTopRight{flex-wrap:wrap;justify-content:flex-end;max-width:96vw} }
 `;
 
 export function installUI() {
@@ -147,27 +135,10 @@ export function installUI() {
 
   const numd = BUILDINGS.filter(b => b.num);
   const spent = numd.reduce((s, b) => s + (b.cost || 0), 0);
-  const byCat = {};
-  numd.forEach(b => byCat[b.cat] = (byCat[b.cat] || 0) + (b.cost || 0));
-  const freeN = numd.filter(b => b.cat === 'free').length;
 
-  /* ---------------- budget tracker ---------------- */
+  /* ---------------- top-right controls — one row ---------------- */
   root.insertAdjacentHTML('beforeend', `
     <div id="uiTopRight">
-      <div id="uiBudget" title="Click for breakdown">
-        <div class="row1"><b>BUILD BUDGET</b><span>${money(spent)} / ${money(BUDGET)}</span></div>
-        <div class="bar">
-          <i style="width:${(byCat.health || 0) / BUDGET * 100}%;background:${CATEGORY_COLORS.health}"></i>
-          <i style="width:${(byCat.community || 0) / BUDGET * 100}%;background:${CATEGORY_COLORS.community}"></i>
-          <i style="width:${(BUDGET - spent) / BUDGET * 100}%;background:rgba(255,255,255,.13)"></i>
-        </div>
-        <div class="sub">
-          <span class="k">Healthcare (${numd.filter(b => b.cat === 'health').length} facilities):</span> ${money(byCat.health || 0)}<br>
-          <span class="k">Community (${numd.filter(b => b.cat === 'community').length} locations):</span> ${money(byCat.community || 0)}<br>
-          <span class="k">University + housing:</span> provided free (${freeN} sites)<br>
-          <span class="k">Remaining headroom:</span> ${money(BUDGET - spent)} — kept under the $10M cap for quality parks &amp; roads
-        </div>
-      </div>
       <div id="uiBtns">
         <div class="btn" id="uiBtnDir">&#8801; FACILITIES</div>
         <div class="btn" id="uiBtnTour">&#9654; TOUR</div>
@@ -191,7 +162,7 @@ export function installUI() {
         <tr><td>Visit a facility</td><td>Click its map label, or pick it in FACILITIES — the camera flies there</td></tr>
         <tr><td>Step inside</td><td>Click the building itself (or &#8220;step inside&#8221; on its card) — WASD to walk, Esc to leave</td></tr>
         <tr><td>Guided tour</td><td>TOUR plays an 8-stop narrated route explaining why each facility sits where it does</td></tr>
-        <tr><td>Budget &amp; brief</td><td>The tracker top-right breaks down the $10M; PROJECT BRIEF maps the assignment</td></tr>
+        <tr><td>Budget &amp; brief</td><td>PROJECT BRIEF maps the assignment — total spend, free sites, healthcare coverage</td></tr>
       </table>
       <h4>Render quality — running <b id="uiGuideRun"></b></h4>
       <div id="uiGuideTiers"></div>
@@ -207,18 +178,16 @@ export function installUI() {
   `);
 
   const $ = s => root.querySelector(s);
-  const budget = $('#uiBudget');
-  budget.addEventListener('click', () => budget.classList.toggle('open'));
 
   /* ---------------- guide + render-quality tiers ---------------- */
   const tierChip = $('#uiTier'), guide = $('#uiGuide');
   const TIERS = [
     ['auto', 'Adapts to this device — picks high / low / min from GPU, CPU cores and memory.'],
-    ['ultra','Maximum — 8K shadows, 8x MSAA, 3x pixels, deeper ambient occlusion, shadowed interiors, every chunk loaded. Fastest machines only.'],
-    ['high', 'Full fidelity — 4K soft shadows, ambient occlusion, bloom, SMAA, 2x pixels, full scene detail.'],
-    ['med',  'Balanced — 2K shadows, bloom + SMAA, no ambient occlusion, full scene detail, chunked map loading.'],
-    ['low',  'Performance — 1K shadows, SMAA only (no AO / bloom), full scene detail, chunked map loading. For weak GPUs / low RAM.'],
-    ['min',  'Minimal — no shadows or post-fx, no moving traffic or pedestrians, 12% scene detail with chunked map culling (~280k tris at street level). For very weak devices.'],
+    ['ultra','Maximum — 8K shadows, 4x MSAA, 2.5x pixels, deeper ambient occlusion, shadowed interiors, every chunk loaded. Fastest machines only.'],
+    ['high', 'Full fidelity — 4K soft shadows, ambient occlusion, bloom, SMAA, 1.5x pixels, 85% scene detail.'],
+    ['med',  'Balanced — 2K shadows, bloom + SMAA, no ambient occlusion, 70% scene detail, chunked map loading.'],
+    ['low',  'Performance — 1K shadows, SMAA only (no AO / bloom), 45% scene detail, chunked map loading. For weak GPUs / low RAM.'],
+    ['min',  'Minimal — no shadows or post-fx, no moving traffic or pedestrians, 12% scene detail with chunked map culling (~360k tris at street level). For very weak devices.'],
   ];
   let savedPref = 'auto';
   try { savedPref = localStorage.getItem('dt_q') || 'auto'; } catch {}
@@ -297,12 +266,14 @@ export function installUI() {
     if (inL) inL.onclick = () => { card.classList.remove('show'); drawer.classList.remove('open'); window.__enterInterior && window.__enterInterior(b.id); };
     if (fly) flyToBuilding(b);
   }
+  const W = () => window.__ws || 1;   // layout coords → world coords
   function flyToBuilding(b) {
+    const w = W();
     const dist = Math.max(b.w || 30, b.d || 30) * 1.7 + 26;
     const ang = Math.atan2(b.x, b.z) + .6;   // approach from the south-east quadrant
     const px = b.x + Math.sin(ang) * dist, pz = b.z + Math.cos(ang) * dist;
     const py = Math.max(30, (b.h || 8) * 1.6 + 24);
-    window.__flyTo(px, py, pz, b.x, (b.h || 8) * .5, b.z, 1.8);
+    window.__flyTo(px * w, py * w, pz * w, b.x * w, (b.h || 8) * .5 * w, b.z * w, 1.8);
   }
   // label clicks open the card — labels carry the num badge
   document.getElementById('labels')?.addEventListener('click', e => {
@@ -348,7 +319,8 @@ export function installUI() {
     tourI = -1; clearTimeout(tourTimer);
     tourBar.classList.remove('show');
     $('#uiBtnTour').classList.remove('on');
-    window.__flyTo(540, 620, 660, -30, 0, -40, 2.2);   // return to the aerial
+    const w = W();
+    window.__flyTo(540 * w, 620 * w, 660 * w, -30 * w, 0, -40 * w, 2.2);   // return to the aerial
   }
   window.__endTour = endTour;   // interior entry stops an in-flight tour
   $('#uiBtnTour').addEventListener('click', () => {
@@ -385,7 +357,7 @@ export function installUI() {
     ['≥3 community locations', `${nComm} numbered sites — Target, mall, pharmacy, museum, school, restaurant, park, post office, grocery, coffeehouse, diner`, '&#10003;'],
     ['Every facility uniquely named', 'Every building carries a proper name — click any label or the Facilities drawer for its card', '&#10003;'],
     ['Realistic layout', '18 named streets on a legible grid, zoned districts (campus NW, medical N, senior E, downtown centre, residential W, school S), signalized junctions, parking, curbside life', '&#10003;'],
-    ['Budget ≤ $10M', `${money(spent)} spent of ${money(BUDGET)} — the tracker top-right breaks it down`, '&#10003;'],
+    ['Budget ≤ $10M', `${money(spent)} spent of ${money(BUDGET)} — health $${((numd.filter(b => b.cat === 'health').reduce((s, b) => s + (b.cost || 0), 0)) / 1e6).toFixed(2)}M, community $${((numd.filter(b => b.cat === 'community').reduce((s, b) => s + (b.cost || 0), 0)) / 1e6).toFixed(2)}M`, '&#10003;'],
     ['Placement explained', 'Take the guided tour (&#9654;) — each stop narrates why it sits where it does', '&#10003;'],
   ].map(r => r[0] === 'REQUIREMENT'
     ? `<tr><th>${r[0]}</th><th>${r[1]}</th><th></th></tr>`

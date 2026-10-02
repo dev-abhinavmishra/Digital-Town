@@ -93,14 +93,16 @@ export function pickTier(params) {
 
 /* per-tier budget. HIGH reproduces the previous pipeline verbatim. */
 export const TIER_CFG = {
-  /* ULTRA — everything on max: 8K adaptive shadow box, 8x MSAA, up to 3x
+  /* ULTRA — everything on max: 8K adaptive shadow box, 4x MSAA, up to 2.5x
      pixels, deep GTAO (32 samples, hotter blend), shadowed interiors */
-  ultra:{ maxRatio: 3,   msaa: 8, ao: true,  bloom: true, smaa: true,  shadow: 8192, detail: 1 },
-  high: { maxRatio: 2,   msaa: 4, ao: true,  bloom: true, smaa: true,  shadow: 4096, detail: 1 },
-  med:  { maxRatio: 1.5, msaa: 2, ao: false, bloom: true, smaa: true,  shadow: 2048, detail: 1 },
-  low:  { maxRatio: 1,   msaa: 0, ao: false, bloom: false, smaa: true,  shadow: 1024, detail: 1 },
+  ultra:{ maxRatio: 2.5, msaa: 4, ao: true,  bloom: true, smaa: true,  shadow: 8192, detail: 1 },
+  /* fill-rate tuned: MSAA/pixel-ratio were the dominant frame cost —
+     SMAA already smooths edges, so AA load goes to the post pass */
+  high: { maxRatio: 1.5, msaa: 2, ao: true,  bloom: true, smaa: true,  shadow: 4096, detail: .85 },
+  med:  { maxRatio: 1.25,msaa: 0, ao: false, bloom: true, smaa: true,  shadow: 2048, detail: .7 },
+  low:  { maxRatio: 1,   msaa: 0, ao: false, bloom: false, smaa: true,  shadow: 1024, detail: .45 },
   /* thinned scene for devices that cannot rasterize the full town —
-     ~12% of scattered instanced content + 320m-chunk distance culling in
-     main.js, no shadow pass, .6x pixels */
+     ~12% of scattered instanced content + chunked map culling in main.js,
+     no shadow pass, .6x pixels */
   min:  { maxRatio: .6,  msaa: 0, ao: false, bloom: false, smaa: false, shadow: 0,    detail: .12 },
 };

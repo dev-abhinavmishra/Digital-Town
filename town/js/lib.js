@@ -32,7 +32,7 @@ export function makeCanvas(w, h) {
   c.width = w; c.height = h;
   return [c, c.getContext('2d')];
 }
-export function canvasTex(c, { srgb = true, repeat = null, aniso = 8 } = {}) {
+export function canvasTex(c, { srgb = true, repeat = null, aniso = 16 } = {}) {
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = aniso;
