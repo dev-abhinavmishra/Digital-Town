@@ -35,8 +35,11 @@ const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 
 const t0 = Date.now();
+/* the app's own 30s boot watchdog (sessionStorage hbBoot) can re-navigate the
+   page mid-goto at heavy tiers — an interrupted goto is fine, __ready still
+   flips on whichever reload wins; just don't die on it */
 await page.goto(`http://127.0.0.1:8778/index.html?q=${q}&time=${time}&still=1`,
-  { waitUntil: 'commit', timeout: 60000 });
+  { waitUntil: 'commit', timeout: 60000 }).catch(e => console.log('GOTOERR', e.message.slice(0, 80)));
 try {
   await page.waitForFunction('window.__ready === true', null, { timeout: 540000, polling: 3000 });
 } catch {}

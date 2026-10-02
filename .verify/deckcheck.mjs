@@ -3,7 +3,7 @@ const b = await chromium.connectOverCDP('http://127.0.0.1:29229');
 const ctx = b.contexts()[0];
 const p = await ctx.newPage();
 await p.setViewportSize({ width: 1600, height: 900 });
-await p.goto('http://127.0.0.1:8778/deck/', { waitUntil: 'load', timeout: 20000 });
+await p.goto('http://127.0.0.1:8778/deck/index.html', { waitUntil: 'load', timeout: 20000 });
 await p.waitForTimeout(1800);
 await p.screenshot({ path: 'shots-linux/deck-static-cover.png' });
 await p.keyboard.press('ArrowRight');
