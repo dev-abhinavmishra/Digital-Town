@@ -299,15 +299,15 @@ const quadM = pbr('grass_ground', { color: '#93b377' });
 quadM.onBeforeCompile = grassDetail;               // same world-noise detail
 attachDriftShadow(quadM, .0015, .0009, .22);        // and the same cloud field
 lift(quadM, 1);
-world.add(plane(190, 84, quadM, -480, .31, -530, -Math.PI / 2, 10));
+world.add(plane(190, 84, quadM, 40, .31, -200, -Math.PI / 2, 10));
 const qp = lift(pbr('precast_stone_paving', { color: '#c4b49a' }), 5);
 for (const a of [.62, -.62]) {
   const g = new THREE.PlaneGeometry(6, 170); g.rotateX(-Math.PI / 2); g.rotateY(a);
-  const p = new THREE.Mesh(g, qp); p.position.set(-480, .33, -532); p.receiveShadow = true;
+  const p = new THREE.Mesh(g, qp); p.position.set(40, .33, -202); p.receiveShadow = true;
   world.add(p);
 }
-world.add(plane(190, 6, qp, -480, .33, -532, -Math.PI / 2, 3));
-world.add(cyl(4, 4.4, .9, mat('#9aa0a3'), -480, .3, -532, 20));
+world.add(plane(190, 6, qp, 40, .33, -202, -Math.PI / 2, 3));
+world.add(cyl(4, 4.4, .9, mat('#9aa0a3'), 40, .3, -202, 20));
 
 /* collapse all static geometry into one mesh per material per cell —
    street views frustum-cull far cells, and MIN distance-culls whole cells.
@@ -396,15 +396,15 @@ const P = {
   aerialW:    { p: [-660, 540, 620],  t: [30, 0, -60] },
   aerialfull: { p: [60, 1250, 640],   t: [0, 0, -20] },
   medical:    { p: [430, 210, -120],  t: [60, 25, -510] },
-  campus:     { p: [-170, 180, -160], t: [-470, 20, -540] },
-  downtown:   { p: [380, 150, 150],   t: [50, 10, -210] },
+  campus:     { p: [340, 180, 165],   t: [40, 20, -215] },
+  downtown:   { p: [-150, 150, -160], t: [-480, 10, -520] },
   park:       { p: [250, 200, 330],   t: [580, 8, 120] },
   senior:     { p: [740, 210, -60],   t: [560, 12, -520] },
   commercial: { p: [280, 300, 760],   t: [290, 8, 430] },
   school:     { p: [-720, 180, 320],  t: [-510, 10, 560] },
   housing:    { p: [-620, 210, 420],  t: [-440, 8, 120] },
   mainstreet: { p: [-150, 6.5, -34],  t: [140, 8, -60] },
-  univclose:  { p: [-270, 70, -330],  t: [-480, 22, -540] },
+  univclose:  { p: [250, 70, -5],     t: [40, 22, -215] },
   hospital:   { p: [240, 90, -300],   t: [70, 30, -500] },
   dusk:       { p: [820, 200, 260],   t: [-350, 60, 120] },
 };
@@ -522,8 +522,8 @@ if (LABELS) {
   }
   for (const a of APARTMENTS) mk(a.name, a.x, a.h + 6, a.z, 'res', 0, true);
   const dists = [
-    ['UNIVERSITY DISTRICT', -480, -700], ['MEDICAL DISTRICT', 200, -555],
-    ['SENIOR DISTRICT', 585, -620], ['DOWNTOWN', 62, -255],
+    ['UNIVERSITY DISTRICT', 40, -360], ['MEDICAL DISTRICT', 200, -555],
+    ['SENIOR DISTRICT', 585, -620], ['DOWNTOWN', -480, -445],
     ['COMMERCIAL CORRIDOR', 160, 555], ['RESIDENTIAL WEST', -460, 40],
     ['SCHOOL DISTRICT', -510, 705],
   ];

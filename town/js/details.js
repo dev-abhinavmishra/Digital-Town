@@ -111,8 +111,8 @@ function sandM() { return _sandM ||= lift(mat('#d4b98a'), 5); }
 /* ---------------- trees (instanced) ---------------- */
 /* district palettes - corridors/districts read differently by canopy */
 const DISTRICT_TREES = [
-  { name: 'downtown',      x0: -170, x1: 340,  z0: -350, z1: -40,  mix: [['u', .55], ['d', .3], ['b', .15]] },
-  { name: 'campus',        x0: -800, x1: -330, z0: -720, z1: -400, mix: [['e', .5], ['o', .25], ['u', .25]] },
+  { name: 'downtown',      x0: -660, x1: -300, z0: -660, z1: -380, mix: [['u', .55], ['d', .3], ['b', .15]] },
+  { name: 'campus',        x0: -150, x1: 230,  z0: -345, z1: -60,  mix: [['e', .5], ['o', .25], ['u', .25]] },
   { name: 'senior',        x0: 340,  x1: 800,  z0: -700, z1: -200, mix: [['w', .35], ['d', .3], ['o', .2], ['s', .15]] },
   { name: 'commercial',    x0: -140, x1: 345,  z0: 430,  z1: 710,  mix: [['u', .4], ['b', .3], ['d', .3]] },
   { name: 'residential-w', x0: -800, x1: -160, z0: 40,   z1: 430,  mix: [['o', .4], ['m', .25], ['e', .25], ['w', .1]] },
@@ -553,7 +553,7 @@ export function buildCars(scene) {
     { c: 140, a0: -780, a1: -160, w: 10, axis: 'h' },  // Elm St
     { c: 425, a0: -780, a1: -160, w: 11, axis: 'h' },  // Schoolhouse Rd
     { c: -180, a0: -700, a1: -160, w: 10, axis: 'h' }, // Midtown Ave
-    { c: -640, a0: -700, a1: -160, w: 11, axis: 'h' }, // Campus Dr
+    { c: -640, a0: -700, a1: -160, w: 11, axis: 'h' }, // Old Town Rd
     { c: 150, a0: -140, a1: 320, w: 10, axis: 'h' },   // Juniper Ave
     { c: -460, a0: 320, a1: 780, w: 10, axis: 'h' },   // Sunset Ridge Rd
     { c: -240, a0: 320, a1: 780, w: 10, axis: 'h' },   // Meadowlark Ln
@@ -1348,8 +1348,8 @@ export function buildPeople(scene) {
 
   // spots: static idlers + sidewalk walkers on the road graph
   const idlers = thin([
-    ...Array.from({ length: 14 }, () => [60 + rr(-35, 35), -205 + rr(-28, 28)]),
-    ...Array.from({ length: 14 }, () => [-480 + rr(-65, 65), -530 + rr(-45, 45)]),
+    ...Array.from({ length: 14 }, () => [-480 + rr(-35, 35), -520 + rr(-28, 28)]),
+    ...Array.from({ length: 14 }, () => [40 + rr(-65, 65), -200 + rr(-45, 45)]),
     ...Array.from({ length: 10 }, () => [rr(380, 700), rr(345, 430)]),
     ...Array.from({ length: 10 }, () => [rr(-580, -420), rr(80, 280)]),
     ...Array.from({ length: 8 }, () => [rr(360, 700), rr(-470, -380)]),
@@ -1740,8 +1740,8 @@ export function buildProps(scene) {
     parts.push({ geo: new THREE.BoxGeometry(.16, .22, .13), color: '#8a9094', x, y: 1.16, z });
   }
   // bike racks: U-tube hoops, plaza edge + school gate + med campus
-  for (const [x, z, ry] of [[30, -240, 0], [95, -240, 0], [-500, 610, 0],
-      [150, -300, 0], [-640, -430, 0], [450, 350, Math.PI / 2]]) {
+  for (const [x, z, ry] of [[-520, -548, 0], [-435, -548, 0], [-500, 610, 0],
+      [-430, -480, 0], [-15, -160, 0], [450, 350, Math.PI / 2]]) {
     for (let k = 0; k < 3; k++) {
       const hx = x + Math.cos(ry) * k * 1.1, hz = z - Math.sin(ry) * k * 1.1;
       parts.push({ geo: new THREE.TorusGeometry(.42, .045, 6, 12, Math.PI).rotateZ(Math.PI).rotateY(ry + Math.PI / 2),

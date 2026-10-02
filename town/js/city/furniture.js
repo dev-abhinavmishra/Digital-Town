@@ -274,7 +274,7 @@ export function buildFurniture(scene) {
 
   /* ---- phone-booth kiosks ---- */
   for (const [x, z, y, ry, skip] of [
-    [PLAZA.x + PLAZA.w / 2 - 2, -176, PLAZA_Y, face(PLAZA.x + PLAZA.w / 2 - 2, -176, PLAZA.x, PLAZA.z), null],
+    [PLAZA.x + PLAZA.w / 2 - 2, PLAZA.z + 29, PLAZA_Y, face(PLAZA.x + PLAZA.w / 2 - 2, PLAZA.z + 29, PLAZA.x, PLAZA.z), null],
     [240, main.c + walkC(main), WALK_Y, Math.PI, main],
     [PLAZA.x - PLAZA.w / 2 + 4, PLAZA.z - 20, PLAZA_Y, Math.PI / 2, null],
   ]) {

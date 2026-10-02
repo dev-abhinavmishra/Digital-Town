@@ -64,6 +64,16 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 - Click-pick regression to watch: if picking/raycast code feeds world-space hit points to layout-space rect maps (e.g. `pickBuildingAt(hit.point)` vs layout.js x/z rects), clicks mis-hit — scaled hit (49.6,-313.1) lands inside healthdept's LAYOUT rect while physically hitting the hospital → wrong interior opens. Signature: `__interior.b.id` ≠ the building you clicked. Always assert the entered bid, not just `on===true`.
 - envMapIntensity audit (angle-tint fix): for non-glass (`m.map.userData.v2.glass` — v2 lives on the TEXTURE's userData, NOT material.userData) MeshStandardMaterials with roughness≥.8, envMapIntensity must be ≤0.5. GLB-imported meshes (chains like `Cube_1<Cube<Scene<world`) added after the material pass can escape the cap — check obj names for imported-model patterns.
 
+## Map view + district/street labels (PR46+)
+- `?view=map` is the HEAVIEST view under SwiftShader (~14-16min to __ready; CDP connects time out repeatedly mid-build — keep retrying, the page is alive; verify via `/json` target list). Add `&labels=1` or NOTHING renders: the whole label block (facility labels + district labels + street-name map labels) is inside `if (LABELS)` — district `.lbl.dist` divs only spawn when `VIEW==='map'` AND `LABELS`.
+- District label positions (DOM divs in `#labels`): UNIVERSITY DISTRICT (40,-360), MEDICAL DISTRICT (200,-555), SENIOR (585,-620), DOWNTOWN (-480,-445), COMMERCIAL CORRIDOR (160,555), RESIDENTIAL WEST (-460,40), SCHOOL (-510,705). Map north = screen-up.
+- `Failed to load resource: net::ERR_CONNECTION_RESET` can appear transiently on the heaviest loads — static-server socket drops under the fetch burst, not an app error; pages still render fully. Don't count these as app console errors but DO report them honestly.
+
+## Wayfinding/fingerpost verification
+- `finger(x,z,ry,blades)` (city/hero.js ~251): blades = texPanel meshes in a group rotated `ry`; each blade's TWO faces carry the same arrow texture so each face's arrow points opposite world dirs. Arrow glyph maps to the face's local axes: '→'=+xText, '←'=-xText, '↑'=-faceNormal (ahead past sign), '↓'=+faceNormal (behind). World arrow dir per face = rotateY(ry+byaw) applied. Validate convention via a known-good sign first, then flag blades whose best-face direction is >60deg off the bearing to the named destination.
+- Sign text IS legible in close-ups: position cam ~10-15m from the pole at blade height (y~3) facing the pole.
+- Pre-shrink branch (pre-PR45-merge): layout coords ARE world coords — `__ws` and the `world` group are absent; `pickBuildingAt(hit.point)` gets matching coords so click-pick works (the PR45 ws mis-pick does not apply).
+
 ## MIN-tier chunked merge + distance culler
 - `?q=min|low|med|high` forces a tier; `#uiTier` element shows the active tier ('MIN'/'HIGH'). `window.__prof` build entries: `['buildWorld',ms]`, `['mergeStatic',ms]`, `['minSplit',n]` (MIN only — n static InstancedMeshes rebucketed into cells).
 - Chunk cells: merged-mesh + split-instanced children carry `userData.ccx/ccz` (cell centre) AND (post-PR45) `userData.cb={x0,z0,x1,z1}` bounds in WORLD coords (pre-scaled by ×__ws at bake). Collect via `__scene.traverse(o=>o.userData&&o.userData.cb)`. Cell spacing: 160m on MIN, 320m elsewhere.
@@ -74,8 +84,8 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 - Street blades: pole at each of the first 8 `intersections()` (all on University Ave x=-140) → SW corner offset (−wv/2−1.4, +wh/2+1.4); e.g. Univ×Main pole ≈(−150.4,−30.6), cam (−138,4.5,−18)→(−150.4,3.1,−30.6). (Verified on Linux: renders blades + crosswalks + pedestrians.)
 - Junction pad pixel check (z-fight): junction centre Univ×Main = (−140,0,−40); project to screen each pose and sample — should stay asphalt-grey (r≈g≈b ~100-175) at every angle, never grass-green.
 - Parking meters: rows z=−62 / z=−18 (x −38..180) along Main St; look along the row, e.g. (−30,2.6,−52)→(40,1,−62).
-- Pedestrian cluster (idlers): plaza (60,−205)±35, cam (35,5,−168)→(62,1.2,−205).
-- Lawn overlays (3 stripe/mottle variants): school field cam (−450,16,470)→(−512,0,545) shows mottle; quad (−430,22,−485)→(−480,0,−560).
+- Pedestrian cluster (idlers): old-town plaza (−480,−520)±35, cam (−455,5,−485)→(−480,1.2,−520); campus cluster (40,−200)±45.
+- Lawn overlays (3 stripe/mottle variants): school field cam (−450,16,470)→(−512,0,545) shows mottle; campus quad cam (40,22,−160)→(40,0,−200).
 - Dusk headlight glows: any moving/parked car on Main St, e.g. (55,4,−24)→(95,1.2,−48).
 
 ## Devin secrets needed
