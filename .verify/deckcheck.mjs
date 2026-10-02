@@ -1,0 +1,16 @@
+import { chromium } from 'playwright-core';
+const b = await chromium.connectOverCDP('http://127.0.0.1:29229');
+const ctx = b.contexts()[0];
+const p = await ctx.newPage();
+await p.setViewportSize({ width: 1600, height: 900 });
+await p.goto('http://127.0.0.1:8778/deck/', { waitUntil: 'load', timeout: 20000 });
+await p.waitForTimeout(1800);
+await p.screenshot({ path: 'shots-linux/deck-static-cover.png' });
+await p.keyboard.press('ArrowRight');
+await p.waitForTimeout(1400);
+await p.screenshot({ path: 'shots-linux/deck-static-s2.png' });
+for (let i = 0; i < 6; i++) await p.keyboard.press('ArrowRight');
+await p.waitForTimeout(1400);
+await p.screenshot({ path: 'shots-linux/deck-static-ledger.png' });
+console.log('done', await p.evaluate(() => document.querySelector('#cnt').textContent));
+await p.close();
