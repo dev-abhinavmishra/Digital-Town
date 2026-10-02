@@ -68,6 +68,10 @@ const css = `
 #uiDeck.on .x { opacity:1; }
 #uiDeck .edge { position:absolute; top:0; bottom:0; width:22%; pointer-events:auto; }
 #uiDeck .edge.l { left:0 } #uiDeck .edge.r { right:0 }
+/* video background: a pre-rendered orbit of the town replaces live camera
+   flights so PRESENT mode costs a video decode instead of the whole scene */
+#uiDeck .bgvid { position:absolute; inset:0; width:100%; height:100%;
+  object-fit:cover; background:#050b0f; }
 `;
 
 export function installDeck() {
@@ -77,7 +81,8 @@ export function installDeck() {
   document.head.appendChild(style);
   const root = document.createElement('div');
   root.id = 'uiDeck';
-  root.innerHTML = `<div class="bar t"></div><div class="bar b"></div><div class="scrim"></div>
+  root.innerHTML = `<div class="bar t"></div><div class="bar b"></div>
+    <video class="bgvid" src="deck/town-orbit.mp4" muted loop playsinline preload="auto"></video><div class="scrim"></div>
     <div class="brand">${TOWN.name} — a community planned around care</div>
     <div class="x">ESC to exit</div>
     <div class="cap"></div>
@@ -134,7 +139,7 @@ export function installDeck() {
   ];
 
   const HOLD_MS = 9500;
-  let on = false, i = -1, timer = 0, capTimer = 0, paused = false;
+  let on = false, i = -1, timer = 0, capTimer = 0, paused = false, vidOK = false;
 
   function caption(s, idx) {
     const bits = [];
@@ -158,8 +163,10 @@ export function installDeck() {
   function show(idx) {
     i = idx;
     const s = SLIDES[i];
-    const w = W();
-    window.__flyTo(...s.cam.map(v => v * w), Math.max(1.8, s.dur * .72));
+    if (!vidOK) {   // fallback: live camera flight when the video can't play
+      const w = W();
+      window.__flyTo(...s.cam.map(v => v * w), Math.max(1.8, s.dur * .72));
+    }
     cap.classList.remove('in'); cap.classList.add('out');
     clearTimeout(capTimer);
     capTimer = setTimeout(() => {
@@ -174,7 +181,7 @@ export function installDeck() {
 
   const HUD_CHROME = ['hudUI', 'hint', 'compass', 'labels', 'legend', 'titlecard', 'hud'];
   const hudStash = {};
-  function start() {
+  async function start() {
     if (on || window.__mapOn) return;   // ortho map view can't fly the slide shots
     on = true; paused = false;
     window.__endTour && window.__endTour();
@@ -185,6 +192,18 @@ export function installDeck() {
     HUD_CHROME.forEach(id => { const el = document.getElementById(id);
       if (el) { hudStash[id] = el.style.display; el.style.display = 'none'; } });
     root.classList.add('on');
+    // video background: the orbit loop plays over a paused 3D renderer —
+    // PRESENT then costs a video decode, not the whole town per frame.
+    // If the file can't play (missing/unsupported) the live flights stay.
+    const vid = root.querySelector('.bgvid');
+    vid.muted = true;
+    // whenever play() actually resolves (now or later), flip to video mode —
+    // a 2.5s bound keeps a stalled fetch from freezing the opening slide
+    const played = vid.play().then(() => {
+      vidOK = true;
+      window.__setPaused && window.__setPaused(true);
+    }).catch(() => {});
+    await Promise.race([played, new Promise(r => setTimeout(r, 2500))]);
     // interior exit restores the saved outdoor pose at +190ms — let it land
     // before the opening flight, or the snap stomps the tween mid-flight
     wasIn ? setTimeout(() => on && show(0), 260) : show(0);
@@ -198,6 +217,9 @@ export function installDeck() {
     HUD_CHROME.forEach(id => { const el = document.getElementById(id);
       if (el) el.style.display = hudStash[id] ?? ''; });
     document.getElementById('uiBtnDeck')?.classList.remove('on');
+    root.querySelector('.bgvid')?.pause();
+    vidOK = false;
+    window.__setPaused && window.__setPaused(false);   // live scene resumes
     const w = W();
     window.__flyTo(540 * w, 620 * w, 660 * w, -30 * w, 0, -40 * w, 2.2);   // home aerial
   }

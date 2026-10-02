@@ -748,9 +748,23 @@ window.__ready = false;
 const fwd = new THREE.Vector3(), right = new THREE.Vector3();
 let lastRatioCheck = 0, callsEMA = 0;
 renderer.info.autoReset = false;
+/* deck-video mode pauses ALL scene rendering: the loop stays alive (cheap)
+   but draws nothing — the 3D work is what makes PRESENT laggy, the video
+   plays over a frozen frame instead */
+let renderPaused = false;
+window.__setPaused = v => {
+  if (!!v === renderPaused) return;
+  renderPaused = !!v;
+  clock.getDelta();          // swallow the paused span so resume doesn't get a huge dt
+};
+/* eval hook for capture rigs: pin an exact pixel ratio (locks the adaptive
+   governor via __lockRatio so it can't drift back) — pipeline + composer
+   buffers all resize through resync() */
+window.__setRatio = v => { window.__lockRatio = true; pixelRatio = v; resync(); };
 function tick() {
   requestAnimationFrame(tick);
   renderer.info.reset();
+  if (renderPaused) { frames++; return; }
   const dt = Math.min(clock.getDelta(), .05);
   const t = clock.elapsedTime;
   if (interior && interior.on) {
@@ -844,7 +858,7 @@ function tick() {
       `${(i.triangles / 1e6).toFixed(2)}M tris · ratio ${pixelRatio} · ` +
       `${renderer.info.memory.geometries} geo / ${renderer.info.memory.textures} tex`;
   }
-  if (t - lastRatioCheck > 2.5) {
+  if (t - lastRatioCheck > 2.5 && !window.__lockRatio) {
     lastRatioCheck = t;
     if (fpsEMA < 42 && pixelRatio > .55) {
       pixelRatio = Math.max(.42, pixelRatio - .2); resync();
