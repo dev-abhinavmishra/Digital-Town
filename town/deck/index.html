@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Havenbrook — A Community Planned Around Care</title>
+<style>
+  :root {
+    --ink:#eef4f6; --sub:#a7bcc6; --dim:#7e97a2; --rule:rgba(238,244,246,.28);
+    --paper:#f4f2ec; --paperink:#16323e; --papersub:#5d7380;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; background:#050b0f;
+    font-family:"Segoe UI", system-ui, -apple-system, sans-serif; }
+  .serif { font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; }
+
+  #track { display:flex; height:100%; transition:transform .85s cubic-bezier(.7,0,.2,1); }
+  .slide { position:relative; flex:0 0 100%; height:100%; overflow:hidden; }
+
+  /* full-bleed imagery with an editorial scrim — no cards on cards */
+  .bg { position:absolute; inset:-4%; background-size:cover; background-position:center;
+    transition:transform 9s cubic-bezier(.2,.6,.2,1); transform:scale(1); }
+  .slide.cur .bg { transform:scale(1.045); }   /* slow push — alive, not static */
+  .scrim { position:absolute; inset:0;
+    background:linear-gradient(14deg, rgba(5,16,22,.84) 0%, rgba(5,16,22,.42) 36%, rgba(5,16,22,0) 64%); }
+
+  .cap { position:absolute; left:7.5%; bottom:12%; max-width:600px; color:var(--ink);
+    opacity:0; transform:translateY(18px); transition:opacity .7s .25s, transform .7s .25s cubic-bezier(.2,.7,.3,1); }
+  .slide.cur .cap { opacity:1; transform:none; }
+  .kick { font-size:11px; letter-spacing:3.4px; font-weight:600; color:var(--sub);
+    text-transform:uppercase; margin-bottom:16px; display:flex; align-items:center; gap:12px; }
+  .kick::after { content:''; height:1px; width:44px; background:var(--rule); }
+  h1 { font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:clamp(34px,4.6vw,52px); line-height:1.06; font-weight:500; letter-spacing:.2px;
+    margin-bottom:16px; text-wrap:balance; }
+  h1.cover { font-size:clamp(52px,7.5vw,86px); letter-spacing:.5px; }
+  h1 em { font-style:italic; font-weight:400; }
+  .body { font-size:clamp(13px,1.35vw,15px); line-height:1.66; color:var(--sub); max-width:480px; }
+
+  .stats { display:flex; gap:34px; margin-top:24px; }
+  .st b { display:block; font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:clamp(24px,2.6vw,32px); font-weight:500; color:var(--ink); }
+  .st span { font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--dim); }
+
+  /* the ledger slide: paper instead of ink — one tonal shift, not a template */
+  .paper { background:var(--paper); }
+  .paper .cap { color:var(--paperink); left:7.5%; bottom:auto; top:50%; transform:translateY(-44%); max-width:560px; }
+  .paper .slide.cur .cap, .paper.slide.cur .cap { transform:translateY(-50%); opacity:1; }
+  .paper .cap { transition:opacity .7s .25s; }
+  .paper .kick { color:var(--papersub); } .paper .kick::after { background:rgba(22,50,62,.3); }
+  .paper .body { color:var(--papersub); }
+  .bud { margin-top:26px; width:min(520px,60vw); }
+  .bud .track { height:5px; display:flex; border-radius:3px; overflow:hidden; background:rgba(22,50,62,.12); }
+  .bud .track i { height:100%; }
+  .bud .rows { margin-top:14px; font-size:13.5px; color:var(--papersub); line-height:2.1; }
+  .bud .rows b { color:var(--paperink); font-weight:600; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:9px; vertical-align:1px; }
+  .paper .side { position:absolute; right:7.5%; top:50%; transform:translateY(-50%);
+    text-align:right; color:var(--papersub); font-size:12.5px; line-height:2; letter-spacing:.3px; }
+  .paper .side b { font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:20px; color:var(--paperink); font-weight:500; display:block; }
+
+  /* chrome: brand, counter, progress — hairlines only */
+  .brand { position:fixed; left:48px; top:22px; z-index:9; font-size:10px; letter-spacing:2.6px;
+    color:var(--dim); text-transform:uppercase; transition:color .4s; }
+  .cnt { position:fixed; right:48px; top:22px; z-index:9; font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:15px; letter-spacing:1.5px; color:var(--ink); transition:color .4s; }
+  .cnt i { font-style:normal; color:var(--dim); margin:0 5px; font-size:12px; }
+  .prog { position:fixed; left:48px; right:48px; bottom:34px; height:1px; z-index:9;
+    background:rgba(238,244,246,.16); }
+  .prog i { display:block; height:100%; width:0; background:rgba(238,244,246,.75); transition:width .6s ease; }
+  .keys { position:fixed; right:48px; bottom:24px; z-index:9; font-size:9.5px; letter-spacing:1.8px;
+    color:var(--dim); text-transform:uppercase; }
+  .darkchrome .brand, .darkchrome .cnt, .darkchrome .keys { color:#8a9490; }
+  .darkchrome .prog { background:rgba(22,50,62,.14); } .darkchrome .prog i { background:rgba(22,50,62,.5); }
+  .darkchrome .cnt { color:var(--paperink); } .darkchrome .cnt i { color:var(--papersub); }
+  .edge { position:fixed; top:0; bottom:0; width:18%; z-index:8; cursor:pointer; }
+  .edge.l { left:0 } .edge.r { right:0 }
+
+  @page { size:landscape; margin:0; }
+  @media print {
+    html, body { overflow:visible; height:auto;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    #track { display:block; transform:none !important; }
+    .slide { width:100vw; height:100vh; page-break-after:always;
+      break-after:page; }
+    .cap { opacity:1 !important; transform:none !important; }
+    .bg { inset:0; transform:none !important; }
+    .brand, .cnt, .prog, .keys, .edge { display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="track">
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/01-cover.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">HST project &middot; a digital town</div>
+      <h1 class="cover"><em>HAVENBROOK</em></h1>
+      <div class="body">A community planned around care — a full town designed, budgeted and built to a $10,000,000 brief.</div></div>
+  </section>
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/02-plan.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">The brief</div>
+      <h1>One town, ten rules</h1>
+      <div class="body">A medical university anchors the plan, housing surrounds it, and at least seven healthcare and three community facilities had to fit inside $10M.</div>
+      <div class="stats">
+        <div class="st"><b>$9.95M</b><span>spent of $10M</span></div>
+        <div class="st"><b>13</b><span>healthcare sites</span></div>
+        <div class="st"><b>11</b><span>community sites</span></div>
+        <div class="st"><b>18</b><span>named streets</span></div>
+      </div></div>
+  </section>
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/03-campus.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">The anchor &middot; provided free</div>
+      <h1>University School of Medicine</h1>
+      <div class="body">A real campus — medical school, library, anatomy and clinical halls around a quadrangle on Campus Dr — the reason the town exists.</div></div>
+  </section>
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/04-wellness.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">#3&ndash;15 &middot; Wellness Way</div>
+      <h1>Care within reach</h1>
+      <div class="body">Havenbrook General sits one block from EMS on the Wellness Way spine — thirteen facilities from diagnostics to hospice, minutes from every district.</div></div>
+  </section>
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/05-preserve.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">#2 &middot; Residential West &middot; provided free</div>
+      <h1>The Preserve</h1>
+      <div class="body">The donated housing development — cottage rows, duplexes and townhouses around Preserve Commons, wrapped around the campus it serves.</div></div>
+  </section>
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/06-park.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">#22 &middot; Willow Creek Park</div>
+      <h1>The third places</h1>
+      <div class="body">Pond, trails, playgrounds and the bandshell — the social heart — with Main Street and the Commons mall a short walk south.</div></div>
+  </section>
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/07-senior.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">#14&ndash;15 &middot; the quiet east</div>
+      <h1>Ageing in place</h1>
+      <div class="body">Silver Oaks senior living and Tranquil Harbor hospice in the leafy east — a full care loop from independent living to end-of-life.</div></div>
+  </section>
+
+  <section class="slide paper">
+    <div class="cap"><div class="kick">The ledger</div>
+      <h1>$9.95M of $10.00M</h1>
+      <div class="body">Every requirement of the brief, priced and placed — with headroom kept for the parks, streets and trees that make it feel like a town.</div>
+      <div class="bud"><div class="track">
+        <i style="width:62.5%;background:#c0392b"></i><i style="width:37%;background:#2471a3"></i><i style="width:.5%;background:rgba(22,50,62,.18)"></i>
+      </div>
+      <div class="rows">
+        <span class="dot" style="background:#c0392b"></span><b>Healthcare</b> 13 facilities — $6.25M<br>
+        <span class="dot" style="background:#2471a3"></span><b>Community</b> 11 locations — $3.70M<br>
+        <span class="dot" style="background:#8a9490"></span><b>Free sites</b> university + housing &nbsp;&middot;&nbsp; <b>Headroom</b> $0.05M
+      </div></div>
+    </div>
+    <div class="side">
+      <b>$1.5M</b>largest spend — General Hospital<br>
+      <b>$400k</b>smallest walk — EMS reach<br>
+      <b>26</b>numbered facilities<br>
+      <b>100%</b>uniquely named
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="bg" style="background-image:url('shots/08-close.jpg')"></div><div class="scrim"></div>
+    <div class="cap"><div class="kick">HAVENBROOK</div>
+      <h1 class="cover">Under budget.<br><em>Over-delivered.</em></h1>
+      <div class="body">A community planned around care.</div></div>
+  </section>
+
+</div>
+
+<div class="brand">Havenbrook — a community planned around care</div>
+<div class="cnt" id="cnt"></div>
+<div class="keys">&larr; &rarr; navigate</div>
+<div class="prog"><i id="pi"></i></div>
+<div class="edge l" id="el"></div><div class="edge r" id="er"></div>
+
+<script>
+const slides = [...document.querySelectorAll('.slide')];
+const track = document.getElementById('track'), cnt = document.getElementById('cnt'),
+      pi = document.getElementById('pi');
+let i = 0;
+function go(n) {
+  i = Math.max(0, Math.min(slides.length - 1, n));
+  track.style.transform = `translateX(${-i * 100}%)`;
+  slides.forEach((s, k) => s.classList.toggle('cur', k === i));
+  cnt.innerHTML = `${String(i + 1).padStart(2, '0')}<i>/</i>${String(slides.length).padStart(2, '0')}`;
+  pi.style.width = `${(i + 1) / slides.length * 100}%`;
+  document.body.classList.toggle('darkchrome', slides[i].classList.contains('paper'));
+}
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') go(i + 1);
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') go(i - 1);
+  if (e.key === 'Home') go(0); if (e.key === 'End') go(slides.length - 1);
+});
+document.getElementById('el').onclick = () => go(i - 1);
+document.getElementById('er').onclick = () => go(i + 1);
+let wx = 0;
+addEventListener('wheel', e => { const now = Date.now();
+  if (now - wx < 900 || Math.abs(e.deltaX ? e.deltaX : e.deltaY) < 24) return;
+  wx = now; go(i + Math.sign(e.deltaX || e.deltaY)); }, { passive: true });
+go(0);
+</script>
+</body>
+</html>

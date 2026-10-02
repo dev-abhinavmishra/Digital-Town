@@ -37,6 +37,16 @@ To simulate the Vercel static bundle, copy town/ minus node_modules (`tar --excl
 - Known cosmetic quirk (pre-existing, translateY(140px) closed state): a closed `#uiCard` leaves ~40-70px of its top edge visible above the viewport bottom — shows as a card sliver in screenshots, NOT a stuck-open card. Check `.classList.contains('show')` for truth.
 - Card 'step inside' link `[data-act="in"]` → `__enterInterior(b.id)`; `__interior.on` flips true, Esc exits. Interior HUD (interior.js anonymous panel, zIndex 72) is a separate dark-ish component — not part of the ui.js theme.
 
+## PRESENT mode (town/js/deck.js) — cinematic slide deck
+- `#uiBtnDeck` ("◉ PRESENT") → `deck.start()`: `#uiDeck.on`, 56px letterbox bars, HUD chrome hidden (hudUI/hint/compass/labels/legend/titlecard/hud stashed+restored via inline display), 9 slides each `__flyTo`, `.cnt` "01 / 09"…"09 / 09", `.cap` caption staggered fade. Slide idx 7 = 'The ledger' (`.bud` budget bar); idx 0/8 = covers.
+- Nav: `.edge.l`/`.edge.r` (outer 22% zones — click at ~5%/95% width), ArrowLeft/Right/Up/Down, Space pauses, Esc or step-past-last exits → `__flyTo(540,620,660,-30,0,-40)` home. start() also calls `__endTour` and `__exitInterior` — test both preemptions.
+- Probes: `window.__deck {start,exit,next,prev,on,i,n}` (n=9).
+- **SwiftShader timing trap**: auto-advance HOLD=9.5s + caption reveal via 360ms setTimeout — page.screenshot takes 2-5s under load, so the auto-advance WILL race your asserts (counter jumps mid-check; past-last auto-exit fires while you screenshot). For deterministic manual-nav asserts press Space FIRST (paused → timer cleared, manual nav unaffected). Caption/`h1` reads need ≥1.5-4s settle, not 0.4s. An "extra" step in counts is usually the auto-advance, not a double-fire — same for TOUR (its 9s timer races identically).
+- `__enterInterior(id)` probe is the reliable interior-enter for preemption tests (click through the card can miss the thin 'step inside' link while it settles).
+
+## Static deck (town/deck/index.html, served at /deck/index.html — no dir index on server.cjs)
+- 9 `.slide` sections, `#track` translateX(−i*100%), `.cur` marks active, `#cnt` "NN/NN", `.edge l/r` click zones, Arrow/Space/Home/End keys, wheel (900ms throttle, |delta|≥24). Clamps at ends (no exit). Slide idx 7 is `.paper` (light ledger, adds `body.darkchrome`); the other 8 load `shots/01-cover.jpg`…`08-close.jpg` — assert decode via `new Image().naturalWidth` per computed `backgroundImage` url.
+
 ## Building interiors (town/js/interior.js)
 - Probes: `__interior{.on,.kind,.b.id,.spec,.saved.p/q}`, `__enterInterior(id)`/`I.byId(id)`, `__exitInterior()`. Deep link: `?interior=hospital|coffee|medhall|preservecommons`. Rooms render on layer 2 at STAGE=(0,-180,0); EYE=1.62; archetypes from BY_ID/BY_TYPE (medical ward, cafe dining room, hall great hall, mall atrium, home, shop).
 - Interior HUD = anonymous `body>div` with `style.zIndex==='72'` (panel/hint/exitBtn; display:'block' while inside). Read panel text via `[...document.querySelectorAll('body>div')].filter(d=>d.style.zIndex==='72'&&d.style.display==='block')`.

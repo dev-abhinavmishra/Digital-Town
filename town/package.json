@@ -11,9 +11,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "pptxgenjs": "^3.12.0",
-    "three": "^0.160.0"
-  }
+  "description": ""
 }

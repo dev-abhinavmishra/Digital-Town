@@ -2,6 +2,7 @@
 // flights, building info cards, guided tour, and the assignment checklist.
 // DOM-only module; the world is untouched except via window.__flyTo.
 import { BUILDINGS, APARTMENTS, TOWN, CATEGORY_COLORS } from './layout.js';
+import { installDeck } from './deck.js';
 
 const BUDGET = 10_000_000;
 const money = n => '$' + (n / 1e6).toFixed(2) + 'M';
@@ -170,6 +171,7 @@ export function installUI() {
       <div id="uiBtns">
         <div class="btn" id="uiBtnDir">&#8801; FACILITIES</div>
         <div class="btn" id="uiBtnTour">&#9654; TOUR</div>
+        <div class="btn" id="uiBtnDeck">&#9673; PRESENT</div>
         <div class="btn" id="uiBtnRubric">&#10003; PROJECT BRIEF</div>
         <div class="btn" id="uiBtnGuide">&#9432; GUIDE</div>
       </div>
@@ -357,6 +359,18 @@ export function installUI() {
   });
   addEventListener('keydown', e => { if (e.key === 'Escape' && tourI >= 0) endTour(); });
   addEventListener('mousedown', () => { if (tourI >= 0) endTour(); }, { once: false, capture: false });
+
+  /* ---------------- present mode (cinematic slide deck) ---------------- */
+  const deck = installDeck();
+  if (window.__mapOn) $('#uiBtnDeck').style.display = 'none';   // no flights in ortho map view
+  $('#uiBtnDeck').addEventListener('click', e => {
+    e.stopPropagation();
+    if (deck.on) { deck.exit(); return; }
+    $('#uiBtnDeck').classList.add('on');
+    if (tourI >= 0) endTour();
+    rub.classList.remove('open'); guide.classList.remove('open');
+    deck.start();
+  });
 
   /* ---------------- rubric / brief overlay ---------------- */
   const rub = $('#uiRubric');

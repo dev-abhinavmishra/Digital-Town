@@ -28,6 +28,7 @@ import { installInterior } from './interior.js';
 
 const params = new URLSearchParams(location.search);
 const VIEW = params.get('view') || 'aerial';
+window.__mapOn = VIEW === 'map';   // early: installUI() reads it before orthoCam exists
 const TIME = params.get('time') || 'day';
 const LABELS = params.get('labels') === '1';
 const NOFX = params.get('nofx') === '1';
