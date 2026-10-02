@@ -132,7 +132,7 @@ export function installDeck() {
   ];
 
   const HOLD_MS = 9500;
-  let on = false, i = -1, timer = 0, paused = false;
+  let on = false, i = -1, timer = 0, capTimer = 0, paused = false;
 
   function caption(s, idx) {
     const bits = [];
@@ -158,7 +158,8 @@ export function installDeck() {
     const s = SLIDES[i];
     window.__flyTo(...s.cam, Math.max(1.8, s.dur * .72));
     cap.classList.remove('in'); cap.classList.add('out');
-    setTimeout(() => {
+    clearTimeout(capTimer);
+    capTimer = setTimeout(() => {
       cap.innerHTML = caption(s, i);
       cap.classList.remove('out'); cap.classList.add('in');
     }, 360);
@@ -171,22 +172,25 @@ export function installDeck() {
   const HUD_CHROME = ['hudUI', 'hint', 'compass', 'labels', 'legend', 'titlecard', 'hud'];
   const hudStash = {};
   function start() {
-    if (on) return;
+    if (on || window.__mapOn) return;   // ortho map view can't fly the slide shots
     on = true; paused = false;
     window.__endTour && window.__endTour();
-    if (window.__interior?.on) window.__exitInterior?.();   // interior HUD sits above the deck layer
+    const wasIn = window.__interior?.on;
+    if (wasIn) window.__exitInterior?.();   // interior HUD sits above the deck layer
     document.getElementById('uiCard')?.classList.remove('show');
     document.getElementById('uiDrawer')?.classList.remove('open');
     HUD_CHROME.forEach(id => { const el = document.getElementById(id);
       if (el) { hudStash[id] = el.style.display; el.style.display = 'none'; } });
     root.classList.add('on');
-    show(0);
+    // interior exit restores the saved outdoor pose at +190ms — let it land
+    // before the opening flight, or the snap stomps the tween mid-flight
+    wasIn ? setTimeout(() => on && show(0), 260) : show(0);
   }
   function exit() {
     if (!on) return;
     on = false; i = -1; paused = false;
-    clearTimeout(timer);
-    cap.classList.remove('in');
+    clearTimeout(timer); clearTimeout(capTimer);
+    cap.classList.remove('in', 'out'); cap.innerHTML = '';
     root.classList.remove('on');
     HUD_CHROME.forEach(id => { const el = document.getElementById(id);
       if (el) el.style.display = hudStash[id] ?? ''; });

@@ -362,6 +362,7 @@ export function installUI() {
 
   /* ---------------- present mode (cinematic slide deck) ---------------- */
   const deck = installDeck();
+  if (window.__mapOn) $('#uiBtnDeck').style.display = 'none';   // no flights in ortho map view
   $('#uiBtnDeck').addEventListener('click', e => {
     e.stopPropagation();
     if (deck.on) { deck.exit(); return; }

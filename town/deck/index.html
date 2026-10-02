@@ -77,13 +77,15 @@
   .edge { position:fixed; top:0; bottom:0; width:18%; z-index:8; cursor:pointer; }
   .edge.l { left:0 } .edge.r { right:0 }
 
+  @page { size:landscape; margin:0; }
   @media print {
-    html, body { overflow:visible; height:auto; }
+    html, body { overflow:visible; height:auto;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     #track { display:block; transform:none !important; }
-    .slide { width:100vw; height:56.25vw; max-height:100vh; page-break-after:always;
+    .slide { width:100vw; height:100vh; page-break-after:always;
       break-after:page; }
     .cap { opacity:1 !important; transform:none !important; }
-    .bg { transform:none !important; }
+    .bg { inset:0; transform:none !important; }
     .brand, .cnt, .prog, .keys, .edge { display:none; }
   }
 </style>
