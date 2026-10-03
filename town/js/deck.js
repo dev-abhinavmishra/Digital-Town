@@ -158,9 +158,9 @@ export function installDeck() {
         'It\u2019s why the town exists, so it gets the best spot'] },
     { cam: [300, 110, -620, 20, 26, -440], dur: 10,
       kick: '#3–15 · Wellness Way', title: 'Thirteen ways to get care', pts: [
-        '<b>Emergency:</b> Havenbrook General + Hartline EMS, a block apart on the Wellness spine',
-        '<b>Everyday:</b> Thacher clinic, Brookfield physicians, Marigold dental, Parallax optical, Argus labs',
-        '<b>Long-term:</b> Stoneleigh rehab, Stillwater behavioral health, Halcyon House, Stillpoint hospice',
+        '<b>Emergency:</b> Havenbrook General + Garrison EMS, a block apart on the Wellness spine',
+        '<b>Everyday:</b> Thacher clinic, Brookfield physicians, Marigold dental, Parallax optical, Meridian labs',
+        '<b>Long-term:</b> Stoneleigh rehab, Ashwood behavioral health, Halcyon House, Stillpoint hospice',
         '<b>Public health:</b> the county Health Department · <b>At home:</b> Innisfree visits'] },
     { cam: [-270, 150, 430, -500, 8, 190], dur: 10,
       kick: '#2 · Residential West · donated, off-budget', title: 'The Preserve', pts: [
@@ -170,8 +170,8 @@ export function installDeck() {
         'Nobody is more than a short walk from campus or a bus route'] },
     { cam: [330, 130, 330, 575, 6, 130], dur: 10,
       kick: 'Community · 11 locations', title: 'The parts that aren\u2019t medicine', pts: [
-        '<b>Errands:</b> Havenbrook Commons mall, Masterson\u2019s, Olsen\u2019s Market, Bellwether Pharmacy',
-        '<b>Food:</b> The Orchard Table, The Painted Coyote, The Whippoorwill coffeehouse',
+        '<b>Errands:</b> Havenbrook Commons mall, Bardsley\u2019s, Olsen\u2019s Market, Bellwether Pharmacy',
+        '<b>Food:</b> The Orchard Table, Mariposa Cantina, The Whippoorwill coffeehouse',
         '<b>Outside:</b> Willow Creek Park — pond, trails, bandshell',
         '<b>The boring-but-needed:</b> post office, school district, Quarry Hill Museum'] },
     { cam: [640, 100, -330, 520, 12, -550], dur: 10,

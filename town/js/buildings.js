@@ -867,7 +867,7 @@ function ems(s) {
     g.add(box(7, .5, .7, mat('#b03a2e'), i * 9, 6, d / 2 + .15));
     g.add(box(.3, 6.5, .5, mat('#d9d5cc'), i * 9 + 3.6, 0, d / 2 + .12));
   }
-  sign(g, 'HARTLINE EMS', w * .8, s.h - 1.4, d / 2 + .3, { bg: '#8e2f26', font: 'bold 44px Arial' });
+  sign(g, 'GARRISON EMS', w * .8, s.h - 1.4, d / 2 + .3, { bg: '#8e2f26', font: 'bold 44px Arial' });
   // small tower + antenna + beacon
   g.add(box(5, s.h + 5, 5, mat('#8e2f26'), -w / 2 + 3, 0, -d / 2 + 3));
   g.add(cyl(.08, .08, 8, mat('#333'), -w / 2 + 3, s.h + 5, -d / 2 + 3));
@@ -1007,10 +1007,10 @@ function bigbox(s, brand) {
   winDressMesh(g, w, d, s.h, { rows: 1, cols: 10, storefront: true, faces: 'fbs',
     transom: true, fins: true, reveal: true });
   storefrontKitMesh(g, w, d, s.h, { cols: 10, faces: 'fbs' });
-  if (isTarget) {   // anchor store — Masterson's navy livery
+  if (isTarget) {   // anchor store — Bardsley's navy livery
     const bc = '#1f3a5f';
     g.add(box(w, 2.6, .8, mat(bc), 0, s.h - 4, d / 2 + .2));
-    sign(g, "MASTERSON'S", w * .3, s.h - 8.4, d / 2 + .4, { bg: bc, font: 'bold 60px Georgia' });
+    sign(g, "BARDSLEY'S", w * .3, s.h - 8.4, d / 2 + .4, { bg: bc, font: 'bold 60px Georgia' });
     for (let i = -3; i <= 3; i++) {
       const sph = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 12), mat('#c8a34e', { roughness: .4 }));
       sph.position.set(i * 6, .8, d / 2 + 4); sph.castShadow = true; g.add(sph);
@@ -1154,7 +1154,7 @@ function fastfood(s) {
   const { w, d } = s;
   const b = box(w, s.h, d, null);
   b.material = wallMats(facadeMaps({ base: '#e8dcc4', rows: 1, cols: 4,
-    storefront: true, signText: 'PAINTED COYOTE', signBg: '#c0392b', brickLines: false }), mat('#8a4b2d'));
+    storefront: true, signText: 'MARIPOSA', signBg: '#c0392b', brickLines: false }), mat('#8a4b2d'));
   g.add(b);
   parapet(g, w, d, s.h, { color: '#8a4b2d' });
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: false });
@@ -1169,7 +1169,7 @@ function fastfood(s) {
   g.add(box(2.4, 1.6, .2, mat('#3a2a18'), w / 2 + 5, .8, -3.6));
   // sign pole
   g.add(cyl(.25, .25, 12, mat('#555'), w / 2 + 12, 0, d / 2 + 6));
-  const st = signTexture('PAINTED\nCOYOTE', { bg: '#c0392b', font: 'bold 34px Arial' });
+  const st = signTexture('MARIPOSA', { bg: '#c0392b', font: 'bold 34px Arial' });
   const ps = new THREE.Mesh(new THREE.PlaneGeometry(7, 5), new M({ map: st, side: THREE.DoubleSide }));
   ps.position.set(w / 2 + 12, 10, d / 2 + 6); g.add(ps);
   return g;

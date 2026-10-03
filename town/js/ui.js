@@ -290,7 +290,7 @@ export function installUI() {
   const TOUR = [
     { b: 'medhall',  t: 'Anchored free: the University School of Medicine', c: 'The town is planned around a medical university — donated land, quadrangle, and research halls at the centre of town.' },
     { b: 'hospital', t: 'Havenbrook General Hospital ($1.5M)', c: 'The largest single spend sits on Wellness Way, one block from the EMS station — the care spine of the town.' },
-    { b: 'ems',      t: 'Hartline EMS ($400k)', c: 'Placed at the Midtown/Main junction so ambulances reach every district along arterials in minutes.' },
+    { b: 'ems',      t: 'Garrison Medical Transport ($400k)', c: 'Placed at the Midtown/Main junction so ambulances reach every district along arterials in minutes.' },
     { b: 'silveroaks', t: 'Halcyon House Senior Living ($750k)', c: 'Senior care sits east, quiet and leafy, between the hospice and the park — a full ageing-in-place loop.' },
     { b: 'park',     t: 'Willow Creek Park ($200k)', c: 'Community green space with ponds, sports fields and the bandshell — the town\'s social heart.' },
     { b: 'mall',     t: 'Havenbrook Commons Mall ($1.0M)', c: 'Commerce Blvd concentrates retail south of downtown — walkable, on the same corridor as the pharmacy and grocery.' },
@@ -355,7 +355,7 @@ export function installUI() {
     ['University Medical School', `#1 ${BUILDINGS.find(b => b.id === 'medhall').name} + library, anatomy & clinical halls on a real campus quad`, '&#10003;'],
     ['Housing Development', `#2 ${BUILDINGS.find(b => b.id === 'housing').name} — cottage rows, duplexes and townhouses across Residential West`, '&#10003;'],
     ['≥7 healthcare facilities', `${nHealth} numbered sites — hospital, EMS, health dept, lab, rehab, behavioral, student clinic, dental, optical, family medicine, home health, senior living, hospice`, '&#10003;'],
-    ['≥3 community locations', `${nComm} numbered sites — Masterson's, mall, pharmacy, museum, school, restaurant, park, post office, grocery, coffeehouse, diner`, '&#10003;'],
+    ['≥3 community locations', `${nComm} numbered sites — Bardsley's, mall, pharmacy, museum, school, restaurant, park, post office, grocery, coffeehouse, diner`, '&#10003;'],
     ['Every facility uniquely named', 'Every building carries a proper name — click any label or the Facilities drawer for its card', '&#10003;'],
     ['Realistic layout', '18 named streets on a legible grid, zoned districts (medical campus centre, hospital N, senior E, downtown NW, residential W, school S), signalized junctions, parking, curbside life', '&#10003;'],
     ['Budget ≤ $10M', `${money(spent)} spent of ${money(BUDGET)} — health $${((numd.filter(b => b.cat === 'health').reduce((s, b) => s + (b.cost || 0), 0)) / 1e6).toFixed(2)}M, community $${((numd.filter(b => b.cat === 'community').reduce((s, b) => s + (b.cost || 0), 0)) / 1e6).toFixed(2)}M`, '&#10003;'],
