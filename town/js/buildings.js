@@ -867,7 +867,7 @@ function ems(s) {
     g.add(box(7, .5, .7, mat('#b03a2e'), i * 9, 6, d / 2 + .15));
     g.add(box(.3, 6.5, .5, mat('#d9d5cc'), i * 9 + 3.6, 0, d / 2 + .12));
   }
-  sign(g, 'EMS \u2022 RAPIDRESPONSE', w * .8, s.h - 1.4, d / 2 + .3, { bg: '#8e2f26', font: 'bold 40px Arial' });
+  sign(g, 'HARTLINE EMS', w * .8, s.h - 1.4, d / 2 + .3, { bg: '#8e2f26', font: 'bold 44px Arial' });
   // small tower + antenna + beacon
   g.add(box(5, s.h + 5, 5, mat('#8e2f26'), -w / 2 + 3, 0, -d / 2 + 3));
   g.add(cyl(.08, .08, 8, mat('#333'), -w / 2 + 3, s.h + 5, -d / 2 + 3));
@@ -894,7 +894,7 @@ function senior(s) { // assisted living — U-shaped courtyard
   g.add(box(14, .7, 10, roofM, 0, 5.2, -d * .33 + d * .17 + 4));
   g.add(cyl(.35, .35, 5.2, mat('#e8e2d4'), -6, 0, -d * .33 + d * .17 + 7));
   g.add(cyl(.35, .35, 5.2, mat('#e8e2d4'), 6, 0, -d * .33 + d * .17 + 7));
-  sign(g, 'SILVER OAKS SENIOR LIVING', w * .55, s.h - 2, -d * .33 + d * .17 + .4, { bg: '#5d4037', font: 'bold 36px Georgia' });
+  sign(g, 'HALCYON HOUSE', w * .55, s.h - 2, -d * .33 + d * .17 + .4, { bg: '#5d4037', font: 'bold 40px Georgia' });
   // courtyard garden beds
   for (let i = -1; i <= 1; i++)
     g.add(box(6, .5, 3, mat('#5d7a4a'), i * 9, 0, d * .22));
@@ -915,7 +915,7 @@ function hospice(s) {
   g.add(box(w * .7, .5, 5, mat('#a58a68'), 0, .4, d / 2 + 2.5));
   for (let i = -3; i <= 3; i++) g.add(cyl(.28, .28, 3.6, mat('#efe8da'), i * w * .09, .6, d / 2 + 4));
   g.add(box(w * .7, .4, 5.5, roofM, 0, 4.4, d / 2 + 2.5));
-  sign(g, 'TRANQUIL HARBOR HOSPICE', w * .6, s.h + 1.2, d / 2 + .4, { bg: '#4d6155', font: 'bold 34px Georgia' });
+  sign(g, 'STILLPOINT HOSPICE', w * .6, s.h + 1.2, d / 2 + .4, { bg: '#4d6155', font: 'bold 38px Georgia' });
   return g;
 }
 
@@ -1099,7 +1099,7 @@ function museum(s) {
   const rot = cyl(9, 9, s.h * .8, mat('#c4cdd2'), -w * .3, 0, d * .18, 20); g.add(rot);
   const dome = new THREE.Mesh(new THREE.SphereGeometry(9, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat('#5d7686', { roughness: .5, metalness: .3 }));
   dome.position.set(-w * .3, s.h * .8, d * .18); dome.castShadow = true; g.add(dome);
-  sign(g, 'DISCOVERY MUSEUM', w * .5, s.h - 3, d / 2 + .3, { bg: '#37474f', font: 'bold 38px Georgia' });
+  sign(g, 'QUARRY HILL MUSEUM', w * .5, s.h - 3, d / 2 + .3, { bg: '#37474f', font: 'bold 36px Georgia' });
   // entry plaza steps
   g.add(box(16, .4, 4, mat('#b9b2a2'), w * .1, 0, d / 2 + 2));
   // sprint-03 entrance: portico canopy + door + blade over the plaza steps

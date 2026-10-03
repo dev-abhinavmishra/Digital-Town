@@ -195,7 +195,7 @@ export const LOTS = [
   { x:-510,z:462,  w:110, d:34 },                                    // school lot
   { x:170, z:-150, w:60, d:24 },                                    // university staff lot, quad east
   { x:-192,z:362,  w:40,  d:16 },                                    // famfirst lot
-  { x:500, z:-640, w:80,  d:40 },                                    // silver oaks lot
+  { x:500, z:-640, w:80,  d:40 },                                    // halcyon house lot
   { x:70,  z:548,  w:100, d:26 },                                    // athletic park lot
 ];
 
@@ -213,7 +213,7 @@ export const GREENS = [
   { id: 'scholar-pocket',  name: 'Scholar Green',             use: 'pocketpark',
     x0: -622, x1: -455, z0: -24,  z1: 55   },   // N of Elm, between Scholar/Cedar
   { id: 'research-green',  name: 'Quarry Research Green',     use: 'pocketpark',
-    x0: 218, x1: 302, z0: -265, z1: -245 },   // campus edge, E of Clinical Sci
+    x0: 218, x1: 302, z0: -265, z1: -245 },   // campus edge, E of Caldecott
   { id: 'tranquil-grove',  name: 'Tranquil Grove',            use: 'grove',
     x0: 650,  x1: 795,  z0: -610, z1: -552 },   // hospice backdrop, N of Sunset Ridge
   { id: 'northsenior',     name: 'North Meadow',              use: 'meadow',
