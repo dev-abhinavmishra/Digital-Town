@@ -1007,18 +1007,19 @@ function bigbox(s, brand) {
   winDressMesh(g, w, d, s.h, { rows: 1, cols: 10, storefront: true, faces: 'fbs',
     transom: true, fins: true, reveal: true });
   storefrontKitMesh(g, w, d, s.h, { cols: 10, faces: 'fbs' });
-  if (isTarget) {
-    g.add(box(w, 2.6, .8, mat('#cc0000'), 0, s.h - 4, d / 2 + .2));
-    sign(g, 'TARGET', w * .3, s.h - 8.4, d / 2 + .4, { bg: '#cc0000', font: 'bold 60px Arial' });
+  if (isTarget) {   // anchor store — Masterson's navy livery
+    const bc = '#1f3a5f';
+    g.add(box(w, 2.6, .8, mat(bc), 0, s.h - 4, d / 2 + .2));
+    sign(g, "MASTERSON'S", w * .3, s.h - 8.4, d / 2 + .4, { bg: bc, font: 'bold 60px Georgia' });
     for (let i = -3; i <= 3; i++) {
-      const sph = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 12), mat('#cc0000', { roughness: .4 }));
+      const sph = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 12), mat('#c8a34e', { roughness: .4 }));
       sph.position.set(i * 6, .8, d / 2 + 4); sph.castShadow = true; g.add(sph);
     }
     // cart corrals in front
     for (const cx of [-18, 18]) {
-      g.add(box(6, 1.1, .15, mat('#cc0000'), cx, .4, d / 2 + 10));
-      g.add(box(.15, 1.1, 4, mat('#cc0000'), cx - 3, .4, d / 2 + 8));
-      g.add(box(.15, 1.1, 4, mat('#cc0000'), cx + 3, .4, d / 2 + 8));
+      g.add(box(6, 1.1, .15, mat(bc), cx, .4, d / 2 + 10));
+      g.add(box(.15, 1.1, 4, mat(bc), cx - 3, .4, d / 2 + 8));
+      g.add(box(.15, 1.1, 4, mat(bc), cx + 3, .4, d / 2 + 8));
     }
   } else {
     sign(g, s.name.toUpperCase(), w * .5, s.h - 4, d / 2 + .3, { bg: '#2e6b46', font: 'bold 48px Georgia' });
@@ -1027,7 +1028,7 @@ function bigbox(s, brand) {
   door(g, 10, 5.4, 0, d / 2 + .3);
   // sprint-03 entrance: canopy + branded fascia + posts over the doors
   const _be = g.children.length;
-  const bc2 = s.brand === 'target' ? '#cc0000' : '#2e6b46';
+  const bc2 = s.brand === 'target' ? '#1f3a5f' : '#2e6b46';
   g.add(box(w * .36, .55, 5, mat('#3f4750'), 0, 6.3, d / 2 + 2.4));
   g.add(box(w * .36 + .5, .25, 5.6, mat(bc2), 0, 6.85, d / 2 + 2.4));
   for (const px of [-w * .15, w * .15]) g.add(cyl(.3, .3, 6.3, mat('#8a9094'), px, 0, d / 2 + 4.4));
@@ -1153,7 +1154,7 @@ function fastfood(s) {
   const { w, d } = s;
   const b = box(w, s.h, d, null);
   b.material = wallMats(facadeMaps({ base: '#e8dcc4', rows: 1, cols: 4,
-    storefront: true, signText: 'FIESTA EXPRESS', signBg: '#c0392b', brickLines: false }), mat('#8a4b2d'));
+    storefront: true, signText: 'PAINTED COYOTE', signBg: '#c0392b', brickLines: false }), mat('#8a4b2d'));
   g.add(b);
   parapet(g, w, d, s.h, { color: '#8a4b2d' });
   facadeDress(g, w, d, s.h, { cornice: true, pilasters: false });
@@ -1168,7 +1169,7 @@ function fastfood(s) {
   g.add(box(2.4, 1.6, .2, mat('#3a2a18'), w / 2 + 5, .8, -3.6));
   // sign pole
   g.add(cyl(.25, .25, 12, mat('#555'), w / 2 + 12, 0, d / 2 + 6));
-  const st = signTexture('FIESTA\nEXPRESS', { bg: '#c0392b', font: 'bold 34px Arial' });
+  const st = signTexture('PAINTED\nCOYOTE', { bg: '#c0392b', font: 'bold 34px Arial' });
   const ps = new THREE.Mesh(new THREE.PlaneGeometry(7, 5), new M({ map: st, side: THREE.DoubleSide }));
   ps.position.set(w / 2 + 12, 10, d / 2 + 6); g.add(ps);
   return g;

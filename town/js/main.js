@@ -693,7 +693,20 @@ function updateShadow() {
   const fl = _fwd.lengthSq() > .01 ? _fwd.normalize() : _fwd.set(0, 0, -1);
   // focus point on the ground ahead of the camera — but once the box covers
   // the whole town (aerial), tracking is pure waste: pin it at town centre
-  // and let the periodic refresh handle moving props.
+  /* capture rigs: __lockShadow snaps the box to the whole town once, then
+     never touches it again — a per-frame refocus while the camera orbits
+     smears the ground dark, and re-rastering the 4096 map doubles cost */
+  if (window.__lockShadow) {
+    _focus.set(0, 0, 0); shHalf = 900;
+    sun.position.copy(_focus).addScaledVector(sunDir, 1800);
+    sun.target.position.copy(_focus);
+    const sc = sun.shadow.camera;
+    if (sc.right !== 900) {
+      sc.left = -900; sc.right = 900; sc.top = 900; sc.bottom = -900;
+      sc.updateProjectionMatrix();
+    }
+    return;
+  }
   const townWide = shHalf > 640;
   if (townWide) _focus.set(0, 0, 0);
   else {
@@ -761,12 +774,15 @@ window.__setPaused = v => {
    governor via __lockRatio so it can't drift back) — pipeline + composer
    buffers all resize through resync() */
 window.__setRatio = v => { window.__lockRatio = true; pixelRatio = v; resync(); };
-function tick() {
-  requestAnimationFrame(tick);
+/* deterministic capture: __setPaused(true) parks the RAF loop, then __step(n, dt)
+   renders exactly n frames at a fixed dt — sim time advances in lockstep with
+   video playback so cars, cloud shadows and waves never jump between frames */
+let simT = 0;
+window.__step = (n = 1, dt = 1 / 60) => { for (let k = 0; k < n; k++) frame(dt); };
+function frame(dt) {
   renderer.info.reset();
-  if (renderPaused) { frames++; return; }
-  const dt = Math.min(clock.getDelta(), .05);
-  const t = clock.elapsedTime;
+  const t = simT;
+  simT += dt;
   if (interior && interior.on) {
     interior.tick(dt);
   } else if (!orthoCam) {
@@ -884,6 +900,11 @@ function tick() {
   }
   if (veilGone && !window.__ready && ++veilFreeFrames >= 2)
     window.__ready = true;
+}
+function tick() {
+  requestAnimationFrame(tick);
+  if (renderPaused) { frames++; return; }
+  frame(Math.min(clock.getDelta(), .05));
 }
 tick();
 addEventListener('resize', () => {

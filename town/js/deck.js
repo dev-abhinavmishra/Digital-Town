@@ -74,6 +74,9 @@ const css = `
    flights so PRESENT mode costs a video decode instead of the whole scene */
 #uiDeck .bgvid { position:absolute; inset:0; width:100%; height:100%;
   object-fit:cover; background:#050b0f; }
+/* film-cut transition: the video dips through black on every slide change */
+#uiDeck .dip { position:absolute; inset:0; background:#050b0f; opacity:0;
+  pointer-events:none; }
 `;
 
 export function installDeck() {
@@ -84,7 +87,7 @@ export function installDeck() {
   const root = document.createElement('div');
   root.id = 'uiDeck';
   root.innerHTML = `<div class="bar t"></div><div class="bar b"></div>
-    <video class="bgvid" src="deck/town-orbit.mp4" muted loop playsinline preload="auto"></video><div class="scrim"></div>
+    <video class="bgvid" src="deck/town-orbit.mp4" muted loop playsinline preload="auto"></video><div class="scrim"></div><div class="dip"></div>
     <div class="brand">${TOWN.name} — a community planned around care</div>
     <div class="x">ESC to exit</div>
     <div class="cap"></div>
@@ -94,7 +97,7 @@ export function installDeck() {
   document.body.appendChild(root);
 
   const cap = root.querySelector('.cap'), cnt = root.querySelector('.cnt'),
-        prog = root.querySelector('.prog i');
+        prog = root.querySelector('.prog i'), dip = root.querySelector('.dip');
 
   const numd = BUILDINGS.filter(b => b.num);
   const spent = numd.reduce((s, b) => s + (b.cost || 0), 0);
@@ -127,7 +130,7 @@ export function installDeck() {
       body: 'The town is planned around a real campus at its heart: a medical school, library, anatomy and clinical halls around a central quadrangle.' },
     { cam: [300, 110, -620, 20, 26, -440], dur: 10,
       kick: '#3–15 · Wellness Way', title: 'Care within reach',
-      body: 'Every tier of the population needs care: students get low-cost urgent visits at CampusCare, families get pediatrics at FamilyFirst, seniors get home visits from ComfortCare — 13 facilities on the Wellness Way spine, minutes from every district.' },
+      body: 'Every tier of the population needs care: students get low-cost urgent visits at Thacher Student Health, families get pediatrics at Brookfield Family Physicians, seniors get home visits from Innisfree — 13 facilities on the Wellness Way spine, minutes from every district.' },
     { cam: [-270, 150, 430, -500, 8, 190], dur: 10,
       kick: '#2 · Residential West — provided free', title: 'The Preserve',
       body: 'The donated housing development: cottage rows, duplexes and townhouses around Preserve Commons — homes wrapped around the campus they serve.' },
@@ -136,7 +139,7 @@ export function installDeck() {
       body: 'Pond, trails, playgrounds and the bandshell — the social heart — with downtown Main Street and the Commons mall walking-distance south.' },
     { cam: [640, 100, -330, 520, 12, -550], dur: 10,
       kick: '#14–15 · the quiet east', title: 'Ageing in place',
-      body: 'Silver Oaks senior living and Tranquil Harbor hospice sit in the leafy east — a full care loop from independent living to end-of-life.' },
+      body: 'Halcyon House senior living and Stillpoint hospice sit in the leafy east — a full care loop from independent living to end-of-life.' },
     { cam: [60, 780, 560, -20, 0, -60], dur: 11,
       kick: 'Layout & placement', title: 'Why things sit where they sit',
       body: 'Streets first, then zoning: the medical campus anchors the town centre, hospital + EMS share the Wellness Way spine a block apart, seniors rest in the quiet east, shopping runs along Commerce Blvd, and the K-12 sits inside family neighbourhoods. Every address is within two blocks of a through-street for emergency access.' },
@@ -180,6 +183,10 @@ export function installDeck() {
   function show(idx) {
     i = idx;
     const s = SLIDES[i];
+    // film-cut: background dips through black between slides (skipped on open)
+    if (idx > 0 && dip.animate) dip.animate(
+      [{ opacity: 0 }, { opacity: .62, offset: .42 }, { opacity: 0 }],
+      { duration: 900, easing: 'ease-in-out' });
     if (!vidOK) {   // fallback: live camera flight when the video can't play
       const w = W();
       window.__flyTo(...s.cam.map(v => v * w), Math.max(1.8, s.dur * .72));
