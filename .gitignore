@@ -6,3 +6,5 @@ Thumbs.db
 .DS_Store
 .verify/shots/
 .verify/shots-linux/
+.verify/orbit-frames*/
+.verify/nul
