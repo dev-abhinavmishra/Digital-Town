@@ -43,6 +43,22 @@ const decalMat = opts => {
 };
 
 /* ---------------- decal canvases ---------------- */
+/* quad edge-feather for overlays — neighbouring decal rects pick different
+   mottle/stripe variants, and their hard quad borders read as shaded blocks
+   on the ground. A radial-fade alphaMap (uv1 = 0-1 quad space) dissolves the
+   border so regions blend instead of meeting at a line. */
+let _edgeT = null;
+const edgeFade = () => {
+  if (_edgeT) return _edgeT;
+  const [c, x] = makeCanvas(64, 64);
+  x.fillStyle = '#000'; x.fillRect(0, 0, 64, 64);
+  const g = x.createRadialGradient(32, 32, 8, 32, 32, 45);
+  g.addColorStop(0, '#fff'); g.addColorStop(.72, '#fff'); g.addColorStop(1, '#000');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  _edgeT = canvasTex(c, { srgb: false });
+  _edgeT.channel = 1;
+  return _edgeT;
+};
 /* mottle overlay: dry patches + clover blotches on transparent; stripe>0 adds
    alternating mowing bands. Blotches wrap-draw so tiled parcels never seam. */
 function mottleCanvas({ dry = .35, stripe = 0 } = {}) {
@@ -182,9 +198,11 @@ export function buildGroundDetail(scene) {
   const ovlHumus = decalMat({ map: canvasTex(mottleCanvas({ dry: .15 })) });
   const decal = (w, d, tile, m, x, y, z, ry = 0) => {
     const g = new THREE.PlaneGeometry(w, d);
+    g.setAttribute('uv1', g.attributes.uv.clone());  // 0-1 quad UVs for edge fade
     const uv = g.attributes.uv;              // world-scale UVs like plane(tile)
     for (let i = 0; i < uv.count; i++)
       uv.setXY(i, uv.getX(i) * w / tile, uv.getY(i) * d / tile);
+    m.alphaMap = edgeFade();
     g.rotateX(-Math.PI / 2);
     bin.add(g, m, x, y, z, { ry });
     G.overlays++;

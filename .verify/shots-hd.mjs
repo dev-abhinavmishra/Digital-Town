@@ -22,7 +22,7 @@ if (!poses.length) { console.error('no matching poses'); process.exit(1); }
 
 const browser = await chromium.connectOverCDP('http://localhost:9223');
 const page = await browser.contexts()[0].newPage();
-await page.setViewportSize({ width: 1920, height: 1080 });
+await page.setViewportSize({ width: 1984, height: 1053 });   // match screencast frame — canvas fills edge-to-edge
 await page.goto('http://127.0.0.1:8778/?view=aerial&time=golden&q=high&still=1&noao=1', { waitUntil: 'commit', timeout: 30000 });
 for (let i = 0; i < 600; i++) {
   if (await page.evaluate('window.__ready === true').catch(() => false)) break;
