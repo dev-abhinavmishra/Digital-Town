@@ -915,7 +915,7 @@ function hospice(s) {
   g.add(box(w * .7, .5, 5, mat('#a58a68'), 0, .4, d / 2 + 2.5));
   for (let i = -3; i <= 3; i++) g.add(cyl(.28, .28, 3.6, mat('#efe8da'), i * w * .09, .6, d / 2 + 4));
   g.add(box(w * .7, .4, 5.5, roofM, 0, 4.4, d / 2 + 2.5));
-  sign(g, 'STILLPOINT HOSPICE', w * .6, s.h + 1.2, d / 2 + .4, { bg: '#4d6155', font: 'bold 38px Georgia' });
+  sign(g, 'STILLPOINT HOSPICE', w * .6, s.h - 2, d / 2 + .4, { bg: '#4d6155', font: 'bold 38px Georgia' });
   return g;
 }
 
