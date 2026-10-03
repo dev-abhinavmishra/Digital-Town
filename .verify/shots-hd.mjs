@@ -36,6 +36,7 @@ await page.evaluate(`(() => {
     if (el !== c && !el.contains(c)) el.style.display = 'none';
   });
   document.body.style.cssText += ';margin:0;background:#000;overflow:hidden';
+  document.documentElement.style.cssText += ';overflow:hidden';
   c.style.cssText += ';position:fixed;inset:0;width:100vw;height:100vh;z-index:1';
 })()`);
 await page.evaluate('window.__setRatio(1); window.__setPaused(true); window.__lockShadow = true;');

@@ -22,7 +22,7 @@ export { occupied, occupyRect, isFree, registerOccupancy, intersections };
 
 const ASPH = pbr('asphalt_02');          // tile via plane(..., tile)
 ASPH.color = new THREE.Color('#9aa0a6'); ASPH.roughness = .97;  // lifted in streetscape.js too (shared instance)
-attachDriftShadow(ASPH, .0015, .0009, .24);   // same cloud field over pavement
+attachDriftShadow(ASPH, .0015, .0009, .15);   // same cloud field over pavement
 // keyed color → own cache instance; shared pbr() instances mutated post-hoc
 // all ended up wearing the last writer's tint
 const PAVE = lift(pbr('precast_stone_paving', { color: '#a8a499' }), 4);
@@ -58,7 +58,7 @@ export function buildLots(scene) {
     const lotM = pbr('asphalt_02', { color: LOT_TINTS[lotIdx++ % LOT_TINTS.length] });
     lotM.roughness = .97;
     WET_SURFACES.push(lotM);
-    attachDriftShadow(lotM, .0015, .0009, .24);
+    attachDriftShadow(lotM, .0015, .0009, .15);
     scene.add(plane(l.w, l.d, lotM, l.x, Y - .015, l.z, -Math.PI / 2, 6));
     if (l.plain) continue;   // apron/pad: bare asphalt, no stalls
     const n = Math.floor(l.w / 3.4);

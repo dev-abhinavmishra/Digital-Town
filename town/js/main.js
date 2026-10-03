@@ -134,9 +134,9 @@ sun.shadow.bias = -0.00018; sun.shadow.normalBias = .35;
 scene.add(sun); scene.add(sun.target);
 // hemisphere fill lifts shadows gently toward sky color
 scene.add(new THREE.HemisphereLight(
-  TIME === 'golden' ? 0xd8b088 : TIME === 'night' ? 0x18243a : 0xbdd6e8,
-  TIME === 'golden' ? 0x7a6848 : TIME === 'night' ? 0x05070a : 0x5d7050,
-  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .40));
+  TIME === 'golden' ? 0xdfb98f : TIME === 'night' ? 0x18243a : 0xbdd6e8,
+  TIME === 'golden' ? 0x8a7852 : TIME === 'night' ? 0x05070a : 0x5d7050,
+  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .82 : .40));
 
 /* ---------- world scale — every town object lives under `world` ----------
    The town is authored in layout coords (±840m), then uniformly scaled down
@@ -174,7 +174,7 @@ const grassDetail = sh => {
       diffuseColor.rgb *= texture2D(uDetail, vWXZ / 28.0).rgb;`);
 };
 groundM.onBeforeCompile = grassDetail;
-attachDriftShadow(groundM, .0015, .0009, .22);  // ~660m cloud shadow field
+attachDriftShadow(groundM, .0015, .0009, .14);  // ~660m cloud shadow field
 world.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
 // large-scale blotch overlay so the lawn never reads as flat tiling
 const ovM = new THREE.MeshStandardMaterial({ map: groundOverlayTexture(), transparent: true,
@@ -297,7 +297,7 @@ scene.traverse(o => {
 /* campus quad — sized to sit clear of the med hall & the campus lot */
 const quadM = pbr('grass_ground', { color: '#93b377' });
 quadM.onBeforeCompile = grassDetail;               // same world-noise detail
-attachDriftShadow(quadM, .0015, .0009, .22);        // and the same cloud field
+attachDriftShadow(quadM, .0015, .0009, .14);        // and the same cloud field
 lift(quadM, 1);
 world.add(plane(190, 84, quadM, 40, .31, -200, -Math.PI / 2, 10));
 const qp = lift(pbr('precast_stone_paving', { color: '#c4b49a' }), 5);

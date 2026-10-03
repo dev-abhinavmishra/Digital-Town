@@ -134,7 +134,7 @@ export function installDeck() {
   const SLIDES = [
     { cam: [620, 520, 690, -60, 0, -70], dur: 12, cover: true,
       kick: 'Our Town · HST digital town project', title: '<em>HAVENBROOK</em>',
-      body: 'A town we designed around a medical school — every building named, every dollar counted.',
+      body: 'The town we designed around a med school — 26 buildings, all named, all budgeted.',
       team: 'Abhinav Mishra · Dinesh Yara · Davi Ogland' },
     { cam: [60, 780, 560, -20, 0, -60], dur: 11,
       kick: 'The brief', title: 'What we had to build', pts: [
@@ -181,7 +181,7 @@ export function installDeck() {
         'Innisfree home health means seniors keep their own homes longer',
         'The whole block sits on Sunset Ridge — farthest from traffic, closest to quiet'] },
     { cam: [60, 780, 560, -20, 0, -60], dur: 11,
-      kick: 'Layout & placement', title: 'How we arranged it', pts: [
+      kick: 'Layout & placement', title: 'How we laid it out', pts: [
         'Streets first: two arterials cross at the campus, 18 named streets fill the grid',
         'Hospital and EMS share the Wellness Way spine — minutes from anywhere',
         'Shops run along Commerce Blvd; the K-12 sits inside the neighborhoods',
@@ -193,7 +193,7 @@ export function installDeck() {
         'Senior care went to the quiet east instead of paying downtown frontage',
         'Stopped at 26 buildings and banked the leftover <b>$50,000</b> instead of forcing a 27th'] },
     { cam: [60, 780, 560, -20, 0, -60], dur: 12, dark: true,
-      kick: 'The budget', title: 'Every dollar, accounted for', sheet: true },
+      kick: 'The budget', title: 'Where the money went', sheet: true },
     { cam: [620, 540, 720, -60, 0, -60], dur: 12, cover: true,
       kick: 'Conclusion', title: 'Why it works', pts: [
         'Students get campus, housing, the clinic, and coffee — no car needed',
