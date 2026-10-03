@@ -172,7 +172,8 @@ export function installUI() {
       <span class="close" id="uiRubricX">&times;</span>
       <h2>${TOWN.name} — Project Brief</h2>
       <div class="tagline">A digital town planned around care: a medical university anchors the
-      town centre; healthcare radiates along Wellness Way; community life fills the south.</div>
+      town centre; healthcare radiates along Wellness Way; community life fills the south.<br>
+      <b>Team — Abhinav Mishra · Dinesh Yara · Davi Ogland</b></div>
       <table id="uiRubricTbl"></table>
     </div></div>
   `);

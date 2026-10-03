@@ -38,6 +38,8 @@ const css = `
 #uiDeck h1 em { font-style:italic; font-weight:400; }
 #uiDeck .body { font-size:14.5px; line-height:1.65; color:var(--sub); max-width:470px; }
 #uiDeck .stats { display:flex; gap:26px; margin-top:20px; }
+#uiDeck .cap .team { margin-top:16px; font-size:10.5px; letter-spacing:2.4px;
+  color:var(--dim); text-transform:uppercase; }
 #uiDeck .st b { display:block; font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
   font-size:26px; font-weight:500; color:var(--ink); }
 #uiDeck .st span { font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--dim); }
@@ -110,17 +112,22 @@ export function installDeck() {
   const SLIDES = [
     { cam: [620, 520, 690, -60, 0, -70], dur: 12, cover: true,
       kick: 'HST project · a digital town', title: '<em>HAVENBROOK</em>',
-      body: 'A community planned around care — a full town designed, budgeted and built to a $10,000,000 brief.' },
+      body: 'A community planned around care — a full town designed, budgeted and built to a $10,000,000 brief.',
+      team: 'Abhinav Mishra · Dinesh Yara · Davi Ogland' },
     { cam: [60, 780, 560, -20, 0, -60], dur: 11,
       kick: 'The brief', title: 'One town, ten rules',
       body: 'A medical university anchors the plan, housing surrounds it, and at least seven healthcare and three community facilities had to fit inside $10M.',
       stats: [money(spent), 'spent of $10M', `${nH}`, 'healthcare sites', `${nC}`, 'community sites'] },
+    { cam: [-270, 150, 430, -500, 8, 190], dur: 10,
+      kick: 'Population & demographics', title: 'Built for its mix',
+      body: 'Population model — 50% college students, 30% families, 20% adults 65+. The plan mirrors it: student flats beside the campus, family homes near the K-12, senior cottages in the quiet east.',
+      stats: ['50%', 'college students', '30%', 'families', '20%', 'adults 65+'] },
     { cam: [230, 110, -40, 40, 16, -250], dur: 10,
       kick: 'The anchor — provided free', title: 'University School of Medicine',
       body: 'The town is planned around a real campus at its heart: a medical school, library, anatomy and clinical halls around a central quadrangle.' },
     { cam: [300, 110, -620, 20, 26, -440], dur: 10,
       kick: '#3–15 · Wellness Way', title: 'Care within reach',
-      body: 'Havenbrook General sits one block from EMS on the Wellness Way spine — 13 facilities from diagnostics to hospice, minutes from every district.' },
+      body: 'Every tier of the population needs care: students get low-cost urgent visits at CampusCare, families get pediatrics at FamilyFirst, seniors get home visits from ComfortCare — 13 facilities on the Wellness Way spine, minutes from every district.' },
     { cam: [-270, 150, 430, -500, 8, 190], dur: 10,
       kick: '#2 · Residential West — provided free', title: 'The Preserve',
       body: 'The donated housing development: cottage rows, duplexes and townhouses around Preserve Commons — homes wrapped around the campus they serve.' },
@@ -130,12 +137,21 @@ export function installDeck() {
     { cam: [640, 100, -330, 520, 12, -550], dur: 10,
       kick: '#14–15 · the quiet east', title: 'Ageing in place',
       body: 'Silver Oaks senior living and Tranquil Harbor hospice sit in the leafy east — a full care loop from independent living to end-of-life.' },
+    { cam: [60, 780, 560, -20, 0, -60], dur: 11,
+      kick: 'Layout & placement', title: 'Why things sit where they sit',
+      body: 'Streets first, then zoning: the medical campus anchors the town centre, hospital + EMS share the Wellness Way spine a block apart, seniors rest in the quiet east, shopping runs along Commerce Blvd, and the K-12 sits inside family neighbourhoods. Every address is within two blocks of a through-street for emergency access.' },
+    { cam: [300, 110, -620, 20, 26, -440], dur: 10,
+      kick: 'Decision-making', title: 'The trade-offs',
+      body: 'Two donated anchors (university + housing) freed ~$4.5M, which bought coverage over scale — 13 neighbourhood facilities instead of one mega-campus. We chose the mall over a second park, senior care in the quiet east over downtown frontage, and kept $50k unspent rather than force a 27th building.' },
     { cam: [60, 780, 560, -20, 0, -60], dur: 9, dark: true,
       kick: 'The ledger', title: `${money(spent)} of ${money(BUDGET)}`,
       body: '', budget: true },
     { cam: [620, 540, 720, -60, 0, -60], dur: 12, cover: true,
       kick: 'HAVENBROOK', title: 'Under budget.<br><em>Over-delivered.</em>',
       body: 'Every requirement of the brief, met — with headroom left for the parks and streets that make it feel like a town.' },
+    { cam: [620, 520, 690, -60, 0, -70], dur: 10, dark: true,
+      kick: 'References', title: 'Sources & tools',
+      body: 'Our Town Healthcare System — project brief & budget sheet (class handout) · U.S. Census QuickFacts — college-town demographic mix · American Planning Association — complete-communities siting guidance · Town rendered in Three.js — presented as a navigable digital world.' },
   ];
 
   const HOLD_MS = 9500;
@@ -157,7 +173,8 @@ export function installDeck() {
     } else {
       bits.push(`<div class="body">${s.body}</div>`);
     }
-    return `<div class="kick">${s.kick}</div><h1${s.cover ? ' class="big"' : ''}>${s.title}</h1>` + bits.join('');
+    return `<div class="kick">${s.kick}</div><h1${s.cover ? ' class="big"' : ''}>${s.title}</h1>` + bits.join('') +
+      (s.team ? `<div class="team">${s.team}</div>` : '');
   }
 
   function show(idx) {
