@@ -770,6 +770,7 @@ window.__setPaused = v => {
   renderPaused = !!v;
   clock.getDelta();          // swallow the paused span so resume doesn't get a huge dt
 };
+window.__paused = () => renderPaused;
 /* eval hook for capture rigs: pin an exact pixel ratio (locks the adaptive
    governor via __lockRatio so it can't drift back) — pipeline + composer
    buffers all resize through resync() */
@@ -778,8 +779,8 @@ window.__setRatio = v => { window.__lockRatio = true; pixelRatio = v; resync(); 
    renders exactly n frames at a fixed dt — sim time advances in lockstep with
    video playback so cars, cloud shadows and waves never jump between frames */
 let simT = 0;
-window.__step = (n = 1, dt = 1 / 60) => { for (let k = 0; k < n; k++) frame(dt); };
-function frame(dt) {
+window.__step = (n = 1, dt = 1 / 60, draw = true) => { for (let k = 0; k < n; k++) frame(dt, draw); };
+function frame(dt, draw = true) {
   renderer.info.reset();
   const t = simT;
   simT += dt;
@@ -843,22 +844,24 @@ function frame(dt) {
       m.visible = dx * dx + dz * dz < r2;
     }
   }
-  if (composer) {
-    if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
-      composer.passes[0].camera = activeCam;
-      if (composer.passes[1] && composer.passes[1].camera) composer.passes[1].camera = activeCam;
+  if (draw) {
+    if (composer) {
+      if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
+        composer.passes[0].camera = activeCam;
+        if (composer.passes[1] && composer.passes[1].camera) composer.passes[1].camera = activeCam;
+      }
+      // AO off in the ortho map view — the map is a schematic overlay, and
+      // GTAO assumes a perspective projection anyway; aoShed is a persistent
+      // low-fps fallback — once shed it stays off (re-enabling would re-add
+      // the pass on exactly the GPU that couldn't afford it)
+      if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam && !aoShed && !inside;
+      if (composer._grade) composer._grade.uniforms.uTime.value = t;
+      composer.render();
+    } else {
+      renderer.render(scene, activeCam);
     }
-    // AO off in the ortho map view — the map is a schematic overlay, and
-    // GTAO assumes a perspective projection anyway; aoShed is a persistent
-    // low-fps fallback — once shed it stays off (re-enabling would re-add
-    // the pass on exactly the GPU that couldn't afford it)
-    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam && !aoShed && !inside;
-    if (composer._grade) composer._grade.uniforms.uTime.value = t;
-    composer.render();
-  } else {
-    renderer.render(scene, activeCam);
+    updateLabels();
   }
-  updateLabels();
   // fps + dynamic resolution
   fpsEMA = fpsEMA * .95 + (1 / Math.max(dt, .001)) * .05;
   callsEMA = callsEMA * .9 + renderer.info.render.calls * .1;
