@@ -16,6 +16,10 @@ const POSES = [
   ['08-close',    [620, 540, 720, -60, 0, -60]],
 ];
 
+const ONLY = (process.argv[2] || '').split(',').filter(Boolean);
+const poses = ONLY.length ? POSES.filter(([n]) => ONLY.includes(n)) : POSES;
+if (!poses.length) { console.error('no matching poses'); process.exit(1); }
+
 const browser = await chromium.connectOverCDP('http://localhost:9223');
 const page = await browser.contexts()[0].newPage();
 await page.setViewportSize({ width: 1920, height: 1080 });
@@ -45,10 +49,13 @@ cdp.on('Page.screencastFrame', ev => {
 });
 await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 95, everyNthFrame: 1 });
 
-for (const [name, cam] of POSES) {
+for (const [name, cam] of poses) {
   const c0 = scCount;
-  await page.evaluate(`window.__setCam(...(${JSON.stringify(cam)}).map(v=>v*window.__ws)); window.__step(3, 1/24)`);
-  for (let k = 0; k < 240 && scCount <= c0; k++) await sleep(250);
+  for (let i = 0; i < 4; i++) {
+    await page.evaluate(`window.__setCam(...(${JSON.stringify(cam)}).map(v=>v*window.__ws)); window.__step(1, 1/24)`);
+    await sleep(350);
+  }
+  for (let k = 0; k < 240 && scCount < c0 + 3; k++) await sleep(250);
   fs.writeFileSync(`town/deck/shots/${name}.jpg`, latest);
   console.log('[shots]', name, 'captured');
 }

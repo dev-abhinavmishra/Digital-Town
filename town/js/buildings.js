@@ -887,9 +887,9 @@ function senior(s) { // assisted living — U-shaped courtyard
     g.add(b);
     const r = hipRoof(ww, 5, dd, roofM); r.position.set(x, s.h, z); g.add(r);
   };
-  mk(w, d * .34, 0, -d * .33);            // back wing
-  mk(w * .3, d * .7, -w * .35, d * .1);   // west wing
-  mk(w * .3, d * .7, w * .35, d * .1);    // east wing
+  mk(w, d * .34, 0, -d * .33);            // back wing — south face at z=-d*.16
+  mk(w * .3, d * .61, -w * .35, d * .145); // west wing abuts it (no overlap)
+  mk(w * .3, d * .61, w * .35, d * .145);  // east wing abuts it
   // porte-cochère
   g.add(box(14, .7, 10, roofM, 0, 5.2, -d * .33 + d * .17 + 4));
   g.add(cyl(.35, .35, 5.2, mat('#e8e2d4'), -6, 0, -d * .33 + d * .17 + 7));

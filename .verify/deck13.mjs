@@ -32,7 +32,7 @@ for (let i = 0; i < 600; i++) { if (await pg.evaluate('window.__ready === true')
 console.log('[deck] ready:', await pg.evaluate('window.__ready'));
 await pg.evaluate('window.__deck.start()');
 await sleep(5000);
-console.log('[deck] open:', await pg.evaluate('JSON.stringify({n:__deck.n,i:__deck.i,calls:__renderer.info.render.calls,playing:!document.querySelector("#uiDeck .bgvid").paused})'));
+console.log('[deck] open:', await pg.evaluate('JSON.stringify({n:__deck.n,i:__deck.i,paused:__paused(),playing:!document.querySelector("#uiDeck .bgvid").paused})'));
 await pg.screenshot({ path: '.verify/deck13-title.png' });
 // step to the demographics slide (i=2)
 for (const k of [1, 2]) { await pg.evaluate('window.__deck.next()'); await sleep(1500); }
