@@ -32,7 +32,7 @@ export function makeCanvas(w, h) {
   c.width = w; c.height = h;
   return [c, c.getContext('2d')];
 }
-export function canvasTex(c, { srgb = true, repeat = null, aniso = 8 } = {}) {
+export function canvasTex(c, { srgb = true, repeat = null, aniso = 16 } = {}) {
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = aniso;
@@ -252,7 +252,7 @@ export function cloudShadowTexture() {
   x.fillStyle = '#fff'; x.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 26; i++) {
     const cx = R() * 512, cy = R() * 512, r = 40 + R() * 110;
-    const d = .28 + R() * .35;
+    const d = .15 + R() * .20;
     // wrapped copies keep the gradient centered on each offset copy
     for (const ox of [-512, 0, 512]) for (const oy of [-512, 0, 512]) {
       const gx = cx + ox, gy = cy + oy;
@@ -299,6 +299,20 @@ export function attachDriftShadow(mat0, scale = .0015, speed = .004, strength = 
   mat0.customProgramCacheKey = () =>
     `drift:${scale}:${speed}:${strength}:${prevKey.length}:${prevKey.slice(0, 40)}`;
   mat0.needsUpdate = true;
+}
+
+/* deterministic z-order for the stacked surface kit — roads, pads, gutters,
+   markings, aprons sit millimetres apart on the ground plane, far inside
+   depth-buffer epsilon at aerial range, so they z-fight into angle-dependent
+   colour flicker. A per-material polygonOffset rank makes the physically
+   higher layer always win; rank mirrors the Y offsets (higher = closer). */
+export function lift(m, rank = 1) {
+  if (!m || m.userData.__lift === rank) return m;
+  m.polygonOffset = true;
+  m.polygonOffsetFactor = -rank;
+  m.polygonOffsetUnits = -rank;
+  m.userData.__lift = rank;
+  return m;
 }
 
 /* ============== facades ============== */
@@ -549,10 +563,23 @@ export function glassFacadeMaps({ tint = '#7fa6bd', rows = 10, cols = 12,
              default keeps the thin band and the original cell metrics */
           sb = banded ? Math.max(5, Math.round(rh * .34)) : 3,
           spand = '#' + new THREE.Color(frame).multiplyScalar(.42).getHexString();
+    /* lit windows in coherent runs — real buildings light bays and corridors,
+       not a uniform scatter; a run lights 2-6 adjacent panes with stragglers */
+    const litGrid = new Uint8Array(rows * cols);
+    for (let r = 0; r < rows; r++) {
+      let col = 0;
+      while (col < cols) {
+        if (R() < litRatio * 2.4) {
+          const len = 2 + Math.floor(R() * 5);
+          for (let k = 0; k < len && col < cols; k++, col++)
+            if (R() < .85) litGrid[r * cols + col] = 1;
+        } else col++;
+      }
+    }
     for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
       const wx = col * cw + 3, wy = r * rh + (banded ? sb + 2 : 3),
             ww = cw - 6, wh = rh - (banded ? sb + 5 : 6);
-      const lit = R() < litRatio;
+      const lit = litGrid[r * cols + col] === 1;
       const gg = x.createLinearGradient(wx, wy, wx, wy + wh);
       if (lit) {
         gg.addColorStop(0, '#ffedb8'); gg.addColorStop(1, '#e8a850');

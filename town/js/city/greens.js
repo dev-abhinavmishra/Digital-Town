@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GREENS, PLAZA } from '../layout.js';
 import { plane, mat, colored, VCOL, instances, waterMaterial, signTexture,
-         makeCanvas, canvasTex, R, rr, pick, mulberry32, thin } from '../lib.js';
+         makeCanvas, canvasTex, lift, R, rr, pick, mulberry32, thin } from '../lib.js';
 import { pbr } from '../mats.js';
 import { GeoBin } from './geo.js';
 import { CITY } from './stats.js';
@@ -35,7 +35,7 @@ function pathStrip(bin, x0, z0, x1, z1, w = 2.2) {
   }
 }
 let _pathM = null;
-function pathMat() { return _pathM || (_pathM = pbr('gravel', { repeat: [2, 2], color: PATHC, envMapIntensity: .12 })); }
+function pathMat() { return _pathM || (_pathM = lift(pbr('gravel', { repeat: [2, 2], color: PATHC, envMapIntensity: .12 }), 4)); }
 
 function bench(parts, x, z, ry) {
   const c = Math.cos(ry), s = Math.sin(ry);
@@ -69,7 +69,7 @@ function hedgeLine(parts, x0, z0, x1, z1) {
 // each returns { trees:[{x,z,s,t}], bushes:[], flowers:[] } for instancing
 
 let _plazaM = null;
-function plazaMat() { return _plazaM ||= pbr('precast_stone_paving', { repeat: [3, 3], color: '#b8ac98', envMapIntensity: .12 }); }
+function plazaMat() { return _plazaM ||= lift(pbr('precast_stone_paving', { repeat: [3, 3], color: '#b8ac98', envMapIntensity: .12 }), 4); }
 
 function rPocketPark(g, bin, parts, out) {
   lawnPlane(bin, g, GRASS_B);
@@ -146,7 +146,7 @@ function rOrchard(g, bin, parts, out) {
         z: g.z0 + 10 + r * 12 + rr(-2.4, 2.4), s: rr(.7, 1.05), t: 'o' });
   // pond
   const px = g.x1 - 22, pz = g.z1 - 20;
-  bin.plane(34, 24, pbr('gravel', { repeat: [3, 3], color: '#c9bd9a' }), px, Y + .002, pz);
+  bin.plane(34, 24, lift(pbr('gravel', { repeat: [3, 3], color: '#c9bd9a' }), 2), px, Y + .002, pz);
   const wat = new THREE.Mesh(new THREE.CircleGeometry(13, 28),
     waterMaterial({ color: '#33556a' }));
   wat.rotation.x = -Math.PI / 2; wat.position.set(px, Y + .05, pz);
