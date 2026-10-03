@@ -117,7 +117,7 @@ export function buildStreetscape(scene) {
   // ribbons — a keyed variant splits it off the shared cache instance
   const padM = pbr('asphalt_02', { color: '#9aa0a6', roughScale: .97 });
   padM.roughness = .97;
-  attachDriftShadow(padM, .0015, .0009, .25);
+  attachDriftShadow(padM, .0015, .0009, .15);
   WET_SURFACES.push(padM);
   lift(padM, 2);
   const gutterM = lift(pbr('asphalt_02', { repeat: [4, 4], color: '#373b41' }), 4);
@@ -129,7 +129,7 @@ export function buildStreetscape(scene) {
   // one continuous world-space cloud-shadow field across every flat surface
   // (default asphalt is shared with details.js ASPH — already drifted there)
   for (const m of [gutterM, walkM, apronM, vergeM])
-    attachDriftShadow(m, .0015, .0009, m === vergeM ? .20 : .24);
+    attachDriftShadow(m, .0015, .0009, m === vergeM ? .12 : .14);
   const white = lift(mat('#e8e6df'), 6), yellow = lift(mat('#d9b23a'), 6),
         drainM = lift(mat('#26292c'), 7);
   const ix = intersections();

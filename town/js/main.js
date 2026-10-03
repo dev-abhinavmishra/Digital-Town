@@ -134,9 +134,9 @@ sun.shadow.bias = -0.00018; sun.shadow.normalBias = .35;
 scene.add(sun); scene.add(sun.target);
 // hemisphere fill lifts shadows gently toward sky color
 scene.add(new THREE.HemisphereLight(
-  TIME === 'golden' ? 0xd8b088 : TIME === 'night' ? 0x18243a : 0xbdd6e8,
-  TIME === 'golden' ? 0x7a6848 : TIME === 'night' ? 0x05070a : 0x5d7050,
-  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .64 : .40));
+  TIME === 'golden' ? 0xdfb98f : TIME === 'night' ? 0x18243a : 0xbdd6e8,
+  TIME === 'golden' ? 0x8a7852 : TIME === 'night' ? 0x05070a : 0x5d7050,
+  TIME === 'night' ? .22 : TIME === 'dusk' ? .6 : TIME === 'golden' ? .82 : .40));
 
 /* ---------- world scale — every town object lives under `world` ----------
    The town is authored in layout coords (±840m), then uniformly scaled down
@@ -174,7 +174,7 @@ const grassDetail = sh => {
       diffuseColor.rgb *= texture2D(uDetail, vWXZ / 28.0).rgb;`);
 };
 groundM.onBeforeCompile = grassDetail;
-attachDriftShadow(groundM, .0015, .0009, .22);  // ~660m cloud shadow field
+attachDriftShadow(groundM, .0015, .0009, .14);  // ~660m cloud shadow field
 world.add(plane(20000, 20000, groundM, 0, 0, 0, -Math.PI / 2, 60));
 // large-scale blotch overlay so the lawn never reads as flat tiling
 const ovM = new THREE.MeshStandardMaterial({ map: groundOverlayTexture(), transparent: true,
@@ -297,7 +297,7 @@ scene.traverse(o => {
 /* campus quad — sized to sit clear of the med hall & the campus lot */
 const quadM = pbr('grass_ground', { color: '#93b377' });
 quadM.onBeforeCompile = grassDetail;               // same world-noise detail
-attachDriftShadow(quadM, .0015, .0009, .22);        // and the same cloud field
+attachDriftShadow(quadM, .0015, .0009, .14);        // and the same cloud field
 lift(quadM, 1);
 world.add(plane(190, 84, quadM, 40, .31, -200, -Math.PI / 2, 10));
 const qp = lift(pbr('precast_stone_paving', { color: '#c4b49a' }), 5);
@@ -693,7 +693,20 @@ function updateShadow() {
   const fl = _fwd.lengthSq() > .01 ? _fwd.normalize() : _fwd.set(0, 0, -1);
   // focus point on the ground ahead of the camera — but once the box covers
   // the whole town (aerial), tracking is pure waste: pin it at town centre
-  // and let the periodic refresh handle moving props.
+  /* capture rigs: __lockShadow snaps the box to the whole town once, then
+     never touches it again — a per-frame refocus while the camera orbits
+     smears the ground dark, and re-rastering the 4096 map doubles cost */
+  if (window.__lockShadow) {
+    _focus.set(0, 0, 0); shHalf = 900;
+    sun.position.copy(_focus).addScaledVector(sunDir, 1800);
+    sun.target.position.copy(_focus);
+    const sc = sun.shadow.camera;
+    if (sc.right !== 900) {
+      sc.left = -900; sc.right = 900; sc.top = 900; sc.bottom = -900;
+      sc.updateProjectionMatrix();
+    }
+    return;
+  }
   const townWide = shHalf > 640;
   if (townWide) _focus.set(0, 0, 0);
   else {
@@ -748,11 +761,29 @@ window.__ready = false;
 const fwd = new THREE.Vector3(), right = new THREE.Vector3();
 let lastRatioCheck = 0, callsEMA = 0;
 renderer.info.autoReset = false;
-function tick() {
-  requestAnimationFrame(tick);
+/* deck-video mode pauses ALL scene rendering: the loop stays alive (cheap)
+   but draws nothing — the 3D work is what makes PRESENT laggy, the video
+   plays over a frozen frame instead */
+let renderPaused = false;
+window.__setPaused = v => {
+  if (!!v === renderPaused) return;
+  renderPaused = !!v;
+  clock.getDelta();          // swallow the paused span so resume doesn't get a huge dt
+};
+window.__paused = () => renderPaused;
+/* eval hook for capture rigs: pin an exact pixel ratio (locks the adaptive
+   governor via __lockRatio so it can't drift back) — pipeline + composer
+   buffers all resize through resync() */
+window.__setRatio = v => { window.__lockRatio = true; pixelRatio = v; resync(); };
+/* deterministic capture: __setPaused(true) parks the RAF loop, then __step(n, dt)
+   renders exactly n frames at a fixed dt — sim time advances in lockstep with
+   video playback so cars, cloud shadows and waves never jump between frames */
+let simT = 0;
+window.__step = (n = 1, dt = 1 / 60, draw = true) => { for (let k = 0; k < n; k++) frame(dt, draw); };
+function frame(dt, draw = true) {
   renderer.info.reset();
-  const dt = Math.min(clock.getDelta(), .05);
-  const t = clock.elapsedTime;
+  const t = simT;
+  simT += dt;
   if (interior && interior.on) {
     interior.tick(dt);
   } else if (!orthoCam) {
@@ -813,22 +844,24 @@ function tick() {
       m.visible = dx * dx + dz * dz < r2;
     }
   }
-  if (composer) {
-    if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
-      composer.passes[0].camera = activeCam;
-      if (composer.passes[1] && composer.passes[1].camera) composer.passes[1].camera = activeCam;
+  if (draw) {
+    if (composer) {
+      if (composer.passes[0] && composer.passes[0].camera !== activeCam) {
+        composer.passes[0].camera = activeCam;
+        if (composer.passes[1] && composer.passes[1].camera) composer.passes[1].camera = activeCam;
+      }
+      // AO off in the ortho map view — the map is a schematic overlay, and
+      // GTAO assumes a perspective projection anyway; aoShed is a persistent
+      // low-fps fallback — once shed it stays off (re-enabling would re-add
+      // the pass on exactly the GPU that couldn't afford it)
+      if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam && !aoShed && !inside;
+      if (composer._grade) composer._grade.uniforms.uTime.value = t;
+      composer.render();
+    } else {
+      renderer.render(scene, activeCam);
     }
-    // AO off in the ortho map view — the map is a schematic overlay, and
-    // GTAO assumes a perspective projection anyway; aoShed is a persistent
-    // low-fps fallback — once shed it stays off (re-enabling would re-add
-    // the pass on exactly the GPU that couldn't afford it)
-    if (pipe && pipe.gtao) pipe.gtao.enabled = !orthoCam && !aoShed && !inside;
-    if (composer._grade) composer._grade.uniforms.uTime.value = t;
-    composer.render();
-  } else {
-    renderer.render(scene, activeCam);
+    updateLabels();
   }
-  updateLabels();
   // fps + dynamic resolution
   fpsEMA = fpsEMA * .95 + (1 / Math.max(dt, .001)) * .05;
   callsEMA = callsEMA * .9 + renderer.info.render.calls * .1;
@@ -844,7 +877,7 @@ function tick() {
       `${(i.triangles / 1e6).toFixed(2)}M tris · ratio ${pixelRatio} · ` +
       `${renderer.info.memory.geometries} geo / ${renderer.info.memory.textures} tex`;
   }
-  if (t - lastRatioCheck > 2.5) {
+  if (t - lastRatioCheck > 2.5 && !window.__lockRatio) {
     lastRatioCheck = t;
     if (fpsEMA < 42 && pixelRatio > .55) {
       pixelRatio = Math.max(.42, pixelRatio - .2); resync();
@@ -870,6 +903,11 @@ function tick() {
   }
   if (veilGone && !window.__ready && ++veilFreeFrames >= 2)
     window.__ready = true;
+}
+function tick() {
+  requestAnimationFrame(tick);
+  if (renderPaused) { frames++; return; }
+  frame(Math.min(clock.getDelta(), .05));
 }
 tick();
 addEventListener('resize', () => {
